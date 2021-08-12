@@ -1,0 +1,78 @@
+body {
+  padding-top: 3rem;
+  background-repeat: repeat;
+  word-wrap: break-word;
+  background-color: white;
+}
+.jumbotron{
+  background-color: white;
+}
+
+.carousel {
+  margin-bottom: 4rem;
+  outline-style: double;
+  margin-top: 2rem;
+}
+
+.carousel-caption {
+  bottom: 3rem;
+  z-index: 10;
+  color: black;
+}
+
+.carousel-item {
+  height: 32rem;
+  max-width: 100vw;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+.welcome-carousel-image1 {
+  box-shadow: inset 0 0 0 100vw rgba(255, 255, 255, 0);
+  background-image: url("../images/Rithu_PresidentAward.jpg");
+}
+
+.welcome-carousel-image2 {
+  box-shadow: inset 0 0 0 100vw rgba(255, 255, 255, 0.3);
+  background-image: url("../images/Model.jpg");
+}
+
+.first {
+  background-color: #f3bd1f;
+  font-size: x-large;
+}
+
+.first1 {
+  background-color: #1f90c3;
+  font-size: x-large;
+  color: white;
+}
+
+.second {
+  background-color: #1f90c3;
+  color: white;
+  font-size: xx-large;
+  list-style: none;
+}
+
+.Third {
+  background-color: #f3bd1f;
+  list-style-type: none;
+  font-size: xx-large;
+  list-style: none;
+}
+
+.last {
+  background-color: #1f90c3;
+  color: white;
+  font-size: xx-large;
+}
+
+.jumbotron {
+  margin-bottom: 0%;
+}
+
+.top {
+  height: 100%;
+}
