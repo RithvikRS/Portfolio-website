@@ -1,335 +1,94 @@
-<!DOCTYPE html>
-
-<html>
-
+<!doctype html>
+<html lang="en" id="top">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <link rel="stylesheet" href="css/bootstrap.css">
-    <link rel="stylesheet" href="css/site.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8f2">
+  <meta name="description" content="Explore Rithvik’s projects in computer vision, machine learning, and web applications.">
+  <title>Projects — Rithvik</title>
+  <link rel="icon" href="images/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://rithvikrs.github.io/Portfolio-website/Projects.html">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Projects — Rithvik">
+  <meta property="og:description" content="Explore Rithvik’s projects in computer vision, machine learning, and web applications.">
+  <meta property="og:url" content="https://rithvikrs.github.io/Portfolio-website/Projects.html">
+  <meta name="twitter:card" content="summary">
+  <link rel="stylesheet" href="css/site.css">
+  <script src="js/site.js" defer></script>
+
 </head>
+<body data-page="projects"><a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="shell header-inner">
+    <a class="brand" href="index.html" aria-label="Rithvik — home"><span class="brand-mark" aria-hidden="true">r<span>.</span></span><span>rithvik<span class="brand-dot">.</span></span></a>
+    <button class="menu-toggle" aria-expanded="false" aria-controls="primary-nav" hidden>Menu <span aria-hidden="true">☰</span></button>
+    <nav id="primary-nav" aria-label="Main navigation">
+      <a href="index.html#about" >About</a>
+      <a href="index.html#experience" >Experience</a>
+      <a href="Projects.html" aria-current="page">Projects</a>
+      <a href="Awards.html" >Credentials</a>
+      <a href="#contact">Contact</a>
+      <a class="nav-cv" href="documents/Rithvik_CV.pdf" download>Download CV <span aria-hidden="true">↓</span></a>
+    </nav>
+  </div></header><main id="main" class="shell archive-main"><section class="page-intro"><a class="back-link" href="index.html">← Back to home</a><p class="eyebrow">Projects / The collection</p><h1>Learning by <span class="serif-word">building.</span></h1><p>Experiments, applications, and earlier independent work.<br class="desktop-break"> A collection of the problems I’ve explored along the way.</p><a class="text-link" href="https://github.com/RithvikRS" target="_blank" rel="noopener noreferrer">Find me on GitHub <span aria-hidden="true">↗</span></a></section>
+    <section aria-label="Project collection"><div class="project-tools" hidden><div class="filters" role="group" aria-label="Filter projects"><button class="filter-button is-active" data-filter="All work" aria-pressed="true">All work</button><button class="filter-button" data-filter="Machine learning" aria-pressed="false">Machine learning</button><button class="filter-button" data-filter="Web applications" aria-pressed="false">Web applications</button><button class="filter-button" data-filter="Applications" aria-pressed="false">Applications</button></div><label class="search-box"><span class="sr-only">Search projects</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="6" stroke="currentColor" stroke-width="1.5"/><path d="m15 15 5 5" stroke="currentColor" stroke-width="1.5"/></svg><input type="search" placeholder="Search projects" autocomplete="off"></label></div><p class="project-count" role="status" aria-live="polite">11 projects</p><div class="archive-grid"><article class="project-card archive-card" id="road-safety" data-category="Machine learning">
 
+    <div class="project-content"><div class="project-meta"><span>Computer vision · Earlier work</span><span>01</span></div>
+    <h3>Road safety, through computer vision</h3><p>Connecting number plate recognition with timestamp data to identify vehicles exceeding average speed limits.</p><ul class="tags"><li>Number plate recognition</li><li>Data processing</li><li>Computer vision</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>Two logging stations capture vehicle number plates and timestamps. The system matches records between stations, calculates average speed from the distance and elapsed time, and writes vehicles exceeding the limit to a CSV file.</p></details></div>
+  </article><article class="project-card archive-card" id="mask-detection" data-category="Machine learning">
 
+    <div class="project-content"><div class="project-meta"><span>Machine learning + IoT · Earlier work</span><span>02</span></div>
+    <h3>Machine learning meets the physical world</h3><p>Real-time face mask detection, extended with a conceptual IoT entry-point system.</p><ul class="tags"><li>Machine learning</li><li>IoT</li><li>Sensors</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>The mask-detection project was extended with a conceptual system combining an MLX90614 temperature sensor, a Pi Camera v2, motion sensing, LEDs, and relays or automatic doors for an entry-point use case.</p></details></div>
+  </article><article class="project-card archive-card" id="movie-app" data-category="Web applications">
 
-<body>
+    <div class="project-content"><div class="project-meta"><span>Web application · Earlier work</span><span>03</span></div>
+    <h3>Movies, discovery &amp; a shared conversation</h3><p>A movie discovery application with sign-in, trailer browsing, search, and global chat.</p><ul class="tags"><li>Authentication</li><li>Movie search</li><li>Global chat</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>Users can sign in, browse trailers across movie categories such as popular titles, search for a movie, and participate in a global chat alongside the discovery experience.</p></details></div>
+  </article><article class="project-card archive-card" id="spam-detection" data-category="Machine learning">
 
-    <header>
-        <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-primary">
-            <div class="container-fluid">
-                <a class="navbar-brand" href="index.html">Rithvik</a>
-                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse"
-                    aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="collapse navbar-collapse" id="navbarCollapse">
-                    <ul class="navbar-nav mr-auto">
-                        <li class="nav-item active">
-                            <a class="nav-link" href="index.html">Home</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#about">About Me</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#skills">My Skills</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#education">My Education</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#work">My Works</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#contact">Contact</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="btn btn-md btn-primary" role="button"
-                                href="documents/Resume-Rithvik-Rajani-Kanth-Sasi.pdf" download>Resume</a>
-                        </li>
+    <div class="project-content"><div class="project-meta"><span>Email classification</span><span>04</span></div>
+    <h3>Spam detection with the Gmail API</h3><p>Retrieve email content with the Gmail API and classify messages as spam.</p><ul class="tags"><li>Gmail API</li><li>Classification</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>An email subject is used to find a message and retrieve its body through the Gmail API. The message content is then used for spam detection.</p></details></div>
+  </article><article class="project-card archive-card" id="malicious-urls" data-category="Machine learning">
 
-                    </ul>
-                </div>
-            </div>
-        </nav>
-    </header>
+    <div class="project-content"><div class="project-meta"><span>Security + machine learning</span><span>05</span></div>
+    <h3>Malicious URL detection</h3><p>Use URL-derived keywords and multiple models to assess whether a website may be malicious.</p><ul class="tags"><li>Classification</li><li>URL analysis</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>The project extracts keywords from a URL and uses multiple models to produce a collection of predictions about whether the website may be malicious.</p></details></div>
+  </article><article class="project-card archive-card" id="lane-detection" data-category="Machine learning">
 
-    <div class="jumbotron jumbotron-fluid text-left">
-        <div class="container">
-            <h1 class="display-4">Projects</h1>
-            <hr class="my-12">
-            <p class="text-left"> <button onclick="window.open('https://github.com/RithvikRS')" type="button"
-                    class="btn-lg btn-primary">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="16" fill="currentColor"
-                        class="bi bi-github" viewBox="0 0 16 16">
-                        <path
-                            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z">
-                        </path>
-                    </svg>
-                    Github
-                </button> </p>
-            <main class="container-fluid" role="main">
-                <div id="about" class="row first">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Road Safety using number plate detection </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                The project helps with enforcing speed limits. The main concept of the project is to
-                                have two
-                                logging stations which will take a photo of number plate of passing vehicles, this is
-                                then feed
-                                into the server which will use number plate detection to store the number plate number
-                                and
-                                timestamp into a database. As the vehicle passes through the second logging station the
-                                number
-                                plate is again detected, this will then check the backend database for a entry of the
-                                vehicle
-                                number plate number. If it is found, it will retrieve the timestamp and calculate the
-                                average
-                                speed of the car using the speed, time, distance formula. If it is found that the
-                                average speed
-                                is greater than the maximum speed, then the car number is added to a csv file.
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-                <div id="about" class="row first1">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Spam Detection with Google Gmail API </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                The project detects if a email from a Gmail account is spam or not using the email's
-                                subject as
-                                an input which is used to retrieve the email body using Gmail API.
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-                <div id="about" class="row first">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Malicious URL detection </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                The project detects if a website may be malicious or not using keywords extracted from
-                                the URL.
-                                Uses multiple model to give a collection of predictions.
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-                <div id="about" class="row first1">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Realtime Mask Detection using Machine Learning(with IOT additions) </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                This helps with identify if a user is wearing a mask or not. As an improvement,
-                                conceptual IOT
-                                model was added to this later to detect the temperature of the user and create a entry
-                                point use
-                                case. The IOT part used various sensors and actuators such as IR camera (MLX90614), pi
-                                camera
-                                v2, LED, Relays/ automatic doors, motion sensor.
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-                <div id="about" class="row first">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Movie Web App (with global chat) </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                It is a movie web app, which allows users to login and view movie trailers from list of
-                                movie
-                                category like most popular movie, etc. It also allows users to search for a movie and
-                                participate in global chat.
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-                <div id="about" class="row first1">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Lane and Object Detection </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                Uses opencv for detection of lane and object in a real time video feed.
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-                <div id="about" class="row first">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Portfolio Website </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                A fully responsive simple personal portfolio website
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-                <div id="about" class="row first1">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Movie Recmmendation System </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                Uses collabritive filitering for recommending movie based on input of movie title.
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-                <div id="about" class="row first">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Game Recommendation System </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                Uses collaborative filtering for recommending games based on a input of a game title.
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-                <div id="about" class="row first1">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Hospital Management System </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                It is a general purpose hospital management website which allows soring data using PHP
-                                and
-                                MySQLi
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-                <div id="about" class="row first">
-                    <div class="col-md-12">
-                        <div class="container">
-                            <br>
-                            <h2 class="pb-4 mb-4 font-itaxlic display-5 text-left">
-                                <strong> Library Management and Delivery System </strong>
-                                <hr>
-                            </h2>
-                            <p class="text-justify">
-                                It is a program to help the library to manage the books and manage book delivery using
-                                multiple
-                                checkpoint tracking.
-                            </p>
-                            <br>
-                            <br>
-                        </div>
-                    </div>
-                </div>
-            </main>
-        </div>
-    </div>
+    <div class="project-content"><div class="project-meta"><span>Computer vision</span><span>06</span></div>
+    <h3>Lane &amp; object detection</h3><p>Detect lanes and objects in a real-time video feed using OpenCV.</p><ul class="tags"><li>OpenCV</li><li>Video processing</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>A computer vision project exploring lane and object detection on a live video stream using OpenCV.</p></details></div>
+  </article><article class="project-card archive-card" id="movie-recommendations" data-category="Machine learning">
 
-    <div id="contact" class="row last">
-        <div class="col-md-12">
-            <br>
-            <div class="container">
-                <h2 class="pb-4 mb-4 font-itaxlic display-3 text-center">
-                    <strong> Contact Me </strong>
-                    <hr>
-                </h2>
-                <p class="text-center"> <b>Email:</b> rithvik.career@gmail.com </p>
-                <p class="text-center"> <b>Phone:</b> 9567644344 </p>
-                <p class="text-center"> <button onclick="window.open('https://www.linkedin.com/in/rithvikrs/')"
-                        type="button" class="btn-lg btn-primary">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                            class="bi bi-linkedin" viewBox="0 0 16 16">
-                            <path
-                                d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 16 1.146v13.708c0 .633-.526 1.146-1.175 1.146H1.175C.526 16 0 15.487 0 14.854V1.146zm4.943 12.248V6.169H2.542v7.225h2.401zm-1.2-8.212c.837 0 1.358-.554 1.358-1.248-.015-.709-.52-1.248-1.342-1.248-.822 0-1.359.54-1.359 1.248 0 .694.521 1.248 1.327 1.248h.016zm4.908 8.212V9.359c0-.216.016-.432.08-.586.173-.431.568-.878 1.232-.878.869 0 1.216.662 1.216 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 0-1.845.7-2.165 1.193v.025h-.016a5.54 5.54 0 0 1 .016-.025V6.169h-2.4c.03.678 0 7.225 0 7.225h2.4z">
-                            </path>
-                        </svg>
-                        Linkedin
-                    </button> </p>
-                <p class="text-center"> <button onclick="window.open('https://github.com/RithvikRS')" type="button"
-                        class="btn-lg btn-primary">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="16" fill="currentColor"
-                            class="bi bi-github" viewBox="0 0 16 16">
-                            <path
-                                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z">
-                            </path>
-                        </svg>
-                        Github
-                    </button> </p>
-                <p class="text-center"> <button type="button" class="btn-lg btn-primary"
-                        onclick="window.open('documents/Resume-Rithvik-Rajani-Kanth-Sasi.pdf')">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                            class="bi bi-card-checklist" viewBox="0 0 16 16">
-                            <path
-                                d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h13zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13z">
-                            </path>
-                            <path
-                                d="M7 5.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm-1.496-.854a.5.5 0 0 1 0 .708l-1.5 1.5a.5.5 0 0 1-.708 0l-.5-.5a.5.5 0 1 1 .708-.708l.146.147 1.146-1.147a.5.5 0 0 1 .708 0zM7 9.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm-1.496-.854a.5.5 0 0 1 0 .708l-1.5 1.5a.5.5 0 0 1-.708 0l-.5-.5a.5.5 0 0 1 .708-.708l.146.147 1.146-1.147a.5.5 0 0 1 .708 0z">
-                            </path>
-                        </svg>
-                        Resume
-                    </button>
-                </p>
-                <br>
-                <p class="text-center">Website Developed by Rithvik </p>
-                <br>
-            </div>
-        </div>
-    </div>
-    <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js"></script>
-    <script src="js/bootstrap.js"></script>
-</body>
+    <div class="project-content"><div class="project-meta"><span>Recommendation systems</span><span>07</span></div>
+    <h3>Movie recommendation system</h3><p>Recommend movies through collaborative filtering, starting with a movie title.</p><ul class="tags"><li>Collaborative filtering</li><li>Recommendations</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>The system takes a movie title as input and uses collaborative filtering to recommend other movies.</p></details></div>
+  </article><article class="project-card archive-card" id="game-recommendations" data-category="Machine learning">
 
+    <div class="project-content"><div class="project-meta"><span>Recommendation systems</span><span>08</span></div>
+    <h3>Game recommendation system</h3><p>Find related games using collaborative filtering and a game title as input.</p><ul class="tags"><li>Collaborative filtering</li><li>Recommendations</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>A game recommendation project that applies collaborative filtering to suggest games based on an input title.</p></details></div>
+  </article><article class="project-card archive-card" id="hospital-management" data-category="Web applications">
+
+    <div class="project-content"><div class="project-meta"><span>Management application</span><span>09</span></div>
+    <h3>Hospital management system</h3><p>A general-purpose hospital management website backed by PHP and MySQLi.</p><ul class="tags"><li>PHP</li><li>MySQLi</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>A web application for storing and managing hospital data using PHP and MySQLi.</p></details></div>
+  </article><article class="project-card archive-card" id="library-management" data-category="Applications">
+
+    <div class="project-content"><div class="project-meta"><span>Management application</span><span>10</span></div>
+    <h3>Library management &amp; delivery</h3><p>Manage library books and follow book deliveries through multiple checkpoints.</p><ul class="tags"><li>Book management</li><li>Delivery tracking</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>A program that helps a library manage its books and track deliveries with multiple checkpoints.</p></details></div>
+  </article><article class="project-card archive-card" id="portfolio" data-category="Web applications">
+
+    <div class="project-content"><div class="project-meta"><span>Personal website</span><span>11</span></div>
+    <h3>This corner of the internet</h3><p>An accessible, responsive portfolio with a lightweight static architecture.</p><ul class="tags"><li>HTML</li><li>CSS</li><li>JavaScript</li></ul>
+    <details><summary>Project overview <span aria-hidden="true">+</span></summary><p>The rebuilt portfolio uses semantic HTML, custom CSS, and a small amount of JavaScript. A dependency-free build script turns a single content file into pages that can be hosted on GitHub Pages.</p><a class="text-link" href="https://github.com/RithvikRS/Portfolio-website" target="_blank" rel="noopener noreferrer">View source on GitHub <span aria-hidden="true">↗</span></a></details></div>
+  </article></div><div class="empty-state" hidden><h2>No projects found.</h2><p>Try a different search or category.</p><button class="button button-outline" data-reset-filters>Reset filters</button></div></section></main><section class="contact-section" id="contact" aria-labelledby="contact-title"><div class="shell contact-inner">
+    <div><p class="eyebrow light">Have something in mind?</p><h2 id="contact-title">Let’s build something<br><span>that matters.</span></h2><p>For engineering opportunities, collaborations,<br class="desktop-break"> or a conversation about what comes next.</p></div>
+    <div class="contact-actions"><a class="email-link" href="mailto:rithvik.career@gmail.com">rithvik.career@gmail.com <span aria-hidden="true">↗</span></a><div class="contact-links"><a class="text-link" href="https://www.linkedin.com/in/rithvikrs/" target="_blank" rel="noopener noreferrer">LinkedIn <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/RithvikRS" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a><button class="copy-email" data-email="rithvik.career@gmail.com" hidden>Copy email <span aria-hidden="true">⧉</span></button></div><p class="copy-status" role="status" aria-live="polite"></p></div>
+  </div></section>
+  <footer class="site-footer shell"><p>© <span data-year>2026</span> Rithvik Rajani Kanth Sasi</p><p>Built with care. Always evolving.</p><a href="#top">Back to top <span aria-hidden="true">↑</span></a></footer></body>
 </html>
