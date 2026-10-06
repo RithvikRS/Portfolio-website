@@ -27,4 +27,13 @@ const content = JSON.parse(await readFile(new URL('data/portfolio.json', root), 
 const cv = await readFile(new URL(content.cv, root));
 assert.equal(cv.subarray(0, 5).toString(), '%PDF-', 'CV download is a PDF');
 assert.equal(new Set(content.projects.map(project => project.id)).size, content.projects.length, 'Unique project anchors');
+for (const project of content.projects) {
+  assert.ok(Array.isArray(project.technologies), `${project.id}: list confirmed tools, or use an empty array`);
+  assert.ok(Array.isArray(project.skills) && project.skills.length > 0, `${project.id}: applied skills are required`);
+  const labels = [...project.technologies, ...project.skills];
+  assert.ok(labels.every(label => typeof label === 'string' && label.trim()), `${project.id}: nonempty skill labels`);
+  assert.equal(new Set(labels).size, labels.length, `${project.id}: duplicate skills or tools`);
+}
+assert.match(content.credly, /^https:\/\/www\.credly\.com\/users\//, 'Credly profile URL');
+for (const name of ['index.html', 'Awards.html']) assert.ok(pages.get(name).includes(`href="${content.credly}"`), `${name}: Credly profile link`);
 console.log(`Checked ${pages.size} pages, ${checkedLinks} local links, unique anchors, and CV: ${fileURLToPath(new URL(content.cv, root))}`);

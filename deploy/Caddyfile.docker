@@ -1,0 +1,7 @@
+{$DOMAIN} {
+    encode zstd gzip
+    reverse_proxy app:4173 {
+        # Replace any visitor-supplied header with the real connected client.
+        header_up X-Real-IP {remote_host}
+    }
+}

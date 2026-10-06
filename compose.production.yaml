@@ -1,0 +1,66 @@
+name: portfolio
+
+services:
+  app:
+    build: .
+    image: rithvik-portfolio:production
+    init: true
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "4173"
+      PUBLIC_ORIGIN: https://${DOMAIN:?Set DOMAIN in .env.production}
+      TRUST_PROXY: "true"
+      TRUSTED_PROXY_IPS: ${CADDY_IP:-172.30.0.3}
+    networks: [backend]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 100
+    stop_grace_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env.production}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      backend:
+        ipv4_address: ${CADDY_IP:-172.30.0.3}
+    security_opt: [no-new-privileges:true]
+    mem_limit: 192m
+    pids_limit: 100
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  backend:
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET:-172.30.0.0/24}
+
+volumes:
+  caddy_data:
+  caddy_config:

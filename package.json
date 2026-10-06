@@ -6,8 +6,15 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "dev": "node scripts/serve.mjs",
-    "check": "node scripts/check.mjs"
+    "dev": "node --env-file-if-exists=.env server/index.mjs",
+    "start": "node --env-file-if-exists=.env server/index.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test tests/*.test.mjs"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=22.9"
+  },
+  "dependencies": {
+    "nodemailer": "^10.0.15"
+  }
 }

@@ -1,0 +1,31 @@
+name: portfolio-local
+
+services:
+  app:
+    build: .
+    image: rithvik-portfolio:local
+    init: true
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: "4173"
+      PUBLIC_ORIGIN: http://localhost:${CONTAINER_PORT:-8080}
+      TRUST_PROXY: "false"
+      TRUSTED_PROXY_IPS: ""
+    ports:
+      - "127.0.0.1:${CONTAINER_PORT:-8080}:4173"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 100
+    stop_grace_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
