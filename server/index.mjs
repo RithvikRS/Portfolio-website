@@ -9,7 +9,7 @@ const url = new URL(process.env.PUBLIC_ORIGIN || `http://127.0.0.1:${port}`);
 if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') throw new Error('Production PUBLIC_ORIGIN must use HTTPS.');
 const sendMessage = createMailer();
 const trustedProxyIPs = (process.env.TRUSTED_PROXY_IPS || '').split(',').map(ip => ip.trim()).filter(Boolean);
-const server = await createPortfolioServer({ origin: url.origin, sendMessage, trustProxy: process.env.TRUST_PROXY === 'true', trustedProxyIPs });
+const server = await createPortfolioServer({ origin: url.origin, sendMessage, trustProxy: process.env.TRUST_PROXY === 'true', trustedProxyIPs, adminEnabled: process.env.ADMIN_ENABLED === 'true', adminUsername: process.env.ADMIN_USERNAME || 'rithvik' });
 server.listen(port, host, () => {
   console.log(`Portfolio: http://${host}:${port}`);
   console.log(sendMessage ? 'SMTP configured; delivery is confirmed per submission.' : 'SMTP is not configured. Contact form will offer LinkedIn instead.');

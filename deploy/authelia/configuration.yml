@@ -1,0 +1,51 @@
+# Non-secret settings only. Private user hashes and keys live in .auth/.
+server:
+  address: 'tcp://:9091/auth'
+  # Use Compose's HTTP health check; skip writing the image's legacy env file.
+  disable_healthcheck: true
+theme: 'light'
+totp:
+  disable: true
+webauthn:
+  disable: true
+log:
+  level: 'info'
+authentication_backend:
+  password_reset:
+    disable: true
+  file:
+    path: '/secrets/users.yml'
+    watch: false
+    password:
+      algorithm: 'argon2'
+      argon2:
+        iterations: 3
+        memory: 65536
+        parallelism: 1
+access_control:
+  default_policy: 'deny'
+  rules:
+    - domain: '{{ env "DOMAIN" }}'
+      resources: ['^/admin(/.*)?$']
+      subject: ['group:admins']
+      policy: 'one_factor'
+session:
+  name: 'workspace_session'
+  same_site: 'lax'
+  inactivity: '30m'
+  expiration: '8h'
+  remember_me: -1
+  cookies:
+    - domain: '{{ env "DOMAIN" }}'
+      authelia_url: 'https://{{ env "DOMAIN" }}/auth/'
+      default_redirection_url: 'https://{{ env "DOMAIN" }}/admin/'
+regulation:
+  max_retries: 5
+  find_time: '2m'
+  ban_time: '10m'
+storage:
+  local:
+    path: '/data/db.sqlite3'
+notifier:
+  filesystem:
+    filename: '/data/notifications.txt'

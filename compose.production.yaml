@@ -17,6 +17,8 @@ services:
       PUBLIC_ORIGIN: https://${DOMAIN:?Set DOMAIN in .env.production}
       TRUST_PROXY: "true"
       TRUSTED_PROXY_IPS: ${CADDY_IP:-172.30.0.3}
+      ADMIN_ENABLED: "true"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-rithvik}
     networks: [backend]
     read_only: true
     cap_drop: [ALL]
@@ -32,9 +34,12 @@ services:
 
   caddy:
     image: caddy:2-alpine
+    command: [caddy, run, --config, /etc/caddy/site/Caddyfile.docker, --adapter, caddyfile]
     restart: unless-stopped
     depends_on:
       app:
+        condition: service_healthy
+      auth:
         condition: service_healthy
     environment:
       DOMAIN: ${DOMAIN:?Set DOMAIN in .env.production}
@@ -43,15 +48,52 @@ services:
       - "443:443"
       - "443:443/udp"
     volumes:
-      - ./deploy/Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      # Directory mounts see Git's atomic file replacements on redeployment.
+      - ./deploy:/etc/caddy/site:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
       backend:
         ipv4_address: ${CADDY_IP:-172.30.0.3}
+      identity:
     security_opt: [no-new-privileges:true]
     mem_limit: 192m
     pids_limit: 100
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  auth:
+    # Authelia v4.39.28; upgrade deliberately after checking release notes.
+    image: authelia/authelia@sha256:bd97cff4fcbf715b5ff1f9ae286afbe6033afce385302520b0368122d43a6f54
+    init: true
+    restart: unless-stopped
+    user: "${AUTHELIA_UID:-1000}:${AUTHELIA_GID:-1000}"
+    entrypoint: [authelia]
+    command: [--config, /etc/authelia/configuration.yml, --config.experimental.filters, template]
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env.production}
+      AUTHELIA_SESSION_SECRET_FILE: /secrets/session-secret
+      AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: /secrets/storage-key
+    volumes:
+      - ./deploy/authelia:/etc/authelia:ro
+      - ./.auth/secrets:/secrets:ro
+      - ./.auth/data:/data
+    networks: [identity]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 192m
+    pids_limit: 100
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:9091/auth/api/health]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     logging:
       driver: local
       options:
@@ -63,6 +105,7 @@ networks:
     ipam:
       config:
         - subnet: ${DOCKER_SUBNET:-172.30.0.0/24}
+  identity:
 
 volumes:
   caddy_data:

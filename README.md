@@ -1,6 +1,37 @@
 # Rithvik’s portfolio
 
-A responsive professional portfolio for full-stack, cloud, and machine learning engineering roles. Built with semantic HTML, custom CSS, and vanilla JavaScript. The pages are static; an optional Node server uses Nodemailer to deliver contact messages through your SMTP provider. No external fonts or build service required.
+A responsive professional portfolio for full-stack, cloud, and machine learning engineering roles. The public pages use generated HTML, custom CSS, and vanilla JavaScript. A Node server serves the site, delivers contact messages through Nodemailer, and renders a protected admin dashboard. Production runs on Oracle with Docker Compose, Caddy HTTPS, and Authelia authentication. No external fonts or hosted build service are required.
+
+## Current deployment
+
+Deployment record updated **8 October 2026 (Asia/Kolkata)**. The Oracle checkout is `/opt/portfolio`, on `main`, at `144.24.135.201`. No-IP supplies the hostname; Caddy supplies HTTPS and routes requests to the containers.
+
+| Resource | Address | Status |
+| --- | --- | --- |
+| Public portfolio | [rithvik.ddns.net](https://rithvik.ddns.net/) | Live, with SMTP configured |
+| Admin dashboard | [/admin/](https://rithvik.ddns.net/admin/) | Stage 1 deployed; login required |
+| Shared sign-in | [/auth/](https://rithvik.ddns.net/auth/) | Authelia, username/password |
+| Portainer | No live route yet | Stage 2, awaiting approval |
+| Blog and learning notebook | No live route yet | Stage 3, awaiting separate approval |
+
+The dashboard currently links to the portfolio and displays inactive cards for future applications. It does not yet manage containers or edit posts. Each future application needs an authentication integration before it shares the login; OpenID Connect clients are not configured in stage 1.
+
+The stage 1 deployment passed 15 automated tests, live HTTPS sign-in/sign-out and access checks, and desktop/mobile layout review. The contact API reported delivery available; these checks did not send email. This is a deployment record, not a continuously monitored status page.
+
+## Documentation
+
+- [Docker and Oracle operation](deploy/DOCKER.md): which file to use, local preview, first deployment, redeployment, and Caddy routing.
+- [Admin dashboard and shared login](deploy/ADMIN.md): account access, password recovery, persistent data, backups, and troubleshooting.
+- [Alternative host deployment](deploy/README.md): Node and Caddy with systemd, plus contact behavior and limits.
+- [Docker and Caddy PDF guide](output/pdf/Portfolio%20Docker%20and%20Caddy%20Guide.pdf): a printable guide to the completed setup.
+
+For the current Oracle deployment, commit the development changes, merge into `main`, and push. Then run this **inside the Oracle SSH session**:
+
+```sh
+bash /opt/portfolio_redeploy.sh
+```
+
+The shortcut already exists. It runs the repository's `portfolio_redeploy.sh`, builds and checks the app, applies production configuration, and verifies HTTPS. No new script needs to be pasted into the terminal. Authelia restarts during redeployment, so sign in again afterward. Stage 1 files were initially copied to Oracle before a Git commit; merge the matching files into `main` before a normal redeployment. The script stops if server copies differ from the pushed versions.
 
 ## Preview and check
 
@@ -17,6 +48,8 @@ node --env-file-if-exists=.env server/index.mjs
 Open **http://127.0.0.1:4173**. Stop the server with Ctrl+C. Equivalent pnpm commands are `pnpm build`, `pnpm check`, `pnpm test`, and `pnpm dev`. Build and content checks still run without installing dependencies; running the server requires Nodemailer. The old `node scripts/serve.mjs` preview command also works, but does not automatically load `.env`.
 
 Copy `.env.example` to `.env` and fill in your SMTP provider settings to enable delivery locally. Do not commit this file. Without SMTP configuration, the dialog offers LinkedIn and disables submission. Tests use fake delivery functions and never send real email. Change both `PORT` and `PUBLIC_ORIGIN` if using a different preview port. The form must be tested through HTTP/HTTPS, not by opening an HTML file directly.
+
+This local command previews the public portfolio and contact API. It does not start Caddy or Authelia; `/admin/` remains closed by default. Use the production setup for the complete sign-in flow.
 
 ## Update the content
 
@@ -35,23 +68,29 @@ Copy `.env.example` to `.env` and fill in your SMTP provider settings to enable 
 - `css/site.css`: colors, type, component styles, responsive layout, print styles, and reduced-motion support.
 - `js/site.js`: mobile navigation, project filters/search, linked project expansion, accessible contact dialog, active navigation, and scroll entrance animations.
 - A roughly 1.5-second introduction brings in the brand and navigation, reveals the homepage headline line by line, then introduces the description, buttons, and illustration with a brief connector animation. Inner-page introductions use the same staggered rhythm. This plays on page loads at the top; anchor links and restored scroll positions skip it. Links remain usable throughout. Sections start revealing just before entering the viewport, with small sibling delays and no nested tag animations. The illustration uses one frame scheduler with time-based easing for pointer tilt and gentle scroll movement; it stops when settled or offscreen. Hover effects and dialogs use consistent easing. There is no automatic scrolling or continuously running decorative loop. The footer's motion toggle is remembered locally; OS reduced-motion preferences always take priority. Keyboard focus and printing cancel entrance animations. Content is never hidden by animation-specific CSS.
-- `server/`: public-file allowlist, same-origin contact API, validation, rate limits, duplicate-submission protection, and SMTP delivery. Recipient and credentials remain in server configuration. Visitor addresses are used for Reply-To only.
-- `deploy/`: Caddy/systemd templates and the Oracle VM setup guide.
+- `server/`: public-file allowlist, protected dashboard, same-origin contact API, validation, rate limits, duplicate-submission protection, and SMTP delivery. Recipient and credentials remain in server configuration. Visitor addresses are used for Reply-To only.
+- `server/admin.mjs` and `css/admin.css`: dashboard markup, administrator identity checks, and responsive styling.
+- `Dockerfile`: builds and tests the Node application image; Compose decides how to run it.
+- `compose.yaml`, `compose.ip.yaml`, and `compose.production.yaml`: separate local, temporary public-IP, and production configurations. Use one at a time for a deployment.
+- `portfolio_redeploy.sh`: pulls `main`, validates configuration, builds the app, starts services, and checks the public endpoints.
+- `scripts/setup-admin.py`: one-time Linux administrator setup. It generates private account files and refuses to replace an existing `.auth/` directory.
+- `deploy/Caddyfile.docker` and `deploy/authelia/configuration.yml`: production routing and non-secret authentication settings.
+- `deploy/Caddyfile` and `deploy/portfolio.service`: alternative host-based templates, not the active Docker deployment.
 - `images/favicon.svg`: local vector identity. The hero illustration and project diagrams use inline SVG/CSS.
 - The existing `Projects.html` and `Awards.html` URLs are retained, as are the original main-page anchors. `error.html` remains available; `404.html` supplies the GitHub Pages error page.
 - Content, navigation, downloads, and project overviews work without JavaScript. JavaScript adds search, filtering, a collapsible mobile menu, and the contact form. LinkedIn remains the contact fallback without JavaScript.
 
 ## Hosting
 
-For Docker, follow the [container deployment guide](deploy/DOCKER.md). `docker compose up --build -d --wait` starts a local preview at `http://localhost:8080`; the separate production Compose file adds Caddy HTTPS for an Oracle VM. The image build regenerates and validates the site, and SMTP credentials are supplied only at runtime.
+For Docker, follow the [container deployment guide](deploy/DOCKER.md). `docker compose up --build -d --wait` starts a local preview at `http://localhost:8080`; the separate production Compose file runs the app, Caddy, and Authelia on Oracle. The image build regenerates and validates the site. SMTP credentials are supplied only at runtime, and Authelia reads its private files from `.auth/`.
 
-The generated pages still work with GitHub Pages served directly from the repository root, but GitHub Pages cannot run the SMTP backend. To enable email delivery on a Linux VM, follow [the Oracle deployment guide](deploy/README.md). It includes HTTPS, service startup, provider configuration, and delivery verification. No VM or email provider has been configured by this rebuild.
+The generated pages still work with GitHub Pages served directly from the repository root. GitHub Pages cannot run the contact backend, admin dashboard, or Authelia. The current Oracle deployment already runs these services. The [host-based guide](deploy/README.md) is an alternative for the public site and SMTP backend; it does not install shared login.
 
-If the public URL changes, update `siteUrl` in the content file and rebuild to refresh canonical URLs, sitemap, and the 404 page base URL. The supplied Node/Caddy setup serves at the domain root.
+For Docker production, change `DOMAIN` in the server's `.env.production` and redeploy when moving to a new domain. Compose derives the public origin, build URL, and authentication URLs from it. For static or direct Node hosting, update `siteUrl` in the content file and rebuild. See [domain changes](deploy/DOCKER.md#changing-the-domain) for details.
 
 The public pages use a form and LinkedIn instead of displaying a destination email or phone number. The CV is unchanged and may contain contact details. Removing visible contact details does not remove them from downloaded PDFs, public source, old commits, or copies indexed elsewhere. Review those separately if you want a public CV with fewer contact details.
 
-This rebuild does not publish or push automatically. The previous Bootstrap and jQuery setup is no longer loaded; the old Bootstrap files and source images remain in the repository for reference.
+Deployments are triggered manually; there is no automatic deployment on a Git push. Keep `.env`, `.env.production`, `.auth/`, passwords, and SSH keys out of Git. The previous Bootstrap and jQuery setup is no longer loaded; the old Bootstrap files and source images remain in the repository for reference.
 
 ## Content sources
 

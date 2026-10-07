@@ -4,8 +4,32 @@
 
 {$DOMAIN} {
     encode zstd gzip
-    reverse_proxy app:4173 {
-        # Replace any visitor-supplied header with the real connected client.
-        header_up X-Real-IP {remote_host}
+    # Never accept identity claims supplied by a visitor.
+    request_header -Remote-User
+    request_header -Remote-Groups
+    request_header -Remote-Email
+    request_header -Remote-Name
+
+    @login path /auth /auth/*
+    handle @login {
+        reverse_proxy auth:9091
+    }
+
+    @workspace path /admin /admin/*
+    handle @workspace {
+        forward_auth auth:9091 {
+            uri /api/authz/forward-auth?authelia_url=https://{$DOMAIN}/auth/
+            copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+        }
+        reverse_proxy app:4173 {
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    handle {
+        reverse_proxy app:4173 {
+            # Replace any visitor-supplied header with the real connected client.
+            header_up X-Real-IP {remote_host}
+        }
     }
 }

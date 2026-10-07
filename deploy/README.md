@@ -1,8 +1,10 @@
-# Oracle VM deployment
+# Oracle deployment and alternative host setup
 
-For the Docker Compose setup, use the [Docker deployment guide](DOCKER.md). The instructions below are the alternative host-based setup; do not run both on the same ports.
+The active Oracle deployment uses Docker Compose at `/opt/portfolio`, with Caddy, the Node app, and Authelia. Open the [public site](https://rithvik.ddns.net/) or [admin dashboard](https://rithvik.ddns.net/admin/). For current commands, use the [Docker deployment guide](DOCKER.md); account access and recovery are covered in the [admin guide](ADMIN.md).
 
-These files prepare a single Node process behind Caddy on a Linux VM. Nothing has been deployed. The app can run on an AMD VM; it does not depend on Oracle-specific APIs. Oracle's free-tier availability and reclamation rules still apply: see the [Always Free documentation](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
+The instructions below describe the alternative **systemd deployment for the public portfolio and contact backend**. They use `deploy/portfolio.service` and `deploy/Caddyfile`; production Docker uses `compose.production.yaml` and `deploy/Caddyfile.docker`. Do not start host-based services alongside the Docker stack on the same ports. These host templates do not install Authelia or enable the admin dashboard.
+
+The app can run on an AMD VM and does not depend on Oracle-specific APIs. See Oracle's [Always Free documentation](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm) for the service's current conditions.
 
 ## Prepare the host
 
@@ -49,4 +51,4 @@ The Caddy template replaces `X-Real-IP` with the connected client's IP. Enable `
 - Each IP may make five submission attempts per 15 minutes; the process permits 100 attempts per hour overall and three simultaneous SMTP deliveries. A single process is intended. Counters reset on restart and are not shared across replicas.
 - Successful submissions are deduplicated by an opaque request ID plus a hashed payload for one hour, within the process. The app does not write messages to disk or log them; memory holds the payload while sending. Your email provider and destination mailbox receive and retain the message.
 - A provider timeout can leave delivery uncertain. The form preserves the draft and does not retry automatically. After a restart or an ambiguous SMTP failure, retrying can produce a duplicate email. Use LinkedIn for urgent follow-up.
-- Only public pages, site assets, and the current CV are served. `.env`, server source, content data, and the old CV are excluded by the Node server. A public Git repository and a downloadable CV can still expose contact details independently of the website; review those separately before publishing.
+- The static-file allowlist serves public pages, assets, and the current CV. The separately handled admin route requires a verified identity when enabled. `.env`, `.auth/`, server source, content data, and the old CV are excluded from static serving. A public Git repository and downloadable CV can still expose contact details independently of the website; review those separately before publishing.

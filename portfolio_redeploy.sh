@@ -82,20 +82,32 @@ main() {
   fi
 
   local -a compose=("${docker_cmd[@]}" compose --env-file .env.production -f compose.production.yaml)
+  if [[ ! -f .auth/secrets/users.yml || ! -f .auth/secrets/session-secret || ! -f .auth/secrets/storage-key ]]; then
+    printf 'Initialize the administrator once with: python3 scripts/setup-admin.py\n' >&2
+    return 1
+  fi
   printf 'Validating the production configuration...\n'
   "${compose[@]}" config --quiet
-  # Caddy has a fixed backend IP, so a second Compose container would conflict.
-  "${compose[@]}" exec -T caddy caddy validate \
-    --config /etc/caddy/Caddyfile --adapter caddyfile </dev/null
+  "${compose[@]}" run --rm --no-deps --interactive=false auth config validate \
+    --config /etc/authelia/configuration.yml --config.experimental.filters template </dev/null
+  # Override networking to avoid a second container claiming Caddy's fixed IP.
+  # The isolated validation container publishes no ports or certificates.
+  local domain caddy_image
+  domain="$("${compose[@]}" run --rm --no-deps --interactive=false --entrypoint sh auth -c 'printf "%s" "$DOMAIN"' </dev/null)"
+  caddy_image="$("${compose[@]}" config --images | while read -r image; do if [[ "$image" == caddy:* ]]; then printf '%s\n' "$image"; fi; done)"
+  "${docker_cmd[@]}" run --rm --network none -e "DOMAIN=$domain" \
+    -v "$repo_dir/deploy:/etc/caddy/site:ro" "$caddy_image" caddy validate \
+    --config /etc/caddy/site/Caddyfile.docker --adapter caddyfile </dev/null
 
   printf 'Building the app, generated pages, link checks, and tests...\n'
   "${compose[@]}" build app </dev/null
   printf 'Starting the production stack and waiting for app health...\n'
+  # Auth reads its configuration and keys at startup. Recreate it on redeploy;
+  # the in-memory sessions intentionally expire, while SQLite stays on disk.
+  "${compose[@]}" up --no-build -d --force-recreate --wait --wait-timeout 180 auth </dev/null
   "${compose[@]}" up --no-build -d --wait --wait-timeout 180 </dev/null
-  # A changed bind-mounted Caddyfile does not itself recreate the container.
-  "${compose[@]}" exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile </dev/null
+  "${compose[@]}" exec -T caddy caddy reload --config /etc/caddy/site/Caddyfile.docker --adapter caddyfile </dev/null
 
-  local domain
   domain="$("${compose[@]}" exec -T caddy sh -c 'printf "%s" "$DOMAIN"' </dev/null)"
   [[ -n "$domain" ]] || { printf 'The Caddy hostname is missing.\n' >&2; return 1; }
   printf 'Checking https://%s/ ...\n' "$domain"
@@ -105,8 +117,14 @@ main() {
   curl --fail --silent --show-error --retry 3 --retry-delay 2 --retry-connrefused \
     --connect-timeout 10 --max-time 30 "https://$domain/api/contact"
   printf '\n'
+  curl --fail --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null "https://$domain/auth/api/health"
+  local admin_status
+  admin_status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null --write-out '%{http_code}' "https://$domain/admin/")"
+  [[ "$admin_status" == 302 || "$admin_status" == 303 || "$admin_status" == 401 ]] || {
+    printf 'Unexpected unauthenticated dashboard response: %s\n' "$admin_status" >&2; return 1;
+  }
   "${compose[@]}" ps
-  printf 'Deployed main commit %s at https://%s/\n' "$(git rev-parse --short HEAD)" "$domain"
+  printf 'Deployed checkout based on main commit %s at https://%s/\n' "$(git rev-parse --short HEAD)" "$domain"
 }
 
 trap 'printf "Deployment stopped at line %s. Review the error above before retrying.\n" "$LINENO" >&2' ERR

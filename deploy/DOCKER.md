@@ -1,14 +1,44 @@
-# Docker deployment
+# Docker and Oracle deployment
 
-The local and public-IP previews each run one Node container. Production runs Node and Caddy in separate containers, with Caddy handling HTTPS. Server deployments use the `main` branch.
+Updated **8 October 2026 (Asia/Kolkata)**. The active deployment is at `/opt/portfolio` on Oracle, using `main` and `compose.production.yaml`. Its hostname is `rithvik.ddns.net`, pointing to `144.24.135.201` through No-IP. Caddy serves HTTPS; Node serves the portfolio and admin dashboard; Authelia handles administrator sign-in.
 
-## Requirements
+Stage 1 is deployed. Portainer is stage 2; the blog and learning notebook are stage 3. Both remain pending approval. See the [admin guide](ADMIN.md) for login, recovery, and backups.
 
-- Docker Engine and Docker Compose v2.24 or newer. On Windows, use [Docker Desktop with Linux containers](https://docs.docker.com/desktop/setup/install/windows-install/). On an Ubuntu VM, follow the [official Engine installation guide](https://docs.docker.com/engine/install/ubuntu/), including the Compose plugin.
-- Run commands from the repository root.
-- The images support Linux AMD64 and ARM64; Docker selects the host architecture. No Node or pnpm installation is needed on the host.
+## Which file should I use?
+
+| File | Purpose | Command or entry point |
+| --- | --- | --- |
+| `Dockerfile` | Builds one Node image, including generated pages, checks, and tests | Compose builds it for the `app` service |
+| `compose.yaml` | Local public-site preview, one app container | `docker compose up --build -d --wait` |
+| `compose.ip.yaml` | Earlier HTTP preview at a public IP, no SMTP or shared login | Use only for a separate temporary preview |
+| `compose.production.yaml` | Current Oracle stack: app, Caddy, Authelia, networks and storage | `bash /opt/portfolio_redeploy.sh` on Oracle |
+| `.dockerignore` | Allows only named inputs into the image build | Update when adding assets or changing the CV filename |
+| `deploy/Caddyfile.docker` | HTTP redirect, HTTPS, `/auth/` and `/admin/` routing | Mounted at `/etc/caddy/site/Caddyfile.docker` |
+| `deploy/authelia/configuration.yml` | Non-secret login, session and access rules | Loaded with the template filter and runtime `DOMAIN` |
+| `deploy/Caddyfile`, `deploy/portfolio.service` | Alternative host Caddy/systemd setup | Not used by the active Docker stack |
+
+A Dockerfile produces an image. Compose describes how to run images together: ports, settings, networks, health checks, and storage. `build` creates an image; `up` creates or updates containers. `up --build` does both. A plain `restart` does not rebuild code or reload changed Compose environment values.
+
+Use one Compose configuration for each deployment; the production and IP files are standalone, not overrides of the local file.
+
+## Current routes and services
+
+| Browser request | Destination | Access |
+| --- | --- | --- |
+| `http://144.24.135.201/` or HTTP on the hostname | Redirect to `https://rithvik.ddns.net/` | Public |
+| `/`, `/Projects.html`, `/Awards.html`, CV and public assets | `app:4173` | Public |
+| `/api/contact` | Node contact handler | Same-origin rules for submission |
+| `/auth/` | `auth:9091` | Sign-in portal |
+| `/admin/` | Authelia session check, then `app:4173` | Administrator only |
+| `/portainer/`, `/learn/` | No application installed | No live route |
+
+Only Caddy publishes web ports: TCP 80 and 443, plus UDP 443 for HTTP/3. App port 4173 and auth port 9091 are container ports, not public host ports. SSH is a separate host service.
+
+The `backend` network connects Caddy and the app. Caddy has the configured fixed address `172.30.0.3`. The separate `identity` network connects Caddy and Authelia. The app checks Caddy's exact peer address before accepting administrator identity headers; Caddy strips visitor-supplied identity headers first. Contact rate-limit proxy handling also supports loopback, but this does not grant dashboard access.
 
 ## Local preview
+
+Use Docker Desktop with Linux containers. Compose v2.24 or newer is needed for the optional `.env` file setting. Run from the repository root:
 
 ```sh
 docker compose config --quiet
@@ -16,170 +46,173 @@ docker compose up --build -d --wait
 docker compose ps
 ```
 
-Open **http://localhost:8080**. Use this exact hostname for the contact form's origin check. This is separate from the existing non-container preview on port 4173. Set `CONTAINER_PORT=8081` in `.env` if 8080 is occupied; Compose also updates the allowed origin.
+Open **http://localhost:8080**, using that exact hostname for the contact form's origin check. The app listens on 4173 inside the container; Docker maps host port 8080 to it. A container being healthy does not mean host port 4173 is published. Set `CONTAINER_PORT=8081` in `.env` if 8080 is occupied, then run `up` again.
 
-The existing `.env` is optional and is passed into the container at runtime, so its SMTP settings can be reused. Compose overrides the server's host, internal port, origin, and proxy settings for Docker. Nothing edits `.env` or copies it into the image. Without SMTP settings, the site works and the contact dialog offers LinkedIn. Starting a container or running its health check does not send email.
+The optional `.env` supplies SMTP settings at runtime. Without them, the contact dialog offers LinkedIn. Local Compose does not start Caddy or Authelia, and the dashboard remains inaccessible. The direct Node preview at `http://127.0.0.1:4173` is a separate workflow in the [project README](../README.md#preview-and-check).
 
 ```sh
 docker compose logs --tail=100 app
 docker compose down
 ```
 
-This is a built snapshot, with no source bind mount or hot reload. After editing content, CSS, JavaScript, or the CV, rerun `docker compose up --build -d --wait`.
+After source or asset changes, rerun `docker compose up --build -d --wait`. There is no source bind mount or hot reload in this preview.
 
-## Oracle VM with a public IP (temporary HTTP preview)
+## Normal Oracle redeployment
 
-Use `compose.ip.yaml` on its own for an initial deployment without a domain. It publishes port 80 and does not load SMTP credentials, so the contact dialog offers LinkedIn. The existing production HTTPS requirement remains unchanged.
+The server already uses `main`; its earlier migration from `V2` is complete. Do not repeat the old branch-creation or IP-preview setup. For each update:
 
-```sh
-cp deploy/ip.env.example .env.ip
-# Edit PUBLIC_IP in .env.ip to match the instance's public IPv4.
-docker compose --env-file .env.ip -f compose.ip.yaml config --quiet
-docker compose --env-file .env.ip -f compose.ip.yaml up --build -d --wait
-```
-
-Allow inbound TCP 80 in the VM firewall and Oracle network security rules, then open `http://YOUR_PUBLIC_IP/`. Run Docker commands with `sudo` if the login user does not have Docker access. The build sets canonical URLs and the sitemap to this address without changing `data/portfolio.json`.
-
-For updates from Git, follow [Redeploy from main](#redeploy-from-main). To inspect or stop the preview:
-
-```sh
-docker compose --env-file .env.ip -f compose.ip.yaml logs --tail=100 app
-docker compose --env-file .env.ip -f compose.ip.yaml down
-```
-
-Once a domain is available, stop this preview and follow the HTTPS setup below before enabling SMTP delivery.
-
-## Switch the existing Oracle checkout from V2 to main (once)
-
-First commit the deployment changes, merge `V2` into `main`, and push `main` to GitHub. Include `Dockerfile`, `scripts/build.mjs`, `compose.ip.yaml`, `deploy/ip.env.example`, and this guide. Keep `.env.ip` and credentials out of Git.
-
-The existing Oracle checkout at `/opt/portfolio` was cloned with `--single-branch` for `V2`. It also has the initial deployment changes copied in as tracked modifications and untracked files. Run this block in the Oracle SSH session after the merge is pushed:
-
-```sh
-(
-  set -eu
-  cd /opt/portfolio
-  git remote set-branches origin main
-  git fetch origin
-  git cat-file -e origin/main:compose.ip.yaml
-  git stash push --include-untracked -m "Oracle deployment backup before switching to main"
-  git switch --create main --track origin/main
-  sudo docker compose --env-file .env.ip -f compose.ip.yaml config --quiet
-  sudo docker compose --env-file .env.ip -f compose.ip.yaml up --build -d --wait
-  sudo docker compose --env-file .env.ip -f compose.ip.yaml ps
-)
-```
-
-The remote setting makes future fetches track `main`. The file check confirms that the IP deployment configuration reached GitHub before changing the checkout. The stash preserves the server's uncommitted files; ignored `.env.ip` stays in place. Keep this stash as a backup: the merged branch already supplies those deployment changes, so it does not need to be reapplied. The parenthesized block stops on an error without closing the SSH session.
-
-This block creates the local `main` branch once. If it already exists, use the redeployment block below instead. Switching Git branches does not change the running container; Compose replaces it after the build succeeds.
-
-## Redeploy from main
-
-After the one-time switch, commit and push each update to `main`, then run this block in the Oracle SSH session:
-
-```sh
-(
-  set -eu
-  cd /opt/portfolio
-  git switch main
-  git pull --ff-only origin main
-  sudo docker compose --env-file .env.ip -f compose.ip.yaml config --quiet
-  sudo docker compose --env-file .env.ip -f compose.ip.yaml up --build -d --wait
-  sudo docker compose --env-file .env.ip -f compose.ip.yaml ps
-)
-```
-
-The build runs the site checks and tests before replacing the container. `--ff-only` stops if the server branch has diverged instead of creating a deployment merge. If Git reports conflicting local changes, reconcile or back them up before continuing. The server builds a snapshot, so pulling code alone does not update the website.
-
-Verify `http://144.24.135.201/` after the command succeeds. For startup problems, run:
-
-```sh
-cd /opt/portfolio
-sudo docker compose --env-file .env.ip -f compose.ip.yaml logs --tail=100 app
-```
-
-## Oracle VM with a domain and HTTPS
-
-Use `compose.production.yaml` on its own, not as an override of the local file. This keeps the Node port off the host's published ports.
-
-1. Install Docker Engine and the Compose plugin, and copy or clone the repository onto the VM. Do not run the systemd/Caddy host setup at the same time: it uses the same public ports.
-2. Point your domain's DNS at the VM. Use one canonical hostname. Allow inbound TCP 80 and 443 in the VM firewall and Oracle security rules; UDP 443 is optional for HTTP/3. Allow outbound DNS, HTTPS, and your SMTP provider's port. Port 4173 stays unpublished.
-3. Create the production settings file:
+1. Commit development changes locally, including generated public pages when content/templates changed.
+2. Merge the development branch (currently `V2`) into `main` and push `main` to GitHub.
+3. Connect to Oracle over SSH and run:
 
    ```sh
-   cp deploy/production.env.example .env.production
-   chmod 600 .env.production
+   bash /opt/portfolio_redeploy.sh
    ```
 
-4. Edit `.env.production`: set `DOMAIN` to your real hostname, without a scheme or path. Add SMTP settings when ready. For your Gmail sender, these are `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false`, `SMTP_USER=rithvik.notifications@gmail.com`, `CONTACT_FROM=rithvik.notifications@gmail.com`, and `CONTACT_TO=rithvik.career@gmail.com`. `SMTP_PASS` must be an app password, not the normal Gmail password. Leave credentials blank to keep messaging disabled. Single-quote any environment value containing a literal `$` so Compose does not interpolate it.
-5. The production build derives `SITE_URL` from `DOMAIN`. This sets canonical links and the sitemap to the HTTPS hostname without changing the default URL in `data/portfolio.json`.
-6. Validate and start:
+`/opt/portfolio_redeploy.sh` is an existing wrapper for `/opt/portfolio/portfolio_redeploy.sh`. Run it inside SSH; do not paste Bash commands into Windows PowerShell. No new script file is needed.
 
-   ```sh
-   docker compose --env-file .env.production -f compose.production.yaml config --quiet
-   docker compose --env-file .env.production -f compose.production.yaml up --build -d --wait
-   docker compose --env-file .env.production -f compose.production.yaml ps
-   docker compose --env-file .env.production -f compose.production.yaml logs --tail=100
-   ```
+The script locks against concurrent deployments, fetches `main`, permits only a fast-forward update, validates Compose/Authelia/Caddy, builds the app, and waits for healthy services. The image build generates five pages, checks their links and CV, and runs tests with fake mail delivery. The script then reloads Caddy and checks the homepage, contact API, auth health, and signed-out dashboard access.
 
-7. Open the public HTTPS website and check its pages and CV download. Once SMTP is configured, submit a test message yourself and check the destination inbox and Reply-To behavior. Container health confirms the app responds; it does not confirm DNS, certificate issuance, or email delivery.
+The current containers serve during the build. Authelia is recreated to load its configuration; its in-memory sessions expire, so sign in again after deployment. The app may briefly restart during replacement. Persistent data and certificates remain.
 
-Caddy obtains and renews certificates for the configured domain once DNS and network access are correct. Its certificate state persists in `caddy_data`; `caddy_config` also persists. See [Caddy automatic HTTPS](https://caddyserver.com/docs/automatic-https) and the [official Caddy container documentation](https://hub.docker.com/_/caddy).
+Stage 1 files were copied to Oracle before being committed. Include all corresponding code, deployment, and documentation changes in the next merge. The script backs up copied files in a Git stash only when they exactly match `origin/main`; it stops when they differ. Reconcile a reported difference rather than discarding server files or private settings. A Git push alone does not deploy the site.
 
-### No-IP hostname
-
-The configured hostname is `rithvik.ddns.net`, with a No-IP A record pointing to `144.24.135.201`. Wildcard DNS is not required for this hostname. Keep `DOMAIN=rithvik.ddns.net` in the server's ignored `.env.production` file. Caddy redirects HTTP requests, including visits to the IP address, to this HTTPS hostname.
-
-Confirm the free hostname every 30 days in No-IP to keep it active. If the Oracle public IP changes, update the A record. An automatic DNS update client, if used, should run on Oracle so it reports the server's address.
-
-Use the production commands below for this HTTPS deployment. The `compose.ip.yaml` commands are only for the earlier HTTP preview. To move to a purchased domain later, point its DNS at Oracle, change `DOMAIN` in `.env.production`, and rebuild with the production command; Caddy will request a certificate for the new hostname. Keep the certificate volumes during this change.
-
-## Updates and operation
-
-The Oracle shortcut is `/opt/portfolio_redeploy.sh`. It runs the versioned `portfolio_redeploy.sh` in `/opt/portfolio`. After committing your development changes, merging them into `main`, and pushing `main`, run this single command in SSH:
-
-```sh
-bash /opt/portfolio_redeploy.sh
-```
-
-The script fetches `main`, allows only a fast-forward update, validates Compose and Caddy, builds the app and generated pages, runs the image's link checks and tests, starts the stack, reloads Caddy, and checks the public HTTPS site and contact API. It keeps the current containers serving during the build and preserves the certificate volumes. Docker can reuse cached build steps when their inputs are unchanged.
-
-The server reads its saved `.env.production`, including the deployed SMTP credentials, on every run. This file remains private, with mode `600`, and is neither replaced from Git nor baked into the image. Updating your computer's `.env` does not update the server automatically; copy any changed mail settings securely to the server's `.env.production` separately.
-
-Include `portfolio_redeploy.sh` and the deployment configuration changes in your next commit and merge to `main` before the first normal run. The script can reconcile the initial copied deployment files when they exactly match the versions pushed to `main`: it saves those server copies in a Git stash before updating. It stops if any server changes differ, instead of overwriting them. A concurrent deployment or divergent server commit also stops the script.
-
-To rebuild the existing server checkout after changing only its environment settings, skip the Git update:
+After changing only the server's saved environment or configuration, rebuild the existing checkout without pulling:
 
 ```sh
 bash /opt/portfolio_redeploy.sh --no-pull
 ```
 
-On another server, the repository copy can be run directly with `bash /opt/portfolio/portfolio_redeploy.sh`. A plain Docker `restart` does not reload environment variables; the script uses Compose `up` to recreate affected containers. Do not scale the Node service: contact rate limits and duplicate protection are in one process's memory.
+Both commands use private `/opt/portfolio/.env.production`. Editing `.env` on your computer does not update that server file. `scripts/setup-admin.py` is a one-time initializer, not part of every redeployment.
 
-To refresh the base images and rebuild explicitly:
+## First setup on a new Linux server
+
+This has already been completed on the current Oracle instance.
+
+1. Install Docker Engine, Compose, Git, Python 3, curl, and flock. Clone the repository's `main` branch into `/opt/portfolio`. Docker builds Node and pnpm inside the image; they are not needed on the host.
+2. Point the hostname at the server. Allow inbound TCP 80/443 in the host firewall and Oracle network rules; UDP 443 is optional. Allow outbound DNS, HTTPS, and SMTP traffic. Keep app/auth ports unpublished.
+3. Create runtime settings without overwriting any existing private file:
+
+   ```sh
+   cd /opt/portfolio
+   cp -n deploy/production.env.example .env.production
+   chmod 600 .env.production
+   ```
+
+4. Edit `.env.production`. Set `DOMAIN` to the hostname only, without a scheme or path. Add SMTP credentials when ready. `CONTACT_FROM` must be a permitted sender; `CONTACT_TO` is the private destination. Use an SMTP app password where required. Single-quote values containing a literal `$` for Compose. Set `AUTHELIA_UID` and `AUTHELIA_GID` to `id -u` and `id -g` if they are not `1000`.
+5. Initialize the administrator as the normal deployment user. The helper uses `sudo -n docker` if required, generates a password/hash and keys, and refuses to overwrite `.auth/`:
+
+   ```sh
+   python3 scripts/setup-admin.py
+   bash portfolio_redeploy.sh --no-pull
+   ```
+
+6. Open the HTTPS site and `/admin/`. Retrieve private bootstrap credentials as described in the [admin guide](ADMIN.md#sign-in). Check actual email delivery manually if needed; health checks and automated tests do not send mail.
+
+On a new server, the repository script works directly. The `/opt/portfolio_redeploy.sh` shortcut is specific to the existing Oracle setup.
+
+## Runtime settings and storage
+
+| Location | Contents | Updated by |
+| --- | --- | --- |
+| `.env` on your computer | Local preview settings | You; never copied into the image |
+| `.env.production` on Oracle | Domain, SMTP, proxy network and account settings | You, privately on Oracle |
+| `.auth/secrets/users.yml` | User metadata, groups and Argon2 password hash | One-time setup; manual recovery |
+| `.auth/secrets/session-secret` | Session secret | One-time setup; preserve across deployment |
+| `.auth/secrets/storage-key` | Database encryption key | One-time setup; retain with the database |
+| `.auth/data/` | SQLite database and filesystem notifier output | Auth service |
+| `.auth/bootstrap-login.txt` | Initial login details in plaintext | One-time setup; store privately |
+| `portfolio_caddy_data` volume | Certificates and ACME account state | Caddy |
+| `portfolio_caddy_config` volume | Caddy runtime state | Caddy |
+
+`.env*` secrets and `.auth/` stay out of Git and the image build context. Do not share plain `docker compose config` output or full container inspection: they can reveal resolved SMTP settings. Use `config --quiet` for validation. Certificate volumes and `.auth/` survive rebuilds and ordinary `compose down`; `down --volumes` removes named volumes.
+
+The app image uses Node 24 and pinned pnpm with the frozen lockfile. Node and Authelia run as non-root users with read-only root filesystems and no extra capabilities. Auth has writable persistent data and temporary `/tmp`. The Compose HTTP health check is active; `server.disable_healthcheck: true` in Authelia only skips writing the image's legacy health-check environment file. Logs rotate. Memory limits are 256 MiB for the app, 192 MiB for Caddy, and 192 MiB for Authelia; Docker and builds need additional memory.
+
+## Caddy changes and new sites
+
+Edit **`deploy/Caddyfile.docker`** for this deployment. Bare `deploy/Caddyfile` belongs to the unused systemd alternative. Caddy mounts the `deploy/` directory so Git file replacement is visible. The redeploy script validates and reloads the correct container path.
+
+For a Caddy-only change already saved on Oracle, validate before reloading:
 
 ```sh
-docker compose --env-file .env.production -f compose.production.yaml pull caddy
-docker compose --env-file .env.production -f compose.production.yaml build --pull app
-docker compose --env-file .env.production -f compose.production.yaml up -d --wait
+cd /opt/portfolio
+sudo docker compose --env-file .env.production -f compose.production.yaml exec -T caddy \
+  caddy validate --config /etc/caddy/site/Caddyfile.docker --adapter caddyfile &&
+sudo docker compose --env-file .env.production -f compose.production.yaml exec -T caddy \
+  caddy reload --config /etc/caddy/site/Caddyfile.docker --adapter caddyfile
 ```
 
-To stop production while preserving certificates:
+Run reload only after validation succeeds. For changes to Compose, `DOMAIN`, or auth settings, use the redeploy script so containers receive their new environment and configuration.
+
+For a future site, decide whether its application supports a path such as `/tool/` or needs a separate hostname. A path on `rithvik.ddns.net` needs no new DNS record or wildcard. Add the service and a deliberate shared network with Caddy; do not attach unrelated applications to the trusted portfolio backend. Proxy to its service name and internal port, not `localhost` inside the Caddy container. Leave its host port unpublished.
+
+`handle` preserves the request path; `handle_path` strips the matched prefix. For example, `handle_path /tool/*` sends `/tool/page` upstream as `/page`. The application must still generate working asset URLs and redirects for its public base URL. The current `/auth/` route preserves its path because Authelia is configured with that base path. See [Caddy's path handling](https://caddyserver.com/docs/caddyfile/directives/handle_path).
+
+A separate hostname needs its own DNS record and Caddy site block, with DNS pointing to this server. Use the same Caddy service to terminate HTTPS. For a private site, add the appropriate Authelia access rule and the application's supported identity integration before publishing access. Forward authentication alone does not automatically replace an application's own login. See [Authelia's Caddy integration](https://www.authelia.com/integration/proxies/caddy/). Portainer and writing services will be configured in their separately approved stages.
+
+For example, after a **public** `tool` service is running on an appropriate shared network and you control the DNS for `tool.example.com`, a new top-level site block would be:
+
+```caddyfile
+tool.example.com {
+    encode zstd gzip
+    reverse_proxy tool:3000
+}
+```
+
+Replace that example hostname, service, and port with real values. This block provides no login protection. For a path-based public app instead, add its handler inside the existing hostname block before the fallback `handle`, with the app configured for that base path:
+
+```caddyfile
+redir /tool /tool/ 308
+handle_path /tool/* {
+    reverse_proxy tool:3000
+}
+```
+
+These are documentation examples only; no `tool` service or route is currently deployed.
+
+## Changing the domain
+
+Point the new hostname at Oracle, change `DOMAIN` in `.env.production`, and run `bash /opt/portfolio_redeploy.sh --no-pull`. Compose derives `PUBLIC_ORIGIN`, the build's `SITE_URL`, and Authelia's URLs from `DOMAIN`. Caddy requests a certificate for the hostname; Authelia uses it for sign-in and cookies. Keep persistent storage, then sign in again on the new address. Future OAuth/OIDC client callback URLs will also need updating.
+
+DNS directs a browser to the server's IP. The HTTPS request still carries the hostname for TLS and HTTP routing, which Caddy uses to choose a certificate and site. The app's public origin controls contact requests; Authelia uses the hostname for session scope and redirects. This setup redirects HTTP on the IP to the hostname; it is not configured to serve HTTPS directly on the raw IP. This is a configuration description, not a claim that IP certificates are impossible.
+
+Keep the No-IP hostname renewed according to its account requirements. If Oracle's public IP changes, update its DNS record. There is no Cloudflare Pages, Worker, tunnel, or dynamic DNS updater deployed by this setup.
+
+## Status and troubleshooting
+
+Run inside SSH:
 
 ```sh
-docker compose --env-file .env.production -f compose.production.yaml down
+cd /opt/portfolio
+sudo docker compose --env-file .env.production -f compose.production.yaml ps
+sudo docker compose --env-file .env.production -f compose.production.yaml logs --tail=100 app caddy auth
+curl -I https://rithvik.ddns.net/
+curl -I https://rithvik.ddns.net/admin/
+curl https://rithvik.ddns.net/api/contact
 ```
 
-Keep the named volumes; adding `--volumes` deletes the stored certificates. Back up `.env.production` privately and preserve Caddy's data volume when moving the deployment. Avoid sharing the output of plain `docker compose config` or container inspection: those can reveal environment secrets. Use `config --quiet` for validation.
+The public page should return 200; a signed-out admin request should redirect to `/auth/`. Contact `{"available":true}` indicates configured delivery, not proof of inbox receipt.
 
-## Container details
+| Symptom | Check |
+| --- | --- |
+| Local container runs but port 4173 is empty | Use `http://localhost:8080` for local Compose; inspect `docker compose ps` |
+| SSH identity file cannot be found | Use the full quoted path to the key on the current computer; copying it does not change its identity |
+| Public site times out | DNS address, running Caddy, Oracle ingress rules, and host firewall for 80/443 |
+| Dashboard is 401 on a local/direct Node preview | Expected: that preview has no authenticated Caddy/Authelia integration |
+| Admin route is 502 or sign-in fails | Auth health and logs; see [admin troubleshooting](ADMIN.md#troubleshooting) |
+| Redeploy reports server changes differ from `origin/main` | Commit/merge the matching files or reconcile the named server change |
+| `Address already in use` on 80/443 | An IP-preview container or host Caddy may still own the port |
 
-- The multi-stage image uses Node 24 on Debian slim. pnpm is pinned and installs production dependencies from the frozen lockfile. The build regenerates pages, checks links, and runs tests with fake mail delivery. The final stage excludes build tools, test files, and pnpm's installation.
-- `.dockerignore` permits only named build inputs. Credentials, Git history, local dependencies, and the old CV are excluded. When adding assets or changing the CV filename, update that allowlist.
-- Node runs as a non-root user with a read-only filesystem, no extra Linux capabilities, a health check, and a graceful shutdown timeout. Logs rotate. The configured runtime limits are 256 MiB for Node and 192 MiB for Caddy; builds and Docker itself need additional memory.
-- Production uses a dedicated bridge network. Caddy gets `172.30.0.3` and overwrites `X-Real-IP`; Node trusts that exact proxy address plus loopback. Other peers cannot bypass rate limits by supplying that header. If the default subnet overlaps a VPN or existing Docker network, change both `DOCKER_SUBNET` and `CADDY_IP` to a matching unused subnet/address before starting. Do not place unrelated containers on this network.
-- Both containers need outbound network access, including Node's SMTP connection. The backend network therefore is not marked `internal`. Only Caddy publishes public ports.
-- The current configuration assumes Caddy directly receives visitor traffic. If adding a CDN or another reverse proxy, update client-IP trust before enabling it.
+## Temporary public-IP preview
 
-The existing [contact behavior and limits](README.md#contact-behavior-and-limits) still apply. The [host-based deployment guide](README.md) remains available if you choose to run without Docker.
+This is an alternative for a server without a domain, not the current Oracle deployment. Do not start it alongside production: it uses port 80 and the same Compose project name.
+
+```sh
+cp deploy/ip.env.example .env.ip
+# Set PUBLIC_IP in .env.ip before continuing.
+docker compose --env-file .env.ip -f compose.ip.yaml config --quiet
+docker compose --env-file .env.ip -f compose.ip.yaml up --build -d --wait
+```
+
+It serves the public portfolio over HTTP and does not enable SMTP, Authelia, or the dashboard. Stop it before installing the production stack. Prefer HTTPS production for ongoing use.
