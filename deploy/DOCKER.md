@@ -113,7 +113,7 @@ Use `compose.production.yaml` on its own, not as an override of the local file. 
    ```
 
 4. Edit `.env.production`: set `DOMAIN` to your real hostname, without a scheme or path. Add SMTP settings when ready. For your Gmail sender, these are `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false`, `SMTP_USER=rithvik.notifications@gmail.com`, `CONTACT_FROM=rithvik.notifications@gmail.com`, and `CONTACT_TO=rithvik.career@gmail.com`. `SMTP_PASS` must be an app password, not the normal Gmail password. Leave credentials blank to keep messaging disabled. Single-quote any environment value containing a literal `$` so Compose does not interpolate it.
-5. Set `siteUrl` in `data/portfolio.json` to `https://` followed by that same domain. This controls canonical links and the sitemap; the container build regenerates the pages.
+5. The production build derives `SITE_URL` from `DOMAIN`. This sets canonical links and the sitemap to the HTTPS hostname without changing the default URL in `data/portfolio.json`.
 6. Validate and start:
 
    ```sh
@@ -127,23 +127,35 @@ Use `compose.production.yaml` on its own, not as an override of the local file. 
 
 Caddy obtains and renews certificates for the configured domain once DNS and network access are correct. Its certificate state persists in `caddy_data`; `caddy_config` also persists. See [Caddy automatic HTTPS](https://caddyserver.com/docs/automatic-https) and the [official Caddy container documentation](https://hub.docker.com/_/caddy).
 
+### No-IP hostname
+
+The configured hostname is `rithvik.ddns.net`, with a No-IP A record pointing to `144.24.135.201`. Wildcard DNS is not required for this hostname. Keep `DOMAIN=rithvik.ddns.net` in the server's ignored `.env.production` file. Caddy redirects HTTP requests, including visits to the IP address, to this HTTPS hostname.
+
+Confirm the free hostname every 30 days in No-IP to keep it active. If the Oracle public IP changes, update the A record. An automatic DNS update client, if used, should run on Oracle so it reports the server's address.
+
+Use the production commands below for this HTTPS deployment. The `compose.ip.yaml` commands are only for the earlier HTTP preview. To move to a purchased domain later, point its DNS at Oracle, change `DOMAIN` in `.env.production`, and rebuild with the production command; Caddy will request a certificate for the new hostname. Keep the certificate volumes during this change.
+
 ## Updates and operation
 
-Once the server uses the HTTPS configuration, deploy updates from `main` with this block instead of the IP preview commands:
+The Oracle shortcut is `/opt/portfolio_redeploy.sh`. It runs the versioned `portfolio_redeploy.sh` in `/opt/portfolio`. After committing your development changes, merging them into `main`, and pushing `main`, run this single command in SSH:
 
 ```sh
-(
-  set -eu
-  cd /opt/portfolio
-  git switch main
-  git pull --ff-only origin main
-  sudo docker compose --env-file .env.production -f compose.production.yaml config --quiet
-  sudo docker compose --env-file .env.production -f compose.production.yaml up --build -d --wait
-  sudo docker compose --env-file .env.production -f compose.production.yaml ps
-)
+bash /opt/portfolio_redeploy.sh
 ```
 
-After copying new source or changing `.env.production`, rerun the production `up --build -d --wait` command. This recreates the affected container with the new configuration. A plain `restart` does not reload environment variables. Do not scale the Node service: contact rate limits and duplicate protection are in one process's memory.
+The script fetches `main`, allows only a fast-forward update, validates Compose and Caddy, builds the app and generated pages, runs the image's link checks and tests, starts the stack, reloads Caddy, and checks the public HTTPS site and contact API. It keeps the current containers serving during the build and preserves the certificate volumes. Docker can reuse cached build steps when their inputs are unchanged.
+
+The server reads its saved `.env.production`, including the deployed SMTP credentials, on every run. This file remains private, with mode `600`, and is neither replaced from Git nor baked into the image. Updating your computer's `.env` does not update the server automatically; copy any changed mail settings securely to the server's `.env.production` separately.
+
+Include `portfolio_redeploy.sh` and the deployment configuration changes in your next commit and merge to `main` before the first normal run. The script can reconcile the initial copied deployment files when they exactly match the versions pushed to `main`: it saves those server copies in a Git stash before updating. It stops if any server changes differ, instead of overwriting them. A concurrent deployment or divergent server commit also stops the script.
+
+To rebuild the existing server checkout after changing only its environment settings, skip the Git update:
+
+```sh
+bash /opt/portfolio_redeploy.sh --no-pull
+```
+
+On another server, the repository copy can be run directly with `bash /opt/portfolio/portfolio_redeploy.sh`. A plain Docker `restart` does not reload environment variables; the script uses Compose `up` to recreate affected containers. Do not scale the Node service: contact rate limits and duplicate protection are in one process's memory.
 
 To refresh the base images and rebuild explicitly:
 
