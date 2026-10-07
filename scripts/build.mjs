@@ -2,6 +2,11 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
 const p = JSON.parse(await readFile(new URL('data/portfolio.json', root), 'utf8'));
+if (process.env.SITE_URL) {
+  const site = new URL(process.env.SITE_URL);
+  if (!['http:', 'https:'].includes(site.protocol)) throw new Error('SITE_URL must use HTTP or HTTPS.');
+  p.siteUrl = site.href.endsWith('/') ? site.href : `${site.href}/`;
+}
 const e = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const arrowIcon = (direction = 'up-right') => {
   const paths = { 'up-right': 'M6 18 18 6M6 6h12v12', 'down-right': 'M6 6l12 12M6 18h12V6', down: 'M12 4v16m-6-6 6 6 6-6', up: 'M12 20V4m-6 6 6-6 6 6' };

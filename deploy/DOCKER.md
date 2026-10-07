@@ -27,6 +27,28 @@ docker compose down
 
 This is a built snapshot, with no source bind mount or hot reload. After editing content, CSS, JavaScript, or the CV, rerun `docker compose up --build -d --wait`.
 
+## Oracle VM with a public IP (temporary HTTP preview)
+
+Use `compose.ip.yaml` on its own for an initial deployment without a domain. It publishes port 80 and does not load SMTP credentials, so the contact dialog offers LinkedIn. The existing production HTTPS requirement remains unchanged.
+
+```sh
+cp deploy/ip.env.example .env.ip
+# Edit PUBLIC_IP in .env.ip to match the instance's public IPv4.
+docker compose --env-file .env.ip -f compose.ip.yaml config --quiet
+docker compose --env-file .env.ip -f compose.ip.yaml up --build -d --wait
+```
+
+Allow inbound TCP 80 in the VM firewall and Oracle network security rules, then open `http://YOUR_PUBLIC_IP/`. Run Docker commands with `sudo` if the login user does not have Docker access. The build sets canonical URLs and the sitemap to this address without changing `data/portfolio.json`.
+
+After pulling updates, rerun the same `up --build -d --wait` command. To inspect or stop the preview:
+
+```sh
+docker compose --env-file .env.ip -f compose.ip.yaml logs --tail=100 app
+docker compose --env-file .env.ip -f compose.ip.yaml down
+```
+
+Once a domain is available, stop this preview and follow the HTTPS setup below before enabling SMTP delivery.
+
 ## Oracle VM with a domain and HTTPS
 
 Use `compose.production.yaml` on its own, not as an override of the local file. This keeps the Node port off the host's published ports.

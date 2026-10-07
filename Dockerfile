@@ -16,6 +16,7 @@ COPY css/ ./css/
 COPY js/ ./js/
 COPY images/ ./images/
 COPY documents/ ./documents/
+ARG SITE_URL
 RUN node scripts/build.mjs && node scripts/check.mjs && node --test tests/*.test.mjs
 
 FROM node:24-bookworm-slim AS runtime
