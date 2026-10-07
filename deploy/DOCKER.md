@@ -1,6 +1,6 @@
 # Docker deployment
 
-The local setup runs one Node container. Production runs Node and Caddy in separate containers, with Caddy handling HTTPS. These files prepare deployment; no VM has been deployed by adding them.
+The local and public-IP previews each run one Node container. Production runs Node and Caddy in separate containers, with Caddy handling HTTPS. Server deployments use the `main` branch.
 
 ## Requirements
 
@@ -40,7 +40,7 @@ docker compose --env-file .env.ip -f compose.ip.yaml up --build -d --wait
 
 Allow inbound TCP 80 in the VM firewall and Oracle network security rules, then open `http://YOUR_PUBLIC_IP/`. Run Docker commands with `sudo` if the login user does not have Docker access. The build sets canonical URLs and the sitemap to this address without changing `data/portfolio.json`.
 
-After pulling updates, rerun the same `up --build -d --wait` command. To inspect or stop the preview:
+For updates from Git, follow [Redeploy from main](#redeploy-from-main). To inspect or stop the preview:
 
 ```sh
 docker compose --env-file .env.ip -f compose.ip.yaml logs --tail=100 app
@@ -48,6 +48,56 @@ docker compose --env-file .env.ip -f compose.ip.yaml down
 ```
 
 Once a domain is available, stop this preview and follow the HTTPS setup below before enabling SMTP delivery.
+
+## Switch the existing Oracle checkout from V2 to main (once)
+
+First commit the deployment changes, merge `V2` into `main`, and push `main` to GitHub. Include `Dockerfile`, `scripts/build.mjs`, `compose.ip.yaml`, `deploy/ip.env.example`, and this guide. Keep `.env.ip` and credentials out of Git.
+
+The existing Oracle checkout at `/opt/portfolio` was cloned with `--single-branch` for `V2`. It also has the initial deployment changes copied in as tracked modifications and untracked files. Run this block in the Oracle SSH session after the merge is pushed:
+
+```sh
+(
+  set -eu
+  cd /opt/portfolio
+  git remote set-branches origin main
+  git fetch origin
+  git cat-file -e origin/main:compose.ip.yaml
+  git stash push --include-untracked -m "Oracle deployment backup before switching to main"
+  git switch --create main --track origin/main
+  sudo docker compose --env-file .env.ip -f compose.ip.yaml config --quiet
+  sudo docker compose --env-file .env.ip -f compose.ip.yaml up --build -d --wait
+  sudo docker compose --env-file .env.ip -f compose.ip.yaml ps
+)
+```
+
+The remote setting makes future fetches track `main`. The file check confirms that the IP deployment configuration reached GitHub before changing the checkout. The stash preserves the server's uncommitted files; ignored `.env.ip` stays in place. Keep this stash as a backup: the merged branch already supplies those deployment changes, so it does not need to be reapplied. The parenthesized block stops on an error without closing the SSH session.
+
+This block creates the local `main` branch once. If it already exists, use the redeployment block below instead. Switching Git branches does not change the running container; Compose replaces it after the build succeeds.
+
+## Redeploy from main
+
+After the one-time switch, commit and push each update to `main`, then run this block in the Oracle SSH session:
+
+```sh
+(
+  set -eu
+  cd /opt/portfolio
+  git switch main
+  git pull --ff-only origin main
+  sudo docker compose --env-file .env.ip -f compose.ip.yaml config --quiet
+  sudo docker compose --env-file .env.ip -f compose.ip.yaml up --build -d --wait
+  sudo docker compose --env-file .env.ip -f compose.ip.yaml ps
+)
+```
+
+The build runs the site checks and tests before replacing the container. `--ff-only` stops if the server branch has diverged instead of creating a deployment merge. If Git reports conflicting local changes, reconcile or back them up before continuing. The server builds a snapshot, so pulling code alone does not update the website.
+
+Verify `http://144.24.135.201/` after the command succeeds. For startup problems, run:
+
+```sh
+cd /opt/portfolio
+sudo docker compose --env-file .env.ip -f compose.ip.yaml logs --tail=100 app
+```
 
 ## Oracle VM with a domain and HTTPS
 
@@ -78,6 +128,20 @@ Use `compose.production.yaml` on its own, not as an override of the local file. 
 Caddy obtains and renews certificates for the configured domain once DNS and network access are correct. Its certificate state persists in `caddy_data`; `caddy_config` also persists. See [Caddy automatic HTTPS](https://caddyserver.com/docs/automatic-https) and the [official Caddy container documentation](https://hub.docker.com/_/caddy).
 
 ## Updates and operation
+
+Once the server uses the HTTPS configuration, deploy updates from `main` with this block instead of the IP preview commands:
+
+```sh
+(
+  set -eu
+  cd /opt/portfolio
+  git switch main
+  git pull --ff-only origin main
+  sudo docker compose --env-file .env.production -f compose.production.yaml config --quiet
+  sudo docker compose --env-file .env.production -f compose.production.yaml up --build -d --wait
+  sudo docker compose --env-file .env.production -f compose.production.yaml ps
+)
+```
 
 After copying new source or changing `.env.production`, rerun the production `up --build -d --wait` command. This recreates the affected container with the new configuration. A plain `restart` does not reload environment variables. Do not scale the Node service: contact rate limits and duplicate protection are in one process's memory.
 
