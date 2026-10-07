@@ -416,19 +416,9 @@ button,a,summary,input,textarea {
 
 .layer-label {
   display:block;
-  position:relative;
   color:#d5dfc9;
   font:inherit;
-}
-
-.layer-label::before {
-  content:'';
-  position:absolute;
-  top:50%;
-  right:calc(100% + 4px);
-  width:12px;
-  height:1px;
-  background:#8cbaa3;
+  text-align:left;
 }
 
 .diagram-stage { display:flow-root; }
