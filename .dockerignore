@@ -1,0 +1,23 @@
+# Allow only build inputs. Credentials, Git history, old CVs, local dependencies,
+# and temporary files never enter the build context.
+**
+!package.json
+!pnpm-lock.yaml
+!scripts/
+!scripts/build.mjs
+!scripts/check.mjs
+!server/
+!server/*.mjs
+!tests/
+!tests/*.test.mjs
+!data/
+!data/portfolio.json
+!css/
+!css/site.css
+!js/
+!js/site.js
+!images/
+!images/favicon.svg
+!images/Rithu_PresidentAward.jpg
+!documents/
+!documents/Rithvik_CV.pdf

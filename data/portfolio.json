@@ -1,0 +1,127 @@
+{
+  "name": "Rithvik Rajani Kanth Sasi",
+  "shortName": "Rithvik",
+  "location": "Bengaluru, India",
+  "contact": { "endpoint": "api/contact" },
+  "role": "Advanced Application Engineering Senior Analyst",
+  "company": "Accenture",
+  "headline": "Advanced Application\nEngineering Senior Analyst\nat Accenture.",
+  "intro": "I build full-stack applications and cloud-native systems at Accenture, with a focus on AWS and bringing machine learning into production.",
+  "about": "I’m a software engineer based in Bengaluru, working across application development, cloud infrastructure, and machine learning. Since joining Accenture in 2022, I’ve developed full-stack features, supported cloud operations, and helped integrate ML workflows into enterprise applications.",
+  "cv": "documents/Rithvik_CV.pdf",
+  "linkedin": "https://www.linkedin.com/in/rithvikrs/",
+  "credly": "https://www.credly.com/users/rithvik-rajani-kanth-sasi.ee527b67/",
+  "github": "https://github.com/RithvikRS",
+  "siteUrl": "https://rithvikrs.github.io/Portfolio-website/",
+  "experience": [
+    {
+      "role": "Advanced Application Engineering Senior Analyst",
+      "company": "Accenture",
+      "dates": "Jun 2026 — Present",
+      "current": true,
+      "description": "Designing and implementing cloud-native applications on AWS, and leading the integration of machine learning workflows into enterprise production environments.",
+      "tags": ["Cloud architecture", "AWS", "Machine learning"]
+    },
+    {
+      "role": "Advanced Application Engineering Analyst",
+      "company": "Accenture",
+      "dates": "Jul 2022 — Jun 2026",
+      "description": "Built and deployed full-stack features, improved cloud operations, and supported application availability. Worked with cross-functional teams on data pipelines and the deployment of AI solutions.",
+      "tags": ["Full-stack development", "Cloud operations", "Data pipelines"]
+    }
+  ],
+  "skills": [
+    { "name": "Languages & applications", "description": "Programming, web interfaces, and application development.", "items": ["Java", "Python", "JavaScript", "C", "C++", "HTML", "CSS", "PHP", "Node.js", "SQL", "Spring Framework", "JDBC"] },
+    { "name": "Cloud & databases", "description": "Cloud infrastructure, containers, and data storage.", "items": ["AWS", "Kubernetes", "Docker", "Cloud-native architecture", "PostgreSQL", "MongoDB", "MySQLi"] },
+    { "name": "Machine learning & data", "description": "Models, computer vision, and data analysis.", "items": ["Machine learning", "Deep learning", "TensorFlow", "OpenCV", "pandas", "NumPy", "Computer vision", "Collaborative filtering"] }
+  ],
+  "projects": [
+    {
+      "id": "road-safety", "name": "Vehicle speed monitoring", "category": "Machine learning", "type": "Computer vision · Earlier work", "visual": "road", "featured": true,
+      "summary": "Match number plates across two checkpoints to calculate average speed and flag vehicles over the limit.",
+      "details": "Two logging stations capture vehicle number plates and timestamps. The system matches records between stations, calculates average speed from the distance and elapsed time, and writes vehicles exceeding the limit to a CSV file.",
+      "technologies": [],
+      "skills": ["Computer vision", "Number plate recognition", "Speed estimation"],
+      "url": "https://github.com/RithvikRS/Road-Safety"
+    },
+    {
+      "id": "mask-detection", "name": "Real-time mask detection", "category": "Machine learning", "type": "Computer vision + IoT · Earlier work", "visual": "vision", "featured": true,
+      "summary": "Detect face masks in live video with OpenCV and TensorFlow, with a conceptual extension for entry-point screening.",
+      "details": "The detector uses OpenCV and TensorFlow with live input from a webcam or a server. A conceptual IoT extension combines an MLX90614 temperature sensor, a Pi Camera v2, motion sensing, LEDs, and relays or automatic doors for entry-point screening.",
+      "technologies": ["OpenCV", "TensorFlow"],
+      "skills": ["Computer vision", "Machine learning", "Conceptual IoT"],
+      "url": "https://github.com/RithvikRS/Realtime-Mask-Detection"
+    },
+    {
+      "id": "movie-app", "name": "Movie discovery & chat", "category": "Web applications", "type": "Web application · Earlier work", "visual": "movies", "featured": true,
+      "summary": "Browse trailers, search for films, and join a global chat in a movie discovery app with user sign-in.",
+      "details": "Users can sign in, browse trailers across movie categories such as popular titles, search for a movie, and participate in a global chat alongside the discovery experience.",
+      "technologies": [],
+      "skills": ["Web development", "User authentication", "Search interfaces"]
+    },
+    {
+      "id": "spam-detection", "name": "Spam detection with the Gmail API", "category": "Machine learning", "type": "Email classification", "summary": "Retrieve email content with the Gmail API and classify messages as spam.",
+      "details": "An email subject is used to find a message and retrieve its body through the Gmail API. The message content is then used for spam detection.", "technologies": ["Gmail API"], "skills": ["API integration", "Spam classification"]
+    },
+    {
+      "id": "malicious-urls", "name": "Malicious URL detection", "category": "Machine learning", "type": "Security + machine learning", "summary": "Use URL-derived keywords and multiple models to assess whether a website may be malicious.",
+      "details": "The project extracts keywords from a URL and uses multiple models to produce a collection of predictions about whether the website may be malicious.", "technologies": [], "skills": ["Feature extraction", "URL classification"], "url": "https://github.com/RithvikRS/Malicious_URL"
+    },
+    {
+      "id": "lane-detection", "name": "Lane & object detection", "category": "Machine learning", "type": "Computer vision", "summary": "Detect lanes and objects in a real-time video feed using OpenCV.",
+      "details": "Uses OpenCV for live video processing, Hough transforms for lane detection, and a DNN detection model with the COCO dataset for object detection.", "technologies": ["OpenCV"], "skills": ["Computer vision", "Hough transforms", "Object detection"], "url": "https://github.com/RithvikRS/Lane-and-Object-Detection"
+    },
+    {
+      "id": "movie-recommendations", "name": "Movie recommendation system", "category": "Machine learning", "type": "Recommendation systems", "summary": "Recommend movies through collaborative filtering, starting with a movie title.",
+      "details": "The system takes a movie title as input and uses collaborative filtering to recommend other movies.", "technologies": [], "skills": ["Collaborative filtering", "Recommendation systems"], "url": "https://github.com/RithvikRS/Movie-Recommendation-System"
+    },
+    {
+      "id": "game-recommendations", "name": "Game recommendation system", "category": "Machine learning", "type": "Recommendation systems", "summary": "Find related games using collaborative filtering and a game title as input.",
+      "details": "A game recommendation project that applies collaborative filtering to suggest games based on an input title.", "technologies": [], "skills": ["Collaborative filtering", "Recommendation systems"], "url": "https://github.com/RithvikRS/Game-Recommendation-System"
+    },
+    {
+      "id": "hospital-management", "name": "Hospital management system", "category": "Web applications", "type": "Management application", "summary": "A general-purpose hospital management website backed by PHP and MySQLi.",
+      "details": "A web application with HTML and CSS interfaces, using PHP and MySQLi to store and manage hospital data.", "technologies": ["HTML", "CSS", "PHP", "MySQLi"], "skills": ["Web development", "Database integration"], "url": "https://github.com/RithvikRS/Hospital-Management-System"
+    },
+    {
+      "id": "library-management", "name": "Library management & delivery", "category": "Applications", "type": "Management application", "summary": "Manage library books and follow book deliveries through multiple checkpoints.",
+      "details": "A C++ application for a university library, combining book management with delivery tracking across multiple checkpoints.", "technologies": ["C++"], "skills": ["Application development", "Delivery tracking"], "url": "https://github.com/RithvikRS/Library-Management-and-delivery-system"
+    },
+    {
+      "id": "portfolio", "name": "Engineering portfolio", "category": "Web applications", "type": "Personal website", "summary": "A responsive portfolio with searchable projects, accessible navigation, and motion that respects visitor preferences.",
+      "details": "Built with semantic HTML, custom CSS, and vanilla JavaScript. A Node.js build script generates static pages from one content file for GitHub Pages. Animations respect reduced-motion preferences, and the content remains available without JavaScript.", "technologies": ["HTML", "CSS", "JavaScript", "Node.js"], "skills": ["Responsive design", "Accessibility", "Web animation"], "url": "https://github.com/RithvikRS/Portfolio-website"
+    }
+  ],
+  "certifications": [
+    { "name": "GitHub Copilot Certification", "issuer": "GitHub", "date": "Jun 2025", "mark": "GH" },
+    { "name": "AWS Certified Developer – Associate", "issuer": "Amazon Web Services", "date": "May 2024", "mark": "AWS" },
+    { "name": "Kubernetes and Cloud Native Associate", "issuer": "CNCF", "date": "Nov 2023", "mark": "K8s" },
+    { "name": "AWS Certified Cloud Practitioner", "issuer": "Amazon Web Services", "date": "Jul 2021", "mark": "AWS" },
+    { "name": "Algorithmic Toolbox", "issuer": "Coursera", "date": "Apr 2021", "mark": "CS" },
+    { "name": "Neural Networks & Deep Learning", "issuer": "Coursera", "date": "Jun 2020", "mark": "AI" },
+    { "name": "Machine Learning with Python", "issuer": "IBM", "date": "Jan 2020", "mark": "IBM" }
+  ],
+  "professionalAwards": [
+    { "name": "Pinnacle Award", "issuer": "Accenture", "scope": "Company-level" },
+    { "name": "ACE Award", "issuer": "Accenture", "scope": "Company-level" },
+    { "name": "Quarterly & Star awards", "issuer": "Accenture", "scope": "Project-level", "description": "Recognition from my current project, which I’ve worked on for more than three years." }
+  ],
+  "awards": [
+    { "name": "United States President’s Award for Educational Excellence", "issuer": "President’s Education Awards Program", "scope": "Academic", "description": "Recognition for academic excellence from the Office of the President of the United States, signed by former President Barack Obama.", "image": "images/Rithu_PresidentAward.jpg" },
+    { "name": "Honor Roll Academic Achievement", "issuer": "California & Virginia", "scope": "Academic", "description": "Four Honor Roll recognitions: two from the Superintendent of Schools in California and two from a member of the House of Delegates in Virginia." },
+    { "name": "Hacktoberfest", "issuer": "Open-source participation", "description": "Completed Hacktoberfest in two consecutive years." },
+    { "name": "Guinness World Record participant", "issuer": "GUVI Geek Networks", "description": "Participated in GUVI’s face recognition application event." }
+  ],
+  "education": [
+    { "school": "Vellore Institute of Technology", "degree": "B.Tech, Computer Science", "detail": "Specialization in Bioinformatics", "dates": "2018 — 2022" },
+    { "school": "Saraswathi Vidyanikethan Public School", "degree": "High School Curriculum", "dates": "2016 — 2018" },
+    { "school": "Dawn International School", "degree": "High School Curriculum", "dates": "2014 — 2016" }
+  ],
+  "community": [
+    { "name": "Developer Circles from Facebook", "role": "Member, Vellore & Chennai", "dates": "Joined Dec 2019" },
+    { "name": "TAG Club", "role": "Core Committee, Vellore", "dates": "Jan 2020 — Mar 2021" }
+  ],
+  "earlierLearning": [
+    "AWS Academy Cloud Foundations · AWS", "Build a Face Recognition Application using Python · GUVI / IITM", "Transfer Learning for NLP with TensorFlow Hub · Coursera", "Introduction to TensorFlow for AI, ML, and Deep Learning · DeepLearning.AI", "AI for Everyone · DeepLearning.AI", "Machine Learning · Stanford University / Coursera", "Python Data Science Toolbox, Parts 1 & 2 · DataCamp", "Introduction to Python & Intermediate Python · DataCamp", "Fundamentals of Parallelism on Intel Architecture · Intel / Coursera", "Introduction to MongoDB · MongoDB / Coursera", "Introduction to SQL · DataCamp", "Programming for Everybody & Python Data Structures · University of Michigan", "Java Programming: Solving Problems with Software (with Honors) · Duke University", "Java Programming: Arrays, Lists, and Structured Data · Duke University", "Bioinformatic Methods I & II · University of Toronto", "Introduction to Programming using HTML and CSS · Microsoft", "Introduction to Programming using Python · Microsoft", "SQL Database Fundamentals · Microsoft"
+  ]
+}

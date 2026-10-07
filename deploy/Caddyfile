@@ -1,0 +1,8 @@
+# Replace portfolio.example.com with the domain whose DNS points to the VM.
+portfolio.example.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:4173 {
+        # Overwrite client-supplied headers. Node trusts this only from loopback.
+        header_up X-Real-IP {remote_host}
+    }
+}

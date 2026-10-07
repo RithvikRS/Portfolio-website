@@ -1,0 +1,33 @@
+# Temporary HTTP preview on a public IP. Use compose.production.yaml for HTTPS.
+name: portfolio
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        SITE_URL: http://${PUBLIC_IP:?Set PUBLIC_IP in .env.ip}/
+    image: rithvik-portfolio:ip-preview
+    init: true
+    restart: unless-stopped
+    environment:
+      # The production server requires HTTPS; this preview does not enable SMTP.
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: "4173"
+      PUBLIC_ORIGIN: http://${PUBLIC_IP:?Set PUBLIC_IP in .env.ip}
+      TRUST_PROXY: "false"
+      TRUSTED_PROXY_IPS: ""
+    ports:
+      - "80:4173"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 100
+    stop_grace_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
