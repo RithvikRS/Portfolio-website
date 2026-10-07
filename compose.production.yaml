@@ -2,7 +2,10 @@ name: portfolio
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        SITE_URL: https://${DOMAIN:?Set DOMAIN in .env.production}/
     image: rithvik-portfolio:production
     init: true
     restart: unless-stopped
