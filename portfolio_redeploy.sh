@@ -18,7 +18,7 @@ main() {
   repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
   cd -- "$repo_dir"
   local tool
-  for tool in git docker flock curl; do
+  for tool in git docker flock curl python3 openssl; do
     command -v "$tool" >/dev/null || { printf 'Missing required command: %s\n' "$tool" >&2; return 1; }
   done
   exec 9>"$(git rev-parse --git-path portfolio-deploy.lock)"
@@ -86,6 +86,7 @@ main() {
     printf 'Initialize the administrator once with: python3 scripts/setup-admin.py\n' >&2
     return 1
   fi
+  python3 scripts/setup-portainer.py --prepare
   printf 'Validating the production configuration...\n'
   "${compose[@]}" config --quiet
   "${compose[@]}" run --rm --no-deps --interactive=false auth config validate \
@@ -105,6 +106,9 @@ main() {
   # Auth reads its configuration and keys at startup. Recreate it on redeploy;
   # the in-memory sessions intentionally expire, while SQLite stays on disk.
   "${compose[@]}" up --no-build -d --force-recreate --wait --wait-timeout 180 auth </dev/null
+  # Initialize and reconcile the private API before exposing a new public route.
+  "${compose[@]}" up --no-build -d portainer </dev/null
+  python3 scripts/setup-portainer.py --configure
   "${compose[@]}" up --no-build -d --wait --wait-timeout 180 </dev/null
   "${compose[@]}" exec -T caddy caddy reload --config /etc/caddy/site/Caddyfile.docker --adapter caddyfile </dev/null
 
@@ -122,6 +126,11 @@ main() {
   admin_status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null --write-out '%{http_code}' "https://$domain/admin/")"
   [[ "$admin_status" == 302 || "$admin_status" == 303 || "$admin_status" == 401 ]] || {
     printf 'Unexpected unauthenticated dashboard response: %s\n' "$admin_status" >&2; return 1;
+  }
+  local portainer_status
+  portainer_status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null --write-out '%{http_code}' "https://$domain/portainer/")"
+  [[ "$portainer_status" == 302 || "$portainer_status" == 303 || "$portainer_status" == 401 ]] || {
+    printf 'Unexpected unauthenticated Portainer response: %s\n' "$portainer_status" >&2; return 1;
   }
   "${compose[@]}" ps
   printf 'Deployed checkout based on main commit %s at https://%s/\n' "$(git rev-parse --short HEAD)" "$domain"

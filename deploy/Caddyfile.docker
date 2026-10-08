@@ -26,6 +26,23 @@
         }
     }
 
+    redir /portainer /portainer/ 308
+    # Portainer 2.45 requests translations at the host root even with --base-url.
+    # Send them through the same protected route; do not expose a second proxy.
+    @portainerTranslations path /locales/*/translation.json
+    redir @portainerTranslations /portainer{uri} 307
+    @containers path /portainer/*
+    handle @containers {
+        # Authorize the original URL before removing Portainer's path prefix.
+        route {
+            forward_auth auth:9091 {
+                uri /api/authz/forward-auth?authelia_url=https://{$DOMAIN}/auth/
+            }
+            uri strip_prefix /portainer
+            reverse_proxy portainer:9000
+        }
+    }
+
     handle {
         reverse_proxy app:4173 {
             # Replace any visitor-supplied header with the real connected client.

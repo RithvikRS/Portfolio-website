@@ -56,6 +56,7 @@ services:
       backend:
         ipv4_address: ${CADDY_IP:-172.30.0.3}
       identity:
+      management:
     security_opt: [no-new-privileges:true]
     mem_limit: 192m
     pids_limit: 100
@@ -100,12 +101,37 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  portainer:
+    # Portainer CE 2.45.2 LTS. Upgrade deliberately, with a data backup.
+    image: portainer/portainer-ce@sha256:03f94a406496dc84d37b552795fc424ccad8d0d7200353b6a82915f6e8f73ab0
+    command:
+      - --http-enabled
+      - --base-url=/portainer
+      - --trusted-origins=https://${DOMAIN:?Set DOMAIN in .env.production}
+      - --admin-password-file=/run/secrets/recovery-password
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./.portainer/data:/data
+      - ./.portainer/recovery-password:/run/secrets/recovery-password:ro
+    # Caddy is the only public entry point. No host ports are published.
+    networks: [management]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 100
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   backend:
     ipam:
       config:
         - subnet: ${DOCKER_SUBNET:-172.30.0.0/24}
   identity:
+  management:
 
 volumes:
   caddy_data:

@@ -1,6 +1,6 @@
 # Oracle deployment and alternative host setup
 
-The active Oracle deployment uses Docker Compose at `/opt/portfolio`, with Caddy, the Node app, and Authelia. Open the [public site](https://rithvik.ddns.net/) or [admin dashboard](https://rithvik.ddns.net/admin/). For current commands, use the [Docker deployment guide](DOCKER.md); account access and recovery are covered in the [admin guide](ADMIN.md).
+The active Oracle deployment uses Docker Compose at `/opt/portfolio`, with Caddy, the Node app, Authelia, and Portainer. Open the [public site](https://rithvik.ddns.net/) or [admin dashboard](https://rithvik.ddns.net/admin/). For current commands, use the [Docker deployment guide](DOCKER.md); account access and recovery are covered in the [admin guide](ADMIN.md) and [Portainer guide](PORTAINER.md).
 
 The instructions below describe the alternative **systemd deployment for the public portfolio and contact backend**. They use `deploy/portfolio.service` and `deploy/Caddyfile`; production Docker uses `compose.production.yaml` and `deploy/Caddyfile.docker`. Do not start host-based services alongside the Docker stack on the same ports. These host templates do not install Authelia or enable the admin dashboard.
 

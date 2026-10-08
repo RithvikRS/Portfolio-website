@@ -11,17 +11,20 @@ Deployment record updated **8 October 2026 (Asia/Kolkata)**. The Oracle checkout
 | Public portfolio | [rithvik.ddns.net](https://rithvik.ddns.net/) | Live, with SMTP configured |
 | Admin dashboard | [/admin/](https://rithvik.ddns.net/admin/) | Stage 1 deployed; login required |
 | Shared sign-in | [/auth/](https://rithvik.ddns.net/auth/) | Authelia, username/password |
-| Portainer | No live route yet | Stage 2, awaiting approval |
+| Portainer | [/portainer/](https://rithvik.ddns.net/portainer/) | Stage 2 deployed; shared login |
 | Blog and learning notebook | No live route yet | Stage 3, awaiting separate approval |
 
-The dashboard currently links to the portfolio and displays inactive cards for future applications. It does not yet manage containers or edit posts. Each future application needs an authentication integration before it shares the login; OpenID Connect clients are not configured in stage 1.
+The dashboard links to the portfolio and Portainer. Portainer CE 2.45.2 uses Authelia OpenID Connect for the existing administrator account and manages the Oracle Docker environment. Blog and learning-note editing remain pending separate approval.
 
 The stage 1 deployment passed 15 automated tests, live HTTPS sign-in/sign-out and access checks, and desktop/mobile layout review. The contact API reported delivery available; these checks did not send email. This is a deployment record, not a continuously monitored status page.
+
+After an outage and reboot on 8 October, the public site and complete dashboard/Portainer SSO flow were verified again. Saved logs showed repeated host memory exhaustion in `dnf-makecache.service`. Its background cache timer is now disabled on Oracle; package updates remain available. See the [incident and recovery record](deploy/DOCKER.md#8-october-2026-memory-exhaustion-and-recovery).
 
 ## Documentation
 
 - [Docker and Oracle operation](deploy/DOCKER.md): which file to use, local preview, first deployment, redeployment, and Caddy routing.
 - [Admin dashboard and shared login](deploy/ADMIN.md): account access, password recovery, persistent data, backups, and troubleshooting.
+- [Portainer and SSO](deploy/PORTAINER.md): container management, recovery access, storage, and the stage 2 integration.
 - [Alternative host deployment](deploy/README.md): Node and Caddy with systemd, plus contact behavior and limits.
 - [Docker and Caddy PDF guide](output/pdf/Portfolio%20Docker%20and%20Caddy%20Guide.pdf): a printable guide to the completed setup.
 
@@ -31,7 +34,7 @@ For the current Oracle deployment, commit the development changes, merge into `m
 bash /opt/portfolio_redeploy.sh
 ```
 
-The shortcut already exists. It runs the repository's `portfolio_redeploy.sh`, builds and checks the app, applies production configuration, and verifies HTTPS. No new script needs to be pasted into the terminal. Authelia restarts during redeployment, so sign in again afterward. Stage 1 files were initially copied to Oracle before a Git commit; merge the matching files into `main` before a normal redeployment. The script stops if server copies differ from the pushed versions.
+The shortcut already exists. It runs the repository's `portfolio_redeploy.sh`, builds and checks the app, applies production configuration, reconciles Portainer SSO, and verifies HTTPS. No new script needs to be pasted into the terminal. Authelia restarts during redeployment, so sign in again afterward. Stage 1 and 2 files were copied to Oracle before merging into `main`; merge the matching files before a normal redeployment. The script stops if server copies differ from the pushed versions.
 
 ## Preview and check
 
@@ -74,6 +77,7 @@ This local command previews the public portfolio and contact API. It does not st
 - `compose.yaml`, `compose.ip.yaml`, and `compose.production.yaml`: separate local, temporary public-IP, and production configurations. Use one at a time for a deployment.
 - `portfolio_redeploy.sh`: pulls `main`, validates configuration, builds the app, starts services, and checks the public endpoints.
 - `scripts/setup-admin.py`: one-time Linux administrator setup. It generates private account files and refuses to replace an existing `.auth/` directory.
+- `scripts/setup-portainer.py`: prepares private Portainer/OIDC files without replacing existing credentials, then applies SSO settings and checks Docker access during redeployment.
 - `deploy/Caddyfile.docker` and `deploy/authelia/configuration.yml`: production routing and non-secret authentication settings.
 - `deploy/Caddyfile` and `deploy/portfolio.service`: alternative host-based templates, not the active Docker deployment.
 - `images/favicon.svg`: local vector identity. The hero illustration and project diagrams use inline SVG/CSS.
@@ -82,7 +86,7 @@ This local command previews the public portfolio and contact API. It does not st
 
 ## Hosting
 
-For Docker, follow the [container deployment guide](deploy/DOCKER.md). `docker compose up --build -d --wait` starts a local preview at `http://localhost:8080`; the separate production Compose file runs the app, Caddy, and Authelia on Oracle. The image build regenerates and validates the site. SMTP credentials are supplied only at runtime, and Authelia reads its private files from `.auth/`.
+For Docker, follow the [container deployment guide](deploy/DOCKER.md). `docker compose up --build -d --wait` starts a local preview at `http://localhost:8080`; the separate production Compose file runs the app, Caddy, Authelia, and Portainer on Oracle. The image build regenerates and validates the site. SMTP credentials are supplied only at runtime. Private authentication and Portainer data live in `.auth/` and `.portainer/`.
 
 The generated pages still work with GitHub Pages served directly from the repository root. GitHub Pages cannot run the contact backend, admin dashboard, or Authelia. The current Oracle deployment already runs these services. The [host-based guide](deploy/README.md) is an alternative for the public site and SMTP backend; it does not install shared login.
 
@@ -90,7 +94,7 @@ For Docker production, change `DOMAIN` in the server's `.env.production` and red
 
 The public pages use a form and LinkedIn instead of displaying a destination email or phone number. The CV is unchanged and may contain contact details. Removing visible contact details does not remove them from downloaded PDFs, public source, old commits, or copies indexed elsewhere. Review those separately if you want a public CV with fewer contact details.
 
-Deployments are triggered manually; there is no automatic deployment on a Git push. Keep `.env`, `.env.production`, `.auth/`, passwords, and SSH keys out of Git. The previous Bootstrap and jQuery setup is no longer loaded; the old Bootstrap files and source images remain in the repository for reference.
+Deployments are triggered manually; there is no automatic deployment on a Git push. Keep `.env`, `.env.production`, `.auth/`, `.portainer/`, passwords, and SSH keys out of Git. The previous Bootstrap and jQuery setup is no longer loaded; the old Bootstrap files and source images remain in the repository for reference.
 
 ## Content sources
 

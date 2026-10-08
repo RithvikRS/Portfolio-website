@@ -7,10 +7,10 @@ Stage 1 was deployed on **8 October 2026 (Asia/Kolkata)**. The dashboard is serv
 | Stage | Scope | Status |
 | --- | --- | --- |
 | 1 | Admin dashboard, Authelia username/password login, HTTPS | Deployed |
-| 2 | Portainer with shared login | Awaiting user approval; not installed |
+| 2 | Portainer with shared login | Deployed; see [Portainer guide](PORTAINER.md) |
 | 3 | Blog and learning notebook, browser editor | Awaiting separate approval; not implemented |
 
-The dashboard shows a working portfolio link and inactive cards for the next stages. A shared sign-in service is in place, but no Portainer or blog authentication client is configured yet. Approve and verify each stage before starting the next.
+The dashboard links to the portfolio and Portainer. Portainer uses a registered OpenID Connect client and the same `rithvik` account. Blog and learning notes remain inactive until separately approved.
 
 ## Sign in
 
@@ -21,7 +21,7 @@ The dashboard shows a working portfolio link and inactive cards for the next sta
 
 The initial password is in `Portfolio admin login.txt`, saved privately beside the Oracle SSH key on the development computer. The server copy is `/opt/portfolio/.auth/bootstrap-login.txt`, readable only by its owner. Save the password in your password manager. Neither the password nor session cookie belongs in repository documentation, shell history, or screenshots.
 
-Sessions expire after 30 minutes of inactivity or 8 hours total. Remember-me is disabled. Restarting Authelia invalidates its in-memory sessions; the redeployment script intentionally recreates it. This stage uses one-factor authentication. TOTP, WebAuthn, email password reset, and additional application SSO clients are not configured.
+Sessions expire after 30 minutes of inactivity or 8 hours total. Remember-me is disabled. Restarting Authelia invalidates its in-memory sessions; the redeployment script intentionally recreates it. Authentication uses a password; TOTP, WebAuthn, and email password reset are not configured. Portainer has its own eight-hour session behind the shared-login gate. Signing out of Authelia blocks new Portainer requests; Portainer's own token is separately cleared by its logout action. See [session behavior](PORTAINER.md#sign-in-and-sign-out).
 
 ## How requests are protected
 
@@ -32,11 +32,11 @@ Browser -- HTTPS --> Caddy -- session check --> Authelia
                        +-- public request ----------> Node portfolio
 ```
 
-Only Caddy publishes web ports. App and Authelia listen privately on 4173 and 9091. Auth has a network shared with Caddy, separate from the app backend.
+Only Caddy publishes web ports. App, Authelia, and Portainer listen privately on 4173, 9091, and 9000. Auth and Portainer each have a network shared with Caddy, separate from the app backend.
 
 Caddy removes visitor-supplied `Remote-User`, `Remote-Groups`, `Remote-Email`, and `Remote-Name` headers. For `/admin/`, it asks Authelia to verify the session and copies the verified identity. The app also requires `ADMIN_ENABLED=true`, proxy trust, the exact configured proxy peer IP, the configured username, and membership in `admins`. The page is marked `no-store` and `noindex`.
 
-Authelia's default access policy is deny; the configured rule permits the `admins` group on `/admin` and its subpaths after password authentication. Login regulation is configured for five retries within two minutes and a ten-minute ban. A dashboard card alone grants no access to an application.
+Authelia's default access policy is deny; its rule permits the `admins` group on `/admin` and `/portainer` and their subpaths after password authentication. The Portainer OIDC client separately requires the same group. Portainer automatic account creation is disabled, and the existing `rithvik` account is explicitly provisioned as an administrator. Login regulation allows five retries within two minutes with a ten-minute ban. A dashboard card alone grants no access to an application.
 
 ## Files and ownership
 
@@ -51,6 +51,7 @@ Authelia's default access policy is deny; the configured rule permits the `admin
 | `.auth/secrets/users.yml` | Account metadata, Argon2id hash, `admins` group |
 | `.auth/secrets/session-secret` | Session secret |
 | `.auth/secrets/storage-key` | SQLite encryption key |
+| `.auth/secrets/oidc-hmac`, `oidc-private.pem`, `portainer-client-hash` | OIDC signing and client credentials; preserve with the matching Portainer files |
 | `.auth/data/db.sqlite3` | Persistent auth database |
 | `.auth/data/notifications.txt` | Filesystem notifier output, not SMTP delivery |
 | `.auth/bootstrap-login.txt` | Initial plaintext credential record |
@@ -92,7 +93,7 @@ Sign in with the new password and update your password manager. Restarting inval
 
 ## Backups and recovery data
 
-Preserve `.env.production`, the complete `.auth/` directory, and both Caddy named volumes. Store backups privately outside Git. For a consistent filesystem copy of `.auth/`, briefly stop only `auth`, copy/archive the directory with permissions, and start `auth` again. The portfolio remains available while sign-in is temporarily unavailable. Do not run `down --volumes` as a backup step.
+Preserve `.env.production`, the complete `.auth/` and `.portainer/` directories, and both Caddy named volumes. Store backups privately outside Git. For a consistent filesystem copy, briefly stop `auth` and `portainer`, archive both directories with permissions, and start them again. The portfolio remains available while private tools are temporarily unavailable. Do not run `down --volumes` as a backup step. See the [Portainer backup procedure](PORTAINER.md#backup-and-restore).
 
 Stage 1 created these private recovery items on Oracle:
 
@@ -128,6 +129,6 @@ curl https://rithvik.ddns.net/auth/api/health
 
 Stage 1 checks passed on 8 October 2026: 15 automated app tests; production build/link checks; HTTPS redirects to sign-in; successful credential authentication; authenticated dashboard access; session invalidation on sign-out; rejection of forged identity headers and encoded-path access; private-file denial; public pages and contact availability. Desktop and phone layouts were reviewed locally. No Portainer or writing service was installed, and no test email was sent. The in-app browser could not open the live hostname during review; live auth behavior was verified through HTTPS requests.
 
-Further changes should retain these checks and add tests relevant to the new integration. Portainer is the next approval gate; writing tools follow after that stage is accepted.
+Stage 2 adds Portainer and its OIDC client; the stage 1 description above is a historical record. Stage 2 verification and recovery are recorded in [PORTAINER.md](PORTAINER.md). Writing tools require the next approval.
 
 References: [Authelia with Caddy](https://www.authelia.com/integration/proxies/caddy/), [session configuration](https://www.authelia.com/configuration/session/introduction/), and [private secrets](https://www.authelia.com/configuration/methods/secrets/).
