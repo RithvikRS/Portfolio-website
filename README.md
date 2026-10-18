@@ -4,7 +4,7 @@
 
 A home for my work across full-stack development, cloud infrastructure, and machine learning. Explore the projects, read what I’m learning, or look behind the scenes at the application and deployment code that run this site on Oracle Cloud.
 
-[**Visit the portfolio →**](https://rithvik.ddns.net/) · [Projects](https://rithvik.ddns.net/Projects.html) · [Blog](https://rithvik.ddns.net/blog/) · [Learning notebook](https://rithvik.ddns.net/learn/) · [LinkedIn](https://www.linkedin.com/in/rithvikrs/)
+[**Visit the portfolio →**](https://rithvik.ddns.net/) · [Projects](https://rithvik.ddns.net/Projects.html) · [Blog](https://rithvik.ddns.net/blog/) · [Learning notebook](https://rithvik.ddns.net/learn/)
 
 [Run locally](#run-locally) · [How it works](#how-it-works) · [Deploy to production](#deploy-to-production) · [Documentation](#documentation)
 
@@ -14,7 +14,7 @@ A home for my work across full-stack development, cloud infrastructure, and mach
 | --- | --- |
 | **Explore the work** | Searchable projects, professional experience, credentials, recognition, and a downloadable CV. |
 | **Read and publish** | Fieldnotes combines a public blog and learning notebook with a private Markdown editor, drafts, publishing, tags, export, and recoverable trash. |
-| **Get in touch** | A contact form backed by Node.js and Nodemailer, with validation, rate limits, and a LinkedIn fallback. |
+| **Get in touch** | A contact form with email delivery, validation, and rate limits. |
 | **Manage the server** | A private dashboard and Portainer share an Authelia sign-in. Editing and container management stay behind authentication. |
 | **Ship updates** | Merging a PR into `main` starts a GitHub Actions deployment, with configuration checks, tests, and live endpoint checks. |
 
@@ -57,7 +57,7 @@ node --env-file-if-exists=.env server/index.mjs
 
 Open **http://127.0.0.1:4173**. Stop the server with Ctrl+C. Equivalent pnpm commands are `pnpm build`, `pnpm check`, `pnpm test`, and `pnpm dev`. Build and content checks still run without installing dependencies; running the server requires the installed dependencies. The old `node scripts/serve.mjs` preview command also works, but does not automatically load `.env`.
 
-Copy `.env.example` to `.env` and fill in your SMTP provider settings to enable delivery locally. Do not commit this file. Without SMTP configuration, the dialog offers LinkedIn and disables submission. Tests use fake delivery functions and never send real email. Change both `PORT` and `PUBLIC_ORIGIN` if using a different preview port. The form must be tested through HTTP/HTTPS, not by opening an HTML file directly.
+Copy `.env.example` to `.env` and fill in your SMTP provider settings to enable delivery locally. Do not commit this file. Without SMTP configuration, contact form submission is disabled. Tests use fake delivery functions and never send real email. Change both `PORT` and `PUBLIC_ORIGIN` if using a different preview port. The form must be tested through HTTP/HTTPS, not by opening an HTML file directly.
 
 This local command previews the public portfolio, empty writing collections, and contact API. It does not start Caddy or Authelia; `/admin/` remains closed by default. Use the production setup for the complete sign-in flow.
 
@@ -75,10 +75,10 @@ Open [Fieldnotes](https://rithvik.ddns.net/admin/notes/) using your existing log
 
 ## Update the content
 
-- Edit `data/portfolio.json` for roles, descriptions, projects, skills, credentials, education, and contact details, including the Credly profile URL.
-- Each project separates `technologies` (confirmed languages, libraries, and tools) from `skills` (the technical approaches demonstrated). Leave `technologies` empty when the description does not identify a stack. Do not infer a project's tools from the general CV skills.
-- The toolkit displays skills as plain text tags. Project cards retain their own applied skills and confirmed tools.
-- `professionalAwards` and `awards` appear together in one Honors & recognition section, with general honors first, followed by Accenture awards. Optional `scope`, `date`, `description`, and `image` fields supply labels and details; missing details are omitted. Homepage recognition links lead to this shared collection.
+- Edit `data/portfolio.json` for roles, descriptions, projects, skills, credentials, education, and contact details.
+- Each project separates `technologies` (languages, libraries, and tools) from `skills` (the technical approaches demonstrated). Leave `technologies` empty when a stack is not specified.
+- The toolkit displays skills as plain text tags. Project cards retain their own applied skills and tools.
+- `professionalAwards` and `awards` appear together in one Honors & recognition section, with general honors first, followed by professional awards. Optional `scope`, `date`, `description`, and `image` fields supply labels and details; missing details are omitted. Homepage recognition links lead to this shared collection.
 - Replace `documents/Rithvik_CV.pdf` to update every CV download. That alone does not change the text on the pages; update the content file for changes to roles or other details.
 - Run `node scripts/build.mjs` after content or template edits. It regenerates `index.html`, `Projects.html`, `Awards.html`, `404.html`, `error.html`, and `sitemap.xml`.
 - Run `node scripts/check.mjs` to validate local links, anchors, document structure, and the PDF download.
@@ -133,7 +133,7 @@ A failed build, startup, or endpoint check does not rotate the recovery tags or 
 
 ## Current deployment
 
-Deployment record updated **19 October 2026 (Asia/Kolkata)**. Oracle serves production from `/opt/portfolio` on `main`. No-IP supplies `rithvik.ddns.net`; Caddy supplies HTTPS. **GitHub Pages is disabled.**
+Deployment record updated **19 October 2026 (Asia/Kolkata)**. Oracle serves production from `/opt/portfolio` on `main` at `rithvik.ddns.net`; Caddy supplies HTTPS. **GitHub Pages is disabled.**
 
 | Resource | Address | Access |
 | --- | --- | --- |
@@ -184,23 +184,6 @@ Generated portfolio pages can also be served by a static host, but the contact b
 
 For Docker production, change `DOMAIN` in the server's `.env.production` and redeploy when moving to a new domain. Compose derives the public origin, build URL, and authentication URLs from it. For static or direct Node hosting, update `siteUrl` in the content file and rebuild. See [domain changes](deploy/DOCKER.md#changing-the-domain) for details.
 
-The public pages use a form and LinkedIn instead of displaying a destination email or phone number. The CV is unchanged and may contain contact details. Removing visible contact details does not remove them from downloaded PDFs, public source, old commits, or copies indexed elsewhere. Review those separately if you want a public CV with fewer contact details.
+The contact form keeps the destination email address in server configuration. Downloadable documents and repository history may contain contact details independently of what appears on the public pages.
 
-The existing `Projects.html`, `Awards.html`, and original homepage anchors are retained. Bootstrap and jQuery are no longer loaded; their old files and source images remain in the repository for reference.
-
-## Content sources
-
-Professional content is grounded in the CV and confirmed project descriptions. Certification dates are issue dates, not a claim of current validity. Review role dates and wording whenever the CV changes.
-
-<details>
-<summary>Source notes and verification limits</summary>
-
-- `documents/Rithvik_CV.pdf` is the primary source for current professional experience, skills, certification issue dates, and education.
-- Publicly accessible LinkedIn information was reviewed at <https://www.linkedin.com/in/rithvikrs/>. Full profile and recent activity access was limited.
-- Earlier project descriptions, academic awards, and additional coursework were retained from the original site. They are labeled as earlier work, with no invented client projects, performance metrics, credential validity dates, or repository links.
-- The exact portfolio repository URL comes from this checkout’s Git remote. Other project-specific repository links can be added using a project’s optional `url` field once confirmed.
-- Project links and selected tool mappings were also checked against the public GitHub repository descriptions: OpenCV/TensorFlow for mask detection; OpenCV, Hough transforms, and DNN object detection for the lane project; HTML/CSS/PHP for hospital management; and C++ for library management. Other tools are limited to the original descriptions and this portfolio’s implementation. Individual project codebases have not been audited.
-- Credly links open the user-provided public profile. Certification dates remain sourced from the CV; no badge status, expiry date, or additional certification was inferred from the profile link.
-- Accenture's company-level Pinnacle and ACE awards, and project-level Quarterly and Star awards, were supplied directly by the user. The user described more than three years on the current project. The approximate 2025–2026 dates for Pinnacle and ACE remain unconfirmed and are omitted publicly; counts, selection criteria, and business impact have not been inferred.
-
-</details>
+The existing `Projects.html`, `Awards.html`, and original homepage anchors are retained.
