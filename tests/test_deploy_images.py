@@ -5,6 +5,7 @@ import io
 from pathlib import Path
 import subprocess
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
     'deploy_images', Path(__file__).resolve().parents[1] / 'scripts' / 'deploy-images.py',
@@ -24,11 +25,25 @@ class FakeDocker:
         self.labelled = set()
         self.digests = {}
         self.extra_users = set()
+        self.disk_total = 10 * 1024 ** 3
+        self.disk_used = 5 * 1024 ** 3
+        self.disk_changes = {}
+        self.disk_reads = 0
+        self.disk_errors = {}
+
+    def disk_usage(self, path):
+        self.calls.append(('filesystem', 'usage', path))
+        self.disk_reads += 1
+        if self.disk_reads in self.disk_errors:
+            raise self.disk_errors[self.disk_reads]
+        return images.DiskUsage(self.disk_total, self.disk_used, self.disk_total - self.disk_used)
 
     def run(self, *args, capture=False):
         self.calls.append(args)
         if args in self.fail:
             raise subprocess.CalledProcessError(1, args)
+        if args == ('info', '--format', '{{.DockerRootDir}}'):
+            return '/var/lib/docker'
         if args[:2] == ('image', 'ls'):
             return self.tags.get(args[-1], '')
         if args[0] == 'ps':
@@ -58,6 +73,7 @@ class FakeDocker:
                 raise AssertionError('Unexpected cache policy: ' + repr(args))
         else:
             raise AssertionError('Unexpected Docker command: ' + repr(args))
+        self.disk_used += self.disk_changes.get(args[:2], 0)
 
 
 class ImageRetentionTests(unittest.TestCase):
@@ -179,6 +195,96 @@ class ImageRetentionTests(unittest.TestCase):
         self.assertEqual(docker.tags[images.CURRENT], 'B')
         self.assertEqual(docker.tags[images.PREVIOUS], 'A')
         self.assertTrue(any(call[:2] == ('buildx', 'prune') for call in docker.calls))
+
+    def test_disk_measurements_include_retirement_and_both_prune_steps(self):
+        docker = FakeDocker({images.PRODUCTION: 'B', images.CURRENT: 'A', images.PREVIOUS: 'older'}, running='B')
+        docker.disk_changes = {
+            ('image', 'rm'): -8 * 1024 ** 2,
+            ('image', 'prune'): -4 * 1024 ** 2,
+            ('buildx', 'prune'): -2 * 1024 ** 2,
+        }
+        images.complete(docker)
+        readings = [i for i, call in enumerate(docker.calls) if call[:2] == ('filesystem', 'usage')]
+        cleanup = [i for i, call in enumerate(docker.calls) if call[1] in ('rm', 'prune')]
+        self.assertEqual(len(readings), 2)
+        self.assertLess(readings[0], min(cleanup))
+        self.assertGreater(readings[1], max(cleanup))
+        output = self.output.getvalue()
+        self.assertIn('Cleanup disk usage before (/var/lib/docker filesystem)', output)
+        self.assertIn('Cleanup disk usage after (/var/lib/docker filesystem)', output)
+        self.assertIn('Net disk space freed during cleanup: 14.00 MiB (14,680,064 bytes)', output)
+        self.assertIn('available: 5.01 GiB (5,383,389,184 bytes)', output)
+        self.assertEqual(docker.tags[images.PREVIOUS], 'A')
+
+    def test_disk_summary_reports_zero_and_growth_without_claiming_savings(self):
+        for change, expected in (
+            (0, 'Net disk space freed during cleanup: 0.00 B (0 bytes)'),
+            (4096, 'Net disk usage increased during cleanup: 4.00 KiB (4,096 bytes)'),
+        ):
+            with self.subTest(change=change):
+                self.output.truncate(0)
+                self.output.seek(0)
+                docker = FakeDocker({images.PRODUCTION: 'B', images.CURRENT: 'B', images.PREVIOUS: 'A'}, running='B')
+                docker.disk_changes[('buildx', 'prune')] = change
+                images.complete(docker)
+                self.assertIn(expected, self.output.getvalue())
+                if change:
+                    self.assertNotIn('Net disk space freed', self.output.getvalue())
+
+    def test_missing_measurements_do_not_block_cleanup_or_report_zero(self):
+        for failed_read in ('location', 1, 2):
+            with self.subTest(failed_read=failed_read):
+                self.output.truncate(0)
+                self.output.seek(0)
+                docker = FakeDocker({images.PRODUCTION: 'B', images.CURRENT: 'A', images.PREVIOUS: 'older'}, running='B')
+                if failed_read == 'location':
+                    docker.fail.add(('info', '--format', '{{.DockerRootDir}}'))
+                else:
+                    docker.disk_errors[failed_read] = OSError('Cannot read filesystem usage')
+                images.complete(docker)
+                self.assertIn('older', docker.deleted)
+                self.assertTrue(any(call[:2] == ('buildx', 'prune') for call in docker.calls))
+                self.assertEqual(docker.tags[images.CURRENT], 'B')
+                self.assertEqual(docker.tags[images.PREVIOUS], 'A')
+                self.assertIn('WARNING:', self.output.getvalue())
+                self.assertIn('Cleanup disk summary unavailable', self.output.getvalue())
+                self.assertNotIn('Net disk space freed', self.output.getvalue())
+
+    def test_cleanup_errors_still_report_the_observed_disk_change(self):
+        docker = FakeDocker({images.PRODUCTION: 'B', images.CURRENT: 'A', images.PREVIOUS: 'older'}, running='B')
+        docker.disk_changes[('image', 'rm')] = -4096
+        docker.fail.add(('image', 'prune', '--force', '--filter', 'label=' + images.APP_LABEL))
+        images.complete(docker)
+        self.assertIn('portfolio image cleanup failed', self.output.getvalue())
+        self.assertIn('Net disk space freed during cleanup: 4.00 KiB (4,096 bytes)', self.output.getvalue())
+
+    def test_capacity_change_does_not_produce_a_misleading_savings_total(self):
+        images.report_cleanup_disk_change(
+            images.DiskUsage(10000, 5000, 5000), images.DiskUsage(20000, 4000, 16000),
+        )
+        self.assertIn('filesystem capacity changed', self.output.getvalue())
+        self.assertNotIn('Net disk space freed', self.output.getvalue())
+
+
+class DiskUsageTests(unittest.TestCase):
+    def test_read_exact_used_and_available_bytes_with_reserved_space(self):
+        # Available space can exclude filesystem-reserved blocks. Do not infer
+        # it by subtracting used from total or parse rounded human-readable units.
+        result = subprocess.CompletedProcess([], 0, stdout='  1B-blocks        Used       Avail\n10737418240 5368709120 4831838208\n')
+        with patch.object(images.subprocess, 'run', return_value=result) as run:
+            usage = images.Docker(sudo=True).disk_usage('/docker data')
+        self.assertEqual(usage, images.DiskUsage(10737418240, 5368709120, 4831838208))
+        self.assertEqual(run.call_args.args[0], [
+            'sudo', '-n', 'df', '--block-size=1', '--output=size,used,avail', '--', '/docker data',
+        ])
+
+    def test_reject_invalid_disk_measurements(self):
+        for output in ('', 'filesystem unavailable', 'Size Used Avail\n1 2', 'Size Used Avail\n0 0 0', 'Size Used Avail\n1024 -1 512'):
+            with self.subTest(output=output):
+                result = subprocess.CompletedProcess([], 0, stdout=output)
+                with patch.object(images.subprocess, 'run', return_value=result):
+                    with self.assertRaises(ValueError):
+                        images.Docker().disk_usage('/var/lib/docker')
 
 
 if __name__ == '__main__':

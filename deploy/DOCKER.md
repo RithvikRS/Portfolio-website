@@ -110,6 +110,10 @@ Cleanup removes untagged, unused portfolio app images bearing `io.github.rithvik
 
 Unused cache in the Docker daemon's **shared default builder** is pruned with `docker buildx prune --builder default --all --force --max-used-space 256MB`. This cache is shared with other builds on the host, so future builds of any project may take longer; it is not application data. Docker removes the least recently used reclaimable records to target 256 MB; records/layers still in use may prevent reaching that target. Other Buildx builders are not cleaned. Cleanup errors are logged as warnings after a healthy deployment; failure to establish the recovery tags stops before cleanup.
 
+Read **Cleanup disk usage before** and **Cleanup disk usage after** in the deployment log for total, used, and available space on the filesystem containing Docker's data directory (`DockerRootDir`). The script uses GNU `df` with byte precision immediately before any retired-image removal and after both prune commands finish. The **Net disk space freed during cleanup** line subtracts final used space from initial used space, so it covers all three cleanup steps. Each step also has its own label; a prune command's `0 B` total applies only to that command.
+
+Treat the summary as the observed filesystem change, not a sum of Docker image sizes. Shared layers count once, while unrelated server writes and delayed Docker reclamation can affect the result. A net increase prints **Net disk usage increased during cleanup**. If either measurement fails or filesystem capacity changes, the script reports the summary as unavailable and keeps the existing cleanup and rollback behavior. If you move Docker or containerd data onto separate filesystems, inspect those filesystems separately; this summary covers only the filesystem containing `DockerRootDir`.
+
 Use the normal deployment command to run retention and cleanup automatically after successful checks. When first introducing these steps on another existing server, run deployment twice: the initial run finishes the script version loaded before Git updates it.
 
 ## Roll back an app deployment
