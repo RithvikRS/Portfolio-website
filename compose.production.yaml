@@ -46,6 +46,7 @@ services:
         condition: service_healthy
     environment:
       DOMAIN: ${DOMAIN:?Set DOMAIN in .env.production}
+      NTFY_DOMAIN: ${NTFY_DOMAIN:?Set NTFY_DOMAIN in .env.production}
     ports:
       - "80:80"
       - "443:443"
@@ -60,6 +61,7 @@ services:
         ipv4_address: ${CADDY_IP:-172.30.0.3}
       identity:
       management:
+      notifications:
     security_opt: [no-new-privileges:true]
     mem_limit: 192m
     pids_limit: 100
@@ -104,6 +106,40 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  ntfy:
+    # ntfy v2.32.0. Keep upgrades deliberate and back up .ntfy/ first.
+    image: binwiederhier/ntfy@sha256:59250e1d8be2ee2186c4560322f625faef22ace380331f05b63f8842dbd62602
+    command: [serve]
+    init: true
+    restart: unless-stopped
+    user: "${NTFY_UID:-1000}:${NTFY_GID:-1000}"
+    environment:
+      NTFY_BASE_URL: https://${NTFY_DOMAIN:?Set NTFY_DOMAIN in .env.production}
+      GOMEMLIMIT: 64MiB
+    volumes:
+      - ./deploy/ntfy:/etc/ntfy:ro
+      - ./.ntfy/data:/var/lib/ntfy
+    # Local cron publishes here; remote clients enter through Caddy HTTPS.
+    ports: ["127.0.0.1:2586:8080"]
+    networks: [notifications]
+    read_only: true
+    tmpfs: ["/tmp:size=8m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    pids_limit: 64
+    healthcheck:
+      test: [CMD-SHELL, "wget -q -O - http://127.0.0.1:8080/v1/health | grep -q '\"healthy\":true'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   portainer:
     # Portainer CE 2.45.2 LTS. Upgrade deliberately, with a data backup.
     image: portainer/portainer-ce@sha256:03f94a406496dc84d37b552795fc424ccad8d0d7200353b6a82915f6e8f73ab0
@@ -135,6 +171,7 @@ networks:
         - subnet: ${DOCKER_SUBNET:-172.30.0.0/24}
   identity:
   management:
+  notifications:
 
 volumes:
   caddy_data:

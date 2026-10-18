@@ -1,0 +1,15 @@
+listen-http: ":8080"
+cache-file: /var/lib/ntfy/cache.db
+cache-duration: 168h
+auth-file: /var/lib/ntfy/auth.db
+auth-default-access: deny-all
+behind-proxy: true
+enable-login: true
+enable-signup: false
+enable-reservations: false
+# iOS receives a wake-up request here, then fetches message text from this server.
+upstream-base-url: https://ntfy.sh
+# Attachments, email, calls, and public account creation stay disabled.
+visitor-request-limit-burst: 30
+visitor-request-limit-replenish: 5s
+visitor-subscription-limit: 10

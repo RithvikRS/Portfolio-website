@@ -22,7 +22,7 @@ The interface uses semantic HTML, custom CSS, and vanilla JavaScript. Public por
 
 ## How it works
 
-Generated portfolio pages and a Node.js backend run together in one app container. Caddy handles HTTPS and routing, Authelia handles shared sign-in, and Portainer manages Docker. All four services run through Docker Compose on the Oracle AMD server.
+Generated portfolio pages and a Node.js backend run together in one app container. Caddy handles HTTPS and routing, Authelia handles shared sign-in, Portainer manages Docker, and ntfy delivers private server notifications. All five services run through Docker Compose on the Oracle AMD server.
 
 ```mermaid
 flowchart LR
@@ -30,11 +30,13 @@ flowchart LR
     caddy --> app[Node.js: portfolio and Fieldnotes]
     caddy --> auth[Authelia: shared sign-in]
     caddy --> portainer[Portainer: Docker management]
+    caddy --> ntfy[ntfy: private notifications]
+    arm[ARM provisioning cron] --> ntfy
     portainer -. OpenID Connect .-> auth
     app --> notes[(Persistent writing storage)]
 ```
 
-Only Caddy publishes web ports. Administrator and Portainer routes require authentication; public portfolio pages and published writing remain open to visitors.
+Only Caddy publishes public web ports. ntfy also binds its API to loopback for the local ARM cron job. Administrator and Portainer routes require authentication; public portfolio pages and published writing remain open to visitors.
 
 | Layer | Tools |
 | --- | --- |
@@ -96,7 +98,7 @@ A push to `V2`, a closed but unmerged PR, or a direct push to `main` does not tr
 
 The server fetches the latest `main`, updates its checkout with a fast-forward merge, validates Compose/Authelia/Caddy, and builds the app image. The build generates pages, checks links, and runs tests. The script then updates services, reconciles Portainer SSO, reloads Caddy, and checks public endpoints and private access gates. A conflicting server edit stops the deployment for reconciliation.
 
-Git updates tracked source files, including removing files deleted in `main`; it does not wipe the server directory. Docker replaces containers as needed. `.env.production`, `.auth/`, `.portainer/`, `.notes/`, and Caddy certificate volumes persist. The existing app serves during the build, but container replacement may briefly interrupt requests. Authelia restarts, so sign in again afterward.
+Git updates tracked source files, including removing files deleted in `main`; it does not wipe the server directory. Docker replaces containers as needed. `.env.production`, `.auth/`, `.portainer/`, `.notes/`, `.ntfy/`, and Caddy certificate volumes persist. The existing app serves during the build, but container replacement may briefly interrupt requests. Authelia restarts, so sign in again afterward.
 
 For a manual deployment, run **inside Oracle SSH**:
 
@@ -128,6 +130,8 @@ A failed build, startup, or endpoint check does not rotate the recovery tags or 
 Rollback restores the app only; configuration and stored data stay at their current versions. Fix or revert the faulty change through a PR before deploying again. A fresh installation gains a previous image after a second distinct image succeeds.
 
 ## Documentation
+
+Set up private ARM alerts and your iPhone with the [ntfy guide](deploy/NTFY.md). Capacity retries stay quiet; a claimed instance or actionable error sends a notification.
 
 | Guide | Start here for |
 | --- | --- |
@@ -174,7 +178,7 @@ Use `/opt/portfolio` on the server's `main` branch for production at `rithvik.dd
 
 ## Hosting and private data
 
-The production Compose file runs the complete Oracle stack. SMTP credentials are supplied at runtime; private authentication, Portainer, and writing data live in `.auth/`, `.portainer/`, and `.notes/`. Keep these directories, `.env`, `.env.production`, passwords, and SSH keys out of Git and the image build context.
+The production Compose file runs the complete Oracle stack. SMTP credentials are supplied at runtime; private authentication, Portainer, writing, and notification data live in `.auth/`, `.portainer/`, `.notes/`, and `.ntfy/`. Keep these directories, `.env`, `.env.production`, passwords, and SSH keys out of Git and the image build context.
 
 Generated portfolio pages can also be served by a static host, but the contact backend, dashboard, authentication, and Fieldnotes require server processes. The [host-based guide](deploy/README.md) covers an alternative Node/systemd setup for the public portfolio and SMTP backend; it does not install shared login.
 

@@ -88,20 +88,23 @@ main() {
   fi
   python3 scripts/setup-notes.py
   python3 scripts/setup-portainer.py --prepare
+  python3 scripts/setup-ntfy.py prepare
   printf 'Validating the production configuration...\n'
   "${compose[@]}" config --quiet
   "${compose[@]}" run --rm --no-deps --interactive=false auth config validate \
     --config /etc/authelia/configuration.yml --config.experimental.filters template </dev/null
   # Override networking to avoid a second container claiming Caddy's fixed IP.
   # The isolated validation container publishes no ports or certificates.
-  local domain caddy_image
+  local domain ntfy_domain caddy_image
   domain="$("${compose[@]}" run --rm --no-deps --interactive=false --entrypoint sh auth -c 'printf "%s" "$DOMAIN"' </dev/null)"
+  ntfy_domain="$("${compose[@]}" config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["caddy"]["environment"]["NTFY_DOMAIN"])')"
   caddy_image="$("${compose[@]}" config --images | while read -r image; do if [[ "$image" == caddy:* ]]; then printf '%s\n' "$image"; fi; done)"
-  "${docker_cmd[@]}" run --rm --network none -e "DOMAIN=$domain" \
+  "${docker_cmd[@]}" run --rm --network none -e "DOMAIN=$domain" -e "NTFY_DOMAIN=$ntfy_domain" \
     -v "$repo_dir/deploy:/etc/caddy/site:ro" "$caddy_image" caddy validate \
     --config /etc/caddy/site/Caddyfile.docker --adapter caddyfile </dev/null
 
   python3 -m unittest discover -s tests -p 'test_deploy_images.py'
+  python3 -m unittest discover -s tests -p 'test_ntfy.py'
   local -a image_manager=(python3 scripts/deploy-images.py)
   if [[ "${docker_cmd[0]}" == sudo ]]; then image_manager+=(--sudo); fi
   "${image_manager[@]}" prepare
@@ -115,6 +118,9 @@ main() {
   # Initialize and reconcile the private API before exposing a new public route.
   "${compose[@]}" up --no-build -d portainer </dev/null
   python3 scripts/setup-portainer.py --configure
+  # First start creates ntfy's databases with deny-all access before users exist.
+  "${compose[@]}" up --no-build -d --no-deps --wait --wait-timeout 120 ntfy </dev/null
+  python3 scripts/setup-ntfy.py configure
   "${compose[@]}" up --no-build -d --wait --wait-timeout 180 </dev/null
   "${compose[@]}" exec -T caddy caddy reload --config /etc/caddy/site/Caddyfile.docker --adapter caddyfile </dev/null
 
@@ -146,6 +152,7 @@ main() {
     printf 'Unexpected unauthenticated Portainer response: %s\n' "$portainer_status" >&2; return 1;
   }
   "${compose[@]}" ps
+  python3 scripts/setup-ntfy.py check
   # Promote the rollback tags and prune only after every deployment check passed.
   "${image_manager[@]}" complete
   printf 'Deployed checkout based on main commit %s at https://%s/\n' "$(git rev-parse --short HEAD)" "$domain"
