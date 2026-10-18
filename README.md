@@ -118,6 +118,8 @@ After **all deployment checks pass**, the script retains successful app images a
 
 Cleanup removes unused, untagged portfolio images and eligible retired rollback images. Explicit backup tags and other applications’ images are preserved. The default builder’s shared cache is pruned toward **256 MB**; records still in use may keep it above that target. Future builds can take longer as cache is rebuilt. Runtime data, volumes, and containers are preserved.
 
+Read the **Cleanup disk usage before/after** lines and the **Net disk space freed during cleanup** summary in the deployment log to see the overall change across image removal and both prune steps. The measurements show used and available space on Docker's filesystem, in readable units and exact bytes. Other server activity and delayed Docker reclamation can affect this net change; an increase appears explicitly instead of being reported as zero.
+
 A failed build, startup, or endpoint check does not rotate the recovery tags or run cleanup. There is **no automatic rollback**. The [rollback runbook](deploy/DOCKER.md#roll-back-an-app-deployment) includes the SSH commands, image selection, health checks, and steps for resuming deployment:
 
 - **Failed deployment:** restore `current`, which still holds the last successful app image. If the build failed and the existing site works, an app rollback is usually unnecessary.
