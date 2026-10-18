@@ -101,8 +101,13 @@ main() {
     -v "$repo_dir/deploy:/etc/caddy/site:ro" "$caddy_image" caddy validate \
     --config /etc/caddy/site/Caddyfile.docker --adapter caddyfile </dev/null
 
+  python3 -m unittest discover -s tests -p 'test_deploy_images.py'
+  local -a image_manager=(python3 scripts/deploy-images.py)
+  if [[ "${docker_cmd[0]}" == sudo ]]; then image_manager+=(--sudo); fi
+  "${image_manager[@]}" prepare
+
   printf 'Building the app, generated pages, link checks, and tests...\n'
-  "${compose[@]}" build app </dev/null
+  "${compose[@]}" build --build-arg "VCS_REF=$(git rev-parse HEAD)" app </dev/null
   printf 'Starting the production stack and waiting for app health...\n'
   # Auth reads its configuration and keys at startup. Recreate it on redeploy;
   # the in-memory sessions intentionally expire, while SQLite stays on disk.
@@ -141,6 +146,8 @@ main() {
     printf 'Unexpected unauthenticated Portainer response: %s\n' "$portainer_status" >&2; return 1;
   }
   "${compose[@]}" ps
+  # Promote the rollback tags and prune only after every deployment check passed.
+  "${image_manager[@]}" complete
   printf 'Deployed checkout based on main commit %s at https://%s/\n' "$(git rev-parse --short HEAD)" "$domain"
 }
 

@@ -1,46 +1,51 @@
 # Rithvik’s portfolio
 
-A responsive professional portfolio for full-stack, cloud, and machine learning engineering roles. The public pages use generated HTML, custom CSS, and vanilla JavaScript. A Node server serves the site, delivers contact messages through Nodemailer, renders a protected admin dashboard, and runs Fieldnotes for blog posts and learning notes. Production runs on Oracle with Docker Compose, Caddy HTTPS, and Authelia authentication. No external fonts or hosted build service are required.
+**A portfolio, a publishing space, and a self-hosted engineering project.**
 
-## Current deployment
+A home for my work across full-stack development, cloud infrastructure, and machine learning. Explore the projects, read what I’m learning, or look behind the scenes at the application and deployment code that run this site on Oracle Cloud.
 
-Deployment record updated **8 October 2026 (Asia/Kolkata)**. The Oracle checkout is `/opt/portfolio`, on `main`, at `144.24.135.201`. No-IP supplies the hostname; Caddy supplies HTTPS and routes requests to the containers.
+[**Visit the portfolio →**](https://rithvik.ddns.net/) · [Projects](https://rithvik.ddns.net/Projects.html) · [Blog](https://rithvik.ddns.net/blog/) · [Learning notebook](https://rithvik.ddns.net/learn/) · [LinkedIn](https://www.linkedin.com/in/rithvikrs/)
 
-| Resource | Address | Status |
-| --- | --- | --- |
-| Public portfolio | [rithvik.ddns.net](https://rithvik.ddns.net/) | Live, with SMTP configured |
-| Admin dashboard | [/admin/](https://rithvik.ddns.net/admin/) | Stage 1 deployed; login required |
-| Shared sign-in | [/auth/](https://rithvik.ddns.net/auth/) | Authelia, username/password |
-| Portainer | [/portainer/](https://rithvik.ddns.net/portainer/) | Stage 2 deployed; shared login |
-| Fieldnotes editor | [/admin/notes/](https://rithvik.ddns.net/admin/notes/) | Stage 3; shared login |
-| Blog / learning notebook | [/blog/](https://rithvik.ddns.net/blog/) / [/learn/](https://rithvik.ddns.net/learn/) | Published entries only |
+[Run locally](#run-locally) · [How it works](#how-it-works) · [Deploy to production](#deploy-to-production) · [Documentation](#documentation)
 
-The dashboard links to the portfolio, Portainer, and Fieldnotes. Portainer CE 2.45.2 uses Authelia OpenID Connect for the existing administrator account and manages the Oracle Docker environment. Fieldnotes supports Markdown, private drafts, explicit publishing, tags/search, export, and recoverable trash. Saving edits to a published post keeps them private until Publish update.
+## What’s inside
 
-The stage 1 deployment passed 15 automated tests, live HTTPS sign-in/sign-out and access checks, and desktop/mobile layout review. The contact API reported delivery available; these checks did not send email. Stage 3 passed 19 tests, browser save/preview/publish/unpublish checks, live shared-login and privacy checks, and persistence after an app restart. This is a deployment record, not a continuously monitored status page.
+| Experience | What it offers |
+| --- | --- |
+| **Explore the work** | Searchable projects, professional experience, credentials, recognition, and a downloadable CV. |
+| **Read and publish** | Fieldnotes combines a public blog and learning notebook with a private Markdown editor, drafts, publishing, tags, export, and recoverable trash. |
+| **Get in touch** | A contact form backed by Node.js and Nodemailer, with validation, rate limits, and a LinkedIn fallback. |
+| **Manage the server** | A private dashboard and Portainer share an Authelia sign-in. Editing and container management stay behind authentication. |
+| **Ship updates** | Merging a PR into `main` starts a GitHub Actions deployment, with configuration checks, tests, and live endpoint checks. |
 
-After an outage and reboot on 8 October, the public site and complete dashboard/Portainer SSO flow were verified again. Saved logs showed repeated host memory exhaustion in `dnf-makecache.service`. Its background cache timer is now disabled on Oracle; package updates remain available. See the [incident and recovery record](deploy/DOCKER.md#8-october-2026-memory-exhaustion-and-recovery).
+The interface uses semantic HTML, custom CSS, and vanilla JavaScript. Public portfolio content and navigation work without JavaScript; motion respects reduced-motion preferences and a saved visitor setting. Fonts and assets are served locally.
 
-## Documentation
+## How it works
 
-- [Docker and Oracle operation](deploy/DOCKER.md): which file to use, local preview, first deployment, redeployment, and Caddy routing.
-- [Admin dashboard and shared login](deploy/ADMIN.md): account access, password recovery, persistent data, backups, and troubleshooting.
-- [Portainer and SSO](deploy/PORTAINER.md): container management, recovery access, storage, and the stage 2 integration.
-- [Blog and learning notebook](deploy/FIELDNOTES.md): writing, publishing, private storage, exports, backups, and recovery.
-- [Alternative host deployment](deploy/README.md): Node and Caddy with systemd, plus contact behavior and limits.
-- [Docker and Caddy PDF guide](output/pdf/Portfolio%20Docker%20and%20Caddy%20Guide.pdf): a printable guide to the completed setup.
+Generated portfolio pages and a Node.js backend run together in one app container. Caddy handles HTTPS and routing, Authelia handles shared sign-in, and Portainer manages Docker. All four services run through Docker Compose on the Oracle AMD server.
 
-For the current Oracle deployment, commit the development changes, merge into `main`, and push. Then run this **inside the Oracle SSH session**:
-
-```sh
-bash /opt/portfolio_redeploy.sh
+```mermaid
+flowchart LR
+    browser[Browser] --> caddy[Caddy: HTTPS and routing]
+    caddy --> app[Node.js: portfolio and Fieldnotes]
+    caddy --> auth[Authelia: shared sign-in]
+    caddy --> portainer[Portainer: Docker management]
+    portainer -. OpenID Connect .-> auth
+    app --> notes[(Persistent writing storage)]
 ```
 
-The shortcut already exists. It runs the repository's `portfolio_redeploy.sh`, builds and checks the app, applies production configuration, reconciles Portainer SSO, and verifies HTTPS. No new script needs to be pasted into the terminal. Authelia restarts during redeployment, so sign in again afterward. Stage 1, 2, and 3 files were copied to Oracle before merging into `main`; merge the matching files before a normal redeployment. The script stops if server copies differ from the pushed versions.
+Only Caddy publishes web ports. Administrator and Portainer routes require authentication; public portfolio pages and published writing remain open to visitors.
 
-## Preview and check
+| Layer | Tools |
+| --- | --- |
+| Public interface | Generated HTML, custom CSS, vanilla JavaScript, local SVG illustrations |
+| Application | Node.js 24 in Docker, Nodemailer, Markdown rendering and HTML sanitization |
+| Access and routing | Caddy HTTPS, Authelia, Portainer OpenID Connect |
+| Hosting and delivery | Oracle Cloud AMD, Docker Compose, GitHub Actions, SSH |
 
-With Node.js 22.9 or later and pnpm installed, run these commands from this directory:
+## Run locally
+
+With Node.js 24 and pnpm installed, run these commands from the repository root:
 
 ```sh
 pnpm install --frozen-lockfile --ignore-scripts
@@ -55,6 +60,14 @@ Open **http://127.0.0.1:4173**. Stop the server with Ctrl+C. Equivalent pnpm com
 Copy `.env.example` to `.env` and fill in your SMTP provider settings to enable delivery locally. Do not commit this file. Without SMTP configuration, the dialog offers LinkedIn and disables submission. Tests use fake delivery functions and never send real email. Change both `PORT` and `PUBLIC_ORIGIN` if using a different preview port. The form must be tested through HTTP/HTTPS, not by opening an HTML file directly.
 
 This local command previews the public portfolio, empty writing collections, and contact API. It does not start Caddy or Authelia; `/admin/` remains closed by default. Use the production setup for the complete sign-in flow.
+
+Prefer Docker? Run `docker compose up --build -d --wait` and open **http://localhost:8080**. See the [container guide](deploy/DOCKER.md) for runtime settings.
+
+The deployment image-retention tests use Python’s standard library and a fake Docker client:
+
+```sh
+python3 -m unittest discover -s tests -p 'test_deploy_images.py'
+```
 
 ## Write posts and learning notes
 
@@ -71,40 +84,116 @@ Open [Fieldnotes](https://rithvik.ddns.net/admin/notes/) using your existing log
 - Run `node scripts/check.mjs` to validate local links, anchors, document structure, and the PDF download.
 - Commit the generated pages alongside the content and the current CV. Generated HTML should not be edited directly.
 
-## Files and behavior
+## Deploy to production
+
+1. Commit and push your changes to `V2`.
+2. Open a pull request into `main` and merge it when ready.
+3. Follow the [Deploy portfolio workflow](https://github.com/RithvikRS/Portfolio-website/actions/workflows/deploy.yml) until the deployment succeeds.
+
+A push to `V2`, a closed but unmerged PR, or a direct push to `main` does not trigger this workflow. The [workflow file](.github/workflows/deploy.yml) uses the trusted `main` context and connects over SSH to run `/opt/portfolio/portfolio_redeploy.sh`. GitHub supplies `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`, and `SSH_KNOWN_HOSTS` from the `production` environment, which is restricted to `main`. It does not check out or execute unmerged PR code.
+
+The server fetches the latest `main`, updates its checkout with a fast-forward merge, validates Compose/Authelia/Caddy, and builds the app image. The build generates pages, checks links, and runs tests. The script then updates services, reconciles Portainer SSO, reloads Caddy, and checks public endpoints and private access gates. A conflicting server edit stops the deployment for reconciliation.
+
+Git updates tracked source files, including removing files deleted in `main`; it does not wipe the server directory. Docker replaces containers as needed. `.env.production`, `.auth/`, `.portainer/`, `.notes/`, and Caddy certificate volumes persist. The existing app serves during the build, but container replacement may briefly interrupt requests. Authelia restarts, so sign in again afterward.
+
+For a manual deployment, run **inside Oracle SSH**:
+
+```sh
+bash /opt/portfolio_redeploy.sh
+```
+
+The existing shortcut runs the repository script. Use `bash /opt/portfolio_redeploy.sh --no-pull` to rebuild the current server checkout after a server-only settings change. Local `.env` edits do not update Oracle’s `.env.production`.
+
+### Image cleanup and rollback
+
+After **all deployment checks pass**, the script retains successful app images and cleans up older ones:
+
+| Image tag | What it represents |
+| --- | --- |
+| `rithvik-portfolio:production` | Most recently built candidate; it may not have passed deployment checks. |
+| `rithvik-portfolio:current` | Last app image to pass the complete deployment checks. |
+| `rithvik-portfolio:previous` | Previous successful app image, retained for manual rollback. |
+
+Cleanup removes unused, untagged portfolio images and eligible retired rollback images. Explicit backup tags and other applications’ images are preserved. The default builder’s shared cache is pruned toward **256 MB**; records still in use may keep it above that target. Future builds can take longer as cache is rebuilt. Runtime data, volumes, and containers are preserved.
+
+A failed build, startup, or endpoint check does not rotate the recovery tags or run cleanup. There is **no automatic rollback**. Use the [manual rollback instructions](deploy/DOCKER.md#image-cleanup-and-rollback) to restore the previous app image without rebuilding. This restores the app only; configuration and stored data stay at their current versions. A fresh installation gains a previous image after a second distinct image succeeds.
+
+**First rollout of cleanup:** after merging this change and allowing its deployment to finish, re-run that successful GitHub Actions run once, or run `bash /opt/portfolio_redeploy.sh --no-pull` on Oracle. The first run finishes the script version loaded before Git updated it; the next run activates the new retention and cleanup steps. Later deployments use them automatically.
+
+## Documentation
+
+| Guide | Start here for |
+| --- | --- |
+| [Docker and Oracle operation](deploy/DOCKER.md) | Setup, deployment, cleanup, rollback, Caddy routing, and troubleshooting |
+| [Admin dashboard and shared login](deploy/ADMIN.md) | Account access, password recovery, persistent data, and backups |
+| [Portainer and SSO](deploy/PORTAINER.md) | Container management, recovery access, and storage |
+| [Blog and learning notebook](deploy/FIELDNOTES.md) | Drafts, publishing, exports, backups, and recovery |
+| [Alternative host deployment](deploy/README.md) | Node and Caddy with systemd, without the Docker stack |
+| [Docker and Caddy PDF guide](output/pdf/Portfolio%20Docker%20and%20Caddy%20Guide.pdf) | A printable setup reference; use the Markdown guide for current deployment procedures |
+
+## Current deployment
+
+Deployment record updated **19 October 2026 (Asia/Kolkata)**. Oracle serves production from `/opt/portfolio` on `main`. No-IP supplies `rithvik.ddns.net`; Caddy supplies HTTPS. **GitHub Pages is disabled.**
+
+| Resource | Address | Access |
+| --- | --- | --- |
+| Public portfolio | [rithvik.ddns.net](https://rithvik.ddns.net/) | Public, with SMTP configured |
+| Blog / learning notebook | [/blog/](https://rithvik.ddns.net/blog/) / [/learn/](https://rithvik.ddns.net/learn/) | Published entries only |
+| Admin dashboard | [/admin/](https://rithvik.ddns.net/admin/) | Login required |
+| Shared sign-in | [/auth/](https://rithvik.ddns.net/auth/) | Authelia, username/password |
+| Portainer | [/portainer/](https://rithvik.ddns.net/portainer/) | Shared login |
+| Fieldnotes editor | [/admin/notes/](https://rithvik.ddns.net/admin/notes/) | Shared login |
+
+<details>
+<summary>Deployment verification and recovery history</summary>
+
+The automatic deployment completed successfully on 19 October. The server checkout matched `main`; public portfolio, contact, writing, and auth health endpoints returned HTTP 200, and private routes rejected signed-out requests. The cleanup feature described above requires its first-rollout step. This is a verification record, not continuous uptime monitoring.
+
+The original dashboard deployment passed 15 automated tests, live sign-in/sign-out and access checks, and desktop/mobile review. Fieldnotes passed 19 tests, browser save/preview/publish/unpublish checks, shared-login and privacy checks, and persistence after an app restart. Contact checks confirmed configured delivery without sending email.
+
+Following an outage and reboot on 8 October, the public site and full Portainer SSO flow were verified again. Logs showed repeated host memory exhaustion in `dnf-makecache.service`; its background cache timer is disabled on Oracle, while package updates remain available. See the [incident and recovery record](deploy/DOCKER.md#8-october-2026-memory-exhaustion-and-recovery).
+
+</details>
+
+## Repository map
 
 - `server/notes.mjs`, `server/notes-store.mjs`, `js/notes.js`, `css/notes.css`: the authenticated editor, private/published content store, and public writing pages.
 - `scripts/setup-notes.py`: prepares private writing storage during deployment.
 - `scripts/build.mjs`: shared HTML templates and page generation.
 - `css/site.css`: colors, type, component styles, responsive layout, print styles, and reduced-motion support.
 - `js/site.js`: mobile navigation, project filters/search, linked project expansion, accessible contact dialog, active navigation, and scroll entrance animations.
-- A roughly 1.5-second introduction brings in the brand and navigation, reveals the homepage headline line by line, then introduces the description, buttons, and illustration with a brief connector animation. Inner-page introductions use the same staggered rhythm. This plays on page loads at the top; anchor links and restored scroll positions skip it. Links remain usable throughout. Sections start revealing just before entering the viewport, with small sibling delays and no nested tag animations. The illustration uses one frame scheduler with time-based easing for pointer tilt and gentle scroll movement; it stops when settled or offscreen. Hover effects and dialogs use consistent easing. There is no automatic scrolling or continuously running decorative loop. The footer's motion toggle is remembered locally; OS reduced-motion preferences always take priority. Keyboard focus and printing cancel entrance animations. Content is never hidden by animation-specific CSS.
 - `server/`: public-file allowlist, protected dashboard, same-origin contact API, validation, rate limits, duplicate-submission protection, and SMTP delivery. Recipient and credentials remain in server configuration. Visitor addresses are used for Reply-To only.
 - `server/admin.mjs` and `css/admin.css`: dashboard markup, administrator identity checks, and responsive styling.
 - `Dockerfile`: builds and tests the Node application image; Compose decides how to run it.
 - `compose.yaml`, `compose.ip.yaml`, and `compose.production.yaml`: separate local, temporary public-IP, and production configurations. Use one at a time for a deployment.
-- `portfolio_redeploy.sh`: pulls `main`, validates configuration, builds the app, starts services, and checks the public endpoints.
+- `.github/workflows/deploy.yml`: starts an SSH deployment when a PR is merged into `main`.
+- `portfolio_redeploy.sh`: pulls `main`, validates configuration, builds the app, starts services, checks the public endpoints, and then retains rollback images and cleans unused portfolio images/build cache.
+- `scripts/deploy-images.py` and `compose.rollback.yaml`: preserve the last successful app images and support [app-only rollback](deploy/DOCKER.md#image-cleanup-and-rollback).
+- `tests/`: Node application tests and Python image-retention tests, with fake mail delivery and Docker operations.
 - `scripts/setup-admin.py`: one-time Linux administrator setup. It generates private account files and refuses to replace an existing `.auth/` directory.
 - `scripts/setup-portainer.py`: prepares private Portainer/OIDC files without replacing existing credentials, then applies SSO settings and checks Docker access during redeployment.
 - `deploy/Caddyfile.docker` and `deploy/authelia/configuration.yml`: production routing and non-secret authentication settings.
 - `deploy/Caddyfile` and `deploy/portfolio.service`: alternative host-based templates, not the active Docker deployment.
 - `images/favicon.svg`: local vector identity. The hero illustration and project diagrams use inline SVG/CSS.
-- The existing `Projects.html` and `Awards.html` URLs are retained, as are the original main-page anchors. `error.html` remains available; `404.html` supplies the GitHub Pages error page.
-- Content, navigation, downloads, and project overviews work without JavaScript. JavaScript adds search, filtering, a collapsible mobile menu, and the contact form. LinkedIn remains the contact fallback without JavaScript.
 
-## Hosting
+## Hosting and private data
 
-For Docker, follow the [container deployment guide](deploy/DOCKER.md). `docker compose up --build -d --wait` starts a local preview at `http://localhost:8080`; the separate production Compose file runs the app, Caddy, Authelia, and Portainer on Oracle. The image build regenerates and validates the site. SMTP credentials are supplied only at runtime. Private authentication and Portainer data live in `.auth/` and `.portainer/`.
+The production Compose file runs the complete Oracle stack. SMTP credentials are supplied at runtime; private authentication, Portainer, and writing data live in `.auth/`, `.portainer/`, and `.notes/`. Keep these directories, `.env`, `.env.production`, passwords, and SSH keys out of Git and the image build context.
 
-The generated pages still work with GitHub Pages served directly from the repository root. GitHub Pages cannot run the contact backend, admin dashboard, or Authelia. The current Oracle deployment already runs these services. The [host-based guide](deploy/README.md) is an alternative for the public site and SMTP backend; it does not install shared login.
+Generated portfolio pages can also be served by a static host, but the contact backend, dashboard, authentication, and Fieldnotes require server processes. The [host-based guide](deploy/README.md) covers an alternative Node/systemd setup for the public portfolio and SMTP backend; it does not install shared login.
 
 For Docker production, change `DOMAIN` in the server's `.env.production` and redeploy when moving to a new domain. Compose derives the public origin, build URL, and authentication URLs from it. For static or direct Node hosting, update `siteUrl` in the content file and rebuild. See [domain changes](deploy/DOCKER.md#changing-the-domain) for details.
 
 The public pages use a form and LinkedIn instead of displaying a destination email or phone number. The CV is unchanged and may contain contact details. Removing visible contact details does not remove them from downloaded PDFs, public source, old commits, or copies indexed elsewhere. Review those separately if you want a public CV with fewer contact details.
 
-Deployments are triggered manually; there is no automatic deployment on a Git push. Keep `.env`, `.env.production`, `.auth/`, `.portainer/`, passwords, and SSH keys out of Git. The previous Bootstrap and jQuery setup is no longer loaded; the old Bootstrap files and source images remain in the repository for reference.
+The existing `Projects.html`, `Awards.html`, and original homepage anchors are retained. Bootstrap and jQuery are no longer loaded; their old files and source images remain in the repository for reference.
 
 ## Content sources
+
+Professional content is grounded in the CV and confirmed project descriptions. Certification dates are issue dates, not a claim of current validity. Review role dates and wording whenever the CV changes.
+
+<details>
+<summary>Source notes and verification limits</summary>
 
 - `documents/Rithvik_CV.pdf` is the primary source for current professional experience, skills, certification issue dates, and education.
 - Publicly accessible LinkedIn information was reviewed at <https://www.linkedin.com/in/rithvikrs/>. Full profile and recent activity access was limited.
@@ -114,4 +203,4 @@ Deployments are triggered manually; there is no automatic deployment on a Git pu
 - Credly links open the user-provided public profile. Certification dates remain sourced from the CV; no badge status, expiry date, or additional certification was inferred from the profile link.
 - Accenture's company-level Pinnacle and ACE awards, and project-level Quarterly and Star awards, were supplied directly by the user. The user described more than three years on the current project. The approximate 2025–2026 dates for Pinnacle and ACE remain unconfirmed and are omitted publicly; counts, selection criteria, and business impact have not been inferred.
 
-Certification dates are issue dates recorded in the CV, not a claim of current credential validity. Review role dates and wording whenever the CV changes.
+</details>

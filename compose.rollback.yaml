@@ -1,0 +1,4 @@
+# App-only rollback overlay; use with compose.production.yaml and --no-build.
+services:
+  app:
+    image: rithvik-portfolio:previous
