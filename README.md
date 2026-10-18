@@ -77,8 +77,10 @@ Open [Fieldnotes](https://rithvik.ddns.net/admin/notes/) using your existing log
 
 - Edit `data/portfolio.json` for roles, descriptions, projects, skills, credentials, education, and contact details.
 - Each project separates `technologies` (languages, libraries, and tools) from `skills` (the technical approaches demonstrated). Leave `technologies` empty when a stack is not specified.
-- The toolkit displays skills as plain text tags. Project cards retain their own applied skills and tools.
-- `professionalAwards` and `awards` appear together in one Honors & recognition section, with general honors first, followed by professional awards. Optional `scope`, `date`, `description`, and `image` fields supply labels and details; missing details are omitted. Homepage recognition links lead to this shared collection.
+- Keep homepage project cards focused on the title and summary. Add details, applied skills, and tools for readers to explore under **Approach & tools** on the projects page.
+- Add work awards to `professionalAwards`. In `awards`, use `scope: "Academic"` for education honors; other entries appear under Community & participation. Add short descriptions to explain each award, and include dates or images when available.
+- Group `earlierLearning` by subject using a `title` and a `courses` list. The credentials page shows every course without requiring readers to expand a panel.
+- Keep each role's `company` consistent to group career progression under one employer heading.
 - Replace `documents/Rithvik_CV.pdf` to update every CV download. That alone does not change the text on the pages; update the content file for changes to roles or other details.
 - Run `node scripts/build.mjs` after content or template edits. It regenerates `index.html`, `Projects.html`, `Awards.html`, `404.html`, `error.html`, and `sitemap.xml`.
 - Run `node scripts/check.mjs` to validate local links, anchors, document structure, and the PDF download.

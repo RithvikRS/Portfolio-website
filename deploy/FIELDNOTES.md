@@ -1,6 +1,6 @@
 # Blog and learning notebook
 
-Stage 3 adds **Fieldnotes**, a browser editor inside the existing Node app. It uses the same Authelia administrator login as the dashboard. There is no additional container, database service, or password. This keeps the Oracle 1 GB VM's footprint small.
+Use **Fieldnotes** to write blog posts and learning notes in your browser. Sign in with the same administrator account as the dashboard. Fieldnotes runs inside the Node app and stores writing in private files, with no additional container or database service.
 
 | Page | Address | Visibility |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ Stage 3 adds **Fieldnotes**, a browser editor inside the existing Node app. It u
 5. Select **Publish entry**, then confirm. Blog posts appear under `/blog/`; notes under `/learn/`. Both types start private, and publishing either makes it visible to everyone.
 6. After publishing, **Save draft** keeps subsequent changes private. **Publish update** replaces the public version with the saved draft. The first publication date stays the same. Changing the entry type and publishing moves it to the other collection; its old collection URL stops working.
 
-Titles and tags are searchable in the library, along with Markdown content. Public search sees only published versions. Use filters for posts, notes, drafts, published writing, or trash. The public pages begin empty; no sample personal articles are published for you.
+Search the library by title, tag, or Markdown content. Use filters for posts, notes, drafts, published writing, or trash. Public search includes only published versions; publish an entry to add it to a public collection.
 
 **Unpublish** removes the public version immediately and keeps the draft. **Move to trash** also unpublishes it. Use the Trash filter and **Restore draft** to recover a private draft. There is no permanent-delete button. Previously downloaded copies and search-engine caches cannot be recalled.
 
@@ -38,7 +38,7 @@ Production binds `.notes/` to `/writing` and sets `NOTES_DATA_DIR=/writing`. The
 
 The store serializes writes in one process, checks revision numbers, writes a temporary file, syncs it, and atomically renames it. Linux also syncs the directory. On startup, malformed data stops the app rather than silently losing entries. Run one app instance per storage directory; shared writers/replicas are unsupported. The library is bounded to 250 entries including trash, 64 KiB of UTF-8 Markdown per entry, 140-character titles, 320-character summaries, and eight 32-character tags.
 
-Writing is **runtime data**, separate from Git and the image. A Git push, image build, redeployment, restart, or ordinary Compose down/up preserves it. `.notes/` is ignored by Git, excluded from Docker builds, and inaccessible through the public-file allowlist. Do not delete that directory or replace it with an empty backup. No image uploads, embeds, comments, scheduled publication, WYSIWYG formatting, or multi-user editing are included in this stage.
+Keep writing in `.notes/` as **runtime data**, separate from Git and the image. A Git push, image build, redeployment, restart, or ordinary Compose down/up preserves it. Keep the directory out of Git, Docker builds, and the public-file allowlist. Do not delete it or replace it with an empty backup. Use Markdown and manual publishing; the editor does not support image uploads, embeds, comments, scheduled publication, WYSIWYG formatting, or multi-user editing.
 
 Local `compose.yaml` explicitly disables writing storage and authenticated editing; it previews the public pages with empty collections. Direct Node development can set `NOTES_DATA_DIR` to a private directory, but the editor still requires the trusted authentication integration. Do not enable a public authentication bypass to preview it.
 
@@ -48,17 +48,17 @@ Local `compose.yaml` explicitly disables writing storage and authenticated editi
 
 `/blog/*` and `/learn/*` use the existing public fallback to `app:4173`. They read only the published snapshot, never the draft. All writing responses use `Cache-Control: no-store` so unpublishing applies to subsequent requests immediately. HTML is sanitized after Markdown parsing; scripts, styles, images, and embedded widgets are excluded. No external image fetch or server-side URL fetch is performed.
 
-There are **no new Caddy blocks, DNS records, certificates, or OAuth clients** for this stage. A new domain is derived from production `DOMAIN` through `PUBLIC_ORIGIN`; redeploy after changing it. If adding a separate future application, follow the [Caddy guide](DOCKER.md#caddy-changes-and-new-sites).
+Reuse the existing Caddy routes and shared login for Fieldnotes. Set the domain through production `DOMAIN` and redeploy after changing it. If adding a separate application, follow the [Caddy guide](DOCKER.md#caddy-changes-and-new-sites).
 
 ## Redeploy
 
-Commit local changes, merge `V2` into `main`, push, then run inside Oracle SSH:
+Commit and push changes to `V2`, then merge its PR into `main` to start the automatic deployment. Follow the run in GitHub Actions. For a manual deployment, run inside Oracle SSH:
 
 ```sh
 bash /opt/portfolio_redeploy.sh
 ```
 
-The script prepares `.notes/`, builds the Node app and dependencies, runs checks/tests, reconciles the existing services, and verifies both public writing pages and the signed-out export gate. It preserves existing writing. Sign in again because Authelia is recreated. Stage 3 files were copied to the server before the local commit/merge; merge matching files before the next normal pull, or the script will stop on differences.
+Use the script to prepare `.notes/`, build the app, run checks, and update services while preserving writing. It checks both public writing pages and the signed-out export gate. Sign in again after Authelia restarts. Reconcile any server files that differ from `origin/main` before retrying a deployment.
 
 ## Export, backup, and restore
 
@@ -80,9 +80,9 @@ dc ps
 
 If the archive command fails, start the services again before troubleshooting. Also preserve the matching source version and Caddy named volumes for a full migration. Copy the private archive to separate, secure storage; on-instance backups alone do not survive loss of the VM.
 
-To restore, stop the affected services, preserve the current directories as a separate recovery point, extract the verified archive into a staging directory, and restore the matching private directories with owners/modes intact. Do not overlay a library backup onto newer files: entries absent from the backup could otherwise remain published. Replace the directory as a unit while the app is stopped. Start services with the compatible source/image version and check public/private visibility. Never mix an old Authelia encryption key with an unmatched database.
+To restore, stop the affected services and preserve the current directories as a separate recovery point. Check the archive's contents, extract it into a staging directory, and restore the matching private directories with owners/modes intact. Do not overlay a library backup onto newer files: entries absent from the backup could otherwise remain published. Replace the directory as a unit while the app is stopped. Start services with the compatible source/image version and check public/private visibility. Never mix an old Authelia encryption key with an unmatched database.
 
-The pre-stage-3 recovery point is `/home/opc/.config/portfolio-deploy/fieldnotes-stage3-DtZPMrmu/`, with source and consistent auth/Portainer archives. The prior image is `rithvik-portfolio:before-fieldnotes-stage3`. It predates writing data and cannot restore writing created afterward. The same directory also contains `private-after.tar.gz`, a consistent backup of the completed integration including the private getting-started note; the temporary verification entry is archived separately. These are manual recovery points; scheduled backups have not been configured.
+For an earlier Fieldnotes recovery point, inspect `/home/opc/.config/portfolio-deploy/fieldnotes-stage3-DtZPMrmu/`. Use `private-after.tar.gz` for the private state from that backup. The image `rithvik-portfolio:before-fieldnotes-stage3` predates writing support and cannot restore later writing. Create fresh private-state backups regularly; manual recovery archives do not update automatically.
 
 ## Checks and troubleshooting
 
@@ -91,8 +91,6 @@ The pre-stage-3 recovery point is `/home/opc/.config/portfolio-deploy/fieldnotes
 - After saving, restart the app to verify the draft persists. Do not edit `.notes/` files while the app runs; the process holds its own in-memory snapshot.
 - For storage errors, inspect app logs and directory ownership. Preserve text in the editor and download it before troubleshooting.
 - For a 409 conflict, copy the local text and reload the newer server version. Repeating the same stale save will not resolve it.
-- Monitor this small VM with `free -m` and `sudo docker stats --no-stream`. The DNF cache timer mitigation from the earlier outage remains in effect.
+- Monitor memory with `free -m` and `sudo docker stats --no-stream`. Follow the [AMD memory guidance](DOCKER.md#manage-memory-on-the-amd-server) when configuring package maintenance.
 
 Implementation references: [Marked](https://marked.js.org/) and [sanitize-html](https://github.com/apostrophecms/apostrophe/tree/main/packages/sanitize-html). The lockfile pins Marked 18.1.0 and sanitize-html 2.18.0; review updates before changing them.
-
-Deployment validation on 8 October 2026: all 19 app tests passed locally and inside the production image; live shared login and full Portainer OAuth remained working. Fieldnotes passed signed-out/forged-header rejection, CSRF rejection, private-draft exclusion, public publication and draft isolation, unpublish, trash/restore, export, and restart persistence. Browser save/preview/publish/unpublish checks passed. A private getting-started note remains in the editor; public collections contain no test or sample articles.

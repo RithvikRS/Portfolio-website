@@ -1,10 +1,10 @@
 # Portainer on Oracle
 
-Stage 2 was deployed on **8 October 2026 (Asia/Kolkata)**. Portainer CE **2.45.2 LTS** is pinned by image digest in `compose.production.yaml`. The dashboard links to it at [https://rithvik.ddns.net/portainer/](https://rithvik.ddns.net/portainer/). Blog and learning-note editing are now available in [Fieldnotes](FIELDNOTES.md), reusing the same login.
+Open [Portainer](https://rithvik.ddns.net/portainer/) to manage containers on the AMD server. Keep Portainer CE **2.45.2 LTS** pinned by image digest in `compose.production.yaml` until you choose to upgrade. Use [Fieldnotes](FIELDNOTES.md) to edit blog posts and learning notes with the same login.
 
 ## Sign in and sign out
 
-Open the [dashboard](https://rithvik.ddns.net/admin/), sign in with the existing `rithvik` Authelia account, and select **Open Portainer**. You can also open Portainer directly. If Portainer shows its login screen, choose **Login with OAuth**; the existing Authelia session supplies the identity without another password. The **Oracle Docker** environment is already connected.
+Open the [dashboard](https://rithvik.ddns.net/admin/), sign in with the `rithvik` Authelia account, and select **Open Portainer**. You can also open Portainer directly. If Portainer shows its login screen, choose **Login with OAuth** to reuse your shared session. Select **Oracle Docker** to manage the server's containers.
 
 The normal account has Portainer administrator access. It can manage all containers, inspect logs, open consoles, and change volumes, images, and networks. Docker socket access gives it control of the Oracle host's containers. Use the repository and `portfolio_redeploy.sh` for the portfolio stack's lasting configuration; changes made directly in Portainer can be replaced by the next Compose deployment. An externally created Compose stack can appear with limited stack editing in Portainer while its containers remain manageable.
 
@@ -46,7 +46,7 @@ Portainer OAuth -> Authelia /auth/api/oidc/authorization
 
 The `.portainer/` parent is mode 700 and credential files are mode 600, owned by `opc`. Portainer runs as root and owns its database files, so backups need `sudo`. Both private directories are ignored by Git and excluded from the app image. Do not delete them to reset a failed deployment.
 
-After committing, merging into `main`, and pushing, run inside SSH:
+Commit and push changes to `V2`, then merge its PR into `main` to start the automatic deployment. Follow the run in GitHub Actions. To deploy manually, run inside SSH:
 
 ```sh
 bash /opt/portfolio_redeploy.sh
@@ -70,7 +70,7 @@ sudo docker inspect portfolio-portainer-1 \
 On your computer, replace `CONTAINER_IP` below with that result and use the full key path for this computer:
 
 ```powershell
-ssh -i "C:\Users\rithv\OneDrive\Desktop\Development\Oracle Cloud\micro-amd-ssh-key-2026-10-04.key" `
+ssh -i "C:\Users\Rithvik\Desktop\Oracle Cloud\micro-amd-ssh-key-2026-10-04.key" `
   -L "127.0.0.1:19000:CONTAINER_IP:9000" opc@144.24.135.201
 ```
 
@@ -96,7 +96,7 @@ dc ps
 
 If archiving fails, start all three services again before troubleshooting. The public app is briefly unavailable while its writing data is backed up. This archive does not include Caddy's named volumes; back those up separately for a full migration. Restore the matched directories while their services are stopped, preserve owners/modes, and use the compatible source and image version. Never restore an old Authelia encryption key over a newer database without its matching backup.
 
-The deployment recovery directory is `/home/opc/.config/portfolio-deploy/portainer-stage2-6erYb3rT/`. It contains the pre-stage-2 source/private configuration archive and a SQLite backup of the earlier auth database. The previous app image is `rithvik-portfolio:before-portainer-stage2`. The post-deployment private-state backup in the same directory preserves the completed integration. These are manual recovery points, not scheduled backups.
+For an earlier Portainer recovery point, inspect `/home/opc/.config/portfolio-deploy/portainer-stage2-6erYb3rT/` and the image tag `rithvik-portfolio:before-portainer-stage2`. Match the source, private configuration, and auth database archives before restoring. Create fresh backups for ongoing use; these manual recovery points do not update automatically. Use the [app rollback runbook](DOCKER.md#roll-back-an-app-deployment) for routine app recovery.
 
 ## Checks and troubleshooting
 
@@ -120,6 +120,6 @@ python3 scripts/setup-portainer.py --configure
 | Setup returns 422 | Recovery password must match initial `admin`; changing its file alone cannot reset an existing password |
 | Memory pressure on the micro instance | Inspect `docker stats --no-stream`; avoid simultaneous builds/heavy tools |
 
-Verified at deployment: 15 app tests; production build and link checks; configuration validation; repeated helper execution; one shared login followed by a successful OAuth exchange as `rithvik` with administrator role; four running containers readable through the public protected API and browser UI; Portainer assets and translation labels; signed-out/forged-header rejection; shared sign-out protection; private-file denial; and unchanged public/contact health. No email was sent. Stage 3 adds Fieldnotes inside the existing app; see the [writing guide](FIELDNOTES.md).
+After changing authentication or routing, sign in through the dashboard, open Portainer, and check the **Oracle Docker** container list. Check that labels and assets load, then sign out and confirm private requests require authentication. Open the public portfolio and contact form to check that both remain available.
 
 References: [Authelia Portainer integration](https://www.authelia.com/integration/openid-connect/clients/portainer/), [Portainer OAuth settings](https://docs.portainer.io/admin/settings/authentication/oauth), [Portainer CLI options](https://docs.portainer.io/advanced/cli).

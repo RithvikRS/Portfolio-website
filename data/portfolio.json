@@ -102,8 +102,8 @@
     { "name": "Machine Learning with Python", "issuer": "IBM", "date": "Jan 2020", "mark": "IBM" }
   ],
   "professionalAwards": [
-    { "name": "Pinnacle Award", "issuer": "Accenture", "scope": "Company-level" },
-    { "name": "ACE Award", "issuer": "Accenture", "scope": "Company-level" },
+    { "name": "Pinnacle Award", "issuer": "Accenture", "scope": "Company-level", "description": "A company-level award received during my time at Accenture." },
+    { "name": "ACE Award", "issuer": "Accenture", "scope": "Company-level", "description": "Company-level recognition from Accenture, alongside my project awards." },
     { "name": "Quarterly & Star awards", "issuer": "Accenture", "scope": "Project-level", "description": "Recognition from my current project, which I’ve worked on for more than three years." }
   ],
   "awards": [
@@ -122,6 +122,38 @@
     { "name": "TAG Club", "role": "Core Committee, Vellore", "dates": "Jan 2020 — Mar 2021" }
   ],
   "earlierLearning": [
-    "AWS Academy Cloud Foundations · AWS", "Build a Face Recognition Application using Python · GUVI / IITM", "Transfer Learning for NLP with TensorFlow Hub · Coursera", "Introduction to TensorFlow for AI, ML, and Deep Learning · DeepLearning.AI", "AI for Everyone · DeepLearning.AI", "Machine Learning · Stanford University / Coursera", "Python Data Science Toolbox, Parts 1 & 2 · DataCamp", "Introduction to Python & Intermediate Python · DataCamp", "Fundamentals of Parallelism on Intel Architecture · Intel / Coursera", "Introduction to MongoDB · MongoDB / Coursera", "Introduction to SQL · DataCamp", "Programming for Everybody & Python Data Structures · University of Michigan", "Java Programming: Solving Problems with Software (with Honors) · Duke University", "Java Programming: Arrays, Lists, and Structured Data · Duke University", "Bioinformatic Methods I & II · University of Toronto", "Introduction to Programming using HTML and CSS · Microsoft", "Introduction to Programming using Python · Microsoft", "SQL Database Fundamentals · Microsoft"
+    {
+      "title": "Cloud & data",
+      "courses": [
+        "AWS Academy Cloud Foundations · AWS",
+        "Introduction to MongoDB · MongoDB / Coursera",
+        "Introduction to SQL · DataCamp",
+        "SQL Database Fundamentals · Microsoft"
+      ]
+    },
+    {
+      "title": "AI & bioinformatics",
+      "courses": [
+        "Build a Face Recognition Application using Python · GUVI / IITM",
+        "Transfer Learning for NLP with TensorFlow Hub · Coursera",
+        "Introduction to TensorFlow for AI, ML, and Deep Learning · DeepLearning.AI",
+        "AI for Everyone · DeepLearning.AI",
+        "Machine Learning · Stanford University / Coursera",
+        "Bioinformatic Methods I & II · University of Toronto"
+      ]
+    },
+    {
+      "title": "Programming foundations",
+      "courses": [
+        "Python Data Science Toolbox, Parts 1 & 2 · DataCamp",
+        "Introduction to Python & Intermediate Python · DataCamp",
+        "Fundamentals of Parallelism on Intel Architecture · Intel / Coursera",
+        "Programming for Everybody & Python Data Structures · University of Michigan",
+        "Java Programming: Solving Problems with Software (with Honors) · Duke University",
+        "Java Programming: Arrays, Lists, and Structured Data · Duke University",
+        "Introduction to Programming using HTML and CSS · Microsoft",
+        "Introduction to Programming using Python · Microsoft"
+      ]
+    }
   ]
 }

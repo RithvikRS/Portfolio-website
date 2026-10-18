@@ -1,14 +1,14 @@
 # Oracle deployment and alternative host setup
 
-The active Oracle deployment uses Docker Compose at `/opt/portfolio`, with Caddy, the Node app (portfolio, dashboard, and Fieldnotes), Authelia, and Portainer. Open the [public site](https://rithvik.ddns.net/) or [admin dashboard](https://rithvik.ddns.net/admin/). For current commands, use the [Docker deployment guide](DOCKER.md); account access and recovery are covered in the [admin guide](ADMIN.md) and [Portainer guide](PORTAINER.md). Writing and content backups are covered in the [Fieldnotes guide](FIELDNOTES.md).
+Use the [Docker deployment guide](DOCKER.md) to run the Oracle stack from `/opt/portfolio`. Open the [public site](https://rithvik.ddns.net/) or [admin dashboard](https://rithvik.ddns.net/admin/). Follow the [admin guide](ADMIN.md) for account access, the [Portainer guide](PORTAINER.md) for container management, and the [Fieldnotes guide](FIELDNOTES.md) for writing and content backups.
 
-The instructions below describe the alternative **systemd deployment for the public portfolio and contact backend**. They use `deploy/portfolio.service` and `deploy/Caddyfile`; production Docker uses `compose.production.yaml` and `deploy/Caddyfile.docker`. Do not start host-based services alongside the Docker stack on the same ports. These host templates do not install Authelia or enable the admin dashboard.
+Follow the steps below for an alternative **systemd deployment of the public portfolio and contact backend**. Use `deploy/portfolio.service` and `deploy/Caddyfile` for this setup. Use `compose.production.yaml` and `deploy/Caddyfile.docker` for Docker. Keep the two setups on separate ports or hosts. Choose the Docker stack if you need shared login and the admin dashboard.
 
 The app can run on an AMD VM and does not depend on Oracle-specific APIs. See Oracle's [Always Free documentation](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm) for the service's current conditions.
 
 ## Prepare the host
 
-1. Install a supported Node.js release (22.9 or later; Node 24 is suitable), pnpm, and [Caddy using its official instructions](https://caddyserver.com/docs/install).
+1. Install Node.js 24, pnpm, and [Caddy using its official instructions](https://caddyserver.com/docs/install).
 2. Create an unprivileged `portfolio` system user and group. Copy this project to `/opt/portfolio`, readable by that user. Install packages there with `pnpm install --frozen-lockfile --prod --ignore-scripts`. Do not copy a Windows `node_modules` folder onto Linux.
 3. Change `siteUrl` in `data/portfolio.json` to the new public URL, then run `node scripts/build.mjs`, `node scripts/check.mjs`, and `node --test tests/*.test.mjs`. Keep the generated HTML with the source.
 4. Copy `.env.example` to `/etc/portfolio.env`, owned by root and readable only by root (`chmod 600 /etc/portfolio.env`). Systemd reads this file before starting the service. Set the values below. Keep credentials out of Git, HTML, and browser JavaScript.
