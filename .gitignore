@@ -6,5 +6,6 @@ tmp/
 !.env.example
 .auth/
 .portainer/
+.ntfy/
 __pycache__/
 .notes/

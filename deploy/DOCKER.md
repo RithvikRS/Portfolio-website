@@ -11,13 +11,14 @@ Use the dashboard for shared access to Portainer and Fieldnotes. Follow the [wri
 | `Dockerfile` | Builds one Node image, including generated pages, checks, and tests | Compose builds it for the `app` service |
 | `compose.yaml` | Local public-site preview, one app container | `docker compose up --build -d --wait` |
 | `compose.ip.yaml` | Earlier HTTP preview at a public IP, no SMTP or shared login | Use only for a separate temporary preview |
-| `compose.production.yaml` | Current Oracle stack: app, Caddy, Authelia, Portainer, networks and storage | `bash /opt/portfolio_redeploy.sh` on Oracle |
+| `compose.production.yaml` | Current Oracle stack: app, Caddy, Authelia, Portainer, ntfy, networks and storage | `bash /opt/portfolio_redeploy.sh` on Oracle |
 | `compose.rollback.yaml` | App-only overlay using the retained previous image | See [image cleanup and rollback](#image-cleanup-and-rollback) |
 | `.dockerignore` | Allows only named inputs into the image build | Update when adding assets or changing the CV filename |
 | `deploy/Caddyfile.docker` | HTTP redirect, HTTPS, `/auth/`, `/admin/`, and `/portainer/` routing | Mounted at `/etc/caddy/site/Caddyfile.docker` |
 | `deploy/authelia/configuration.yml` | Non-secret login, session and access rules | Loaded with the template filter and runtime `DOMAIN` |
 | `scripts/setup-notes.py` | Creates/verifies private `.notes/` for the Node user | Called on every redeploy; preserves entries |
 | `scripts/setup-portainer.py` | Private key preparation and Portainer SSO reconciliation | Called by the redeploy script |
+| `scripts/setup-ntfy.py` | Private notification accounts, topic permissions, and HTTPS checks | Called by the redeploy script |
 | `scripts/deploy-images.py` | Retains successful app images and cleans unused images/cache | Called before the build and after all deployment checks |
 | `deploy/Caddyfile`, `deploy/portfolio.service` | Alternative host Caddy/systemd setup | Not used by the active Docker stack |
 
@@ -38,12 +39,15 @@ Use one Compose configuration for each deployment; the production and IP files a
 | `/locales/*/translation.json` | Redirect to protected `/portainer/locales/` | Portainer 2.45 translation compatibility |
 | `/blog/`, `/learn/` and their article paths | `app:4173` | Published writing only |
 | `/admin/notes/` and `/admin/notes/api/*` | Existing `/admin/*` gate, then app | Administrator only |
+| Separate `NTFY_DOMAIN` hostname | `ntfy:8080` | ntfy credentials and topic permissions |
 
-Only Caddy publishes web ports: TCP 80 and 443, plus UDP 443 for HTTP/3. App port 4173, auth port 9091, and Portainer ports 8000/9000/9443 are not published on the host. SSH is a separate host service.
+Only Caddy publishes public web ports: TCP 80 and 443, plus UDP 443 for HTTP/3. ntfy binds port 2586 to loopback for the local ARM script. App port 4173, auth port 9091, and Portainer ports 8000/9000/9443 are not published on the host. SSH is a separate host service.
 
 The `backend` network connects Caddy and the app. Caddy has the configured fixed address `172.30.0.3`. The separate `identity` network connects Caddy and Authelia. The app checks Caddy's exact peer address before accepting administrator identity headers; Caddy strips visitor-supplied identity headers first. Contact rate-limit proxy handling also supports loopback, but this does not grant dashboard access.
 
 The `management` network connects Caddy and Portainer. Portainer has the Docker socket mounted to manage Oracle containers; this grants host-level container control. Its database and settings persist in `.portainer/data/`.
+
+The `notifications` network connects Caddy and ntfy. ntfy stores its cache and authentication database in `.ntfy/data/`; account credentials and notification state stay in the private `.ntfy/` directory.
 
 ## Local preview
 
@@ -80,7 +84,7 @@ Keep the server checkout on `main` and make development changes on `V2`. For eac
 
 `/opt/portfolio_redeploy.sh` is an existing wrapper for `/opt/portfolio/portfolio_redeploy.sh`. Run it inside SSH; do not paste Bash commands into Windows PowerShell. No new script file is needed.
 
-The script locks against concurrent deployments, fetches `main`, permits only a fast-forward update, prepares `.notes/` and missing Portainer/OIDC private files, validates Compose/Authelia/Caddy, and builds the app. The image build generates five pages, checks links and the CV, and runs tests with fake mail delivery. It starts auth and Portainer, reconciles Portainer OAuth settings through its private API, verifies Docker access, updates the rest of the stack, and reloads Caddy. Final checks cover the homepage, contact API, auth health, and signed-out dashboard/Portainer/writing-export access and both public writing collections. A Portainer API failure stops deployment before the final Caddy reload.
+The script locks against concurrent deployments, fetches `main`, permits only a fast-forward update, prepares `.notes/` and missing Portainer/OIDC private files, validates Compose/Authelia/Caddy, and builds the app. The image build generates five pages, checks links and the CV, and runs tests with fake mail delivery. It starts auth and Portainer, reconciles Portainer OAuth settings through its private API, verifies Docker access, updates the rest of the stack, and reloads Caddy. Final checks cover the homepage, contact API, auth health, and signed-out dashboard/Portainer/writing-export access and both public writing collections. ntfy preparation preserves account credentials, starts the service, and reconciles topic permissions. HTTPS and topic access checks must pass before cleanup. A Portainer API failure stops deployment before the final Caddy reload.
 
 The current containers serve during the build. Authelia is recreated to load its configuration; its in-memory sessions expire, so sign in again after deployment. The app may briefly restart during replacement. Persistent data and certificates remain.
 
@@ -106,7 +110,7 @@ The deployment runs the image-retention tests, then preserves the healthy runnin
 
 On the first run, `current` is initialized from the actual healthy app container, not the mutable `production` tag. A failed build/start/check does not rotate the recovery tags or run cleanup. A retry retains the last successful image even if a failed candidate is still running. Redeploying the same image keeps the existing distinct rollback. A brand-new installation has no previous image until a second distinct image succeeds.
 
-Cleanup removes untagged, unused portfolio app images bearing `io.github.rithvikrs.portfolio.app=true`. When the previous tag rotates, its retired image is also eligible for non-forced removal if it has no other tags or digest references; Docker protects images used by containers. Explicit manual backup tags, other applications' images, containers, volumes, networks, certificates, `.env.production`, `.auth/`, `.portainer/`, and `.notes/` are preserved. No `docker system prune`, volume prune, or `docker image prune --all` is used.
+Cleanup removes untagged, unused portfolio app images bearing `io.github.rithvikrs.portfolio.app=true`. When the previous tag rotates, its retired image is also eligible for non-forced removal if it has no other tags or digest references; Docker protects images used by containers. Explicit manual backup tags, other applications' images, containers, volumes, networks, certificates, `.env.production`, `.auth/`, `.portainer/`, `.notes/`, and `.ntfy/` are preserved. No `docker system prune`, volume prune, or `docker image prune --all` is used.
 
 Unused cache in the Docker daemon's **shared default builder** is pruned with `docker buildx prune --builder default --all --force --max-used-space 256MB`. This cache is shared with other builds on the host, so future builds of any project may take longer; it is not application data. Docker removes the least recently used reclaimable records to target 256 MB; records/layers still in use may prevent reaching that target. Other Buildx builders are not cleaned. Cleanup errors are logged as warnings after a healthy deployment; failure to establish the recovery tags stops before cleanup.
 
@@ -238,7 +242,7 @@ Follow these steps when provisioning a new server. For an existing installation,
    chmod 600 .env.production
    ```
 
-4. Edit `.env.production`. Set `DOMAIN` to the hostname only, without a scheme or path. Add SMTP credentials when ready. `CONTACT_FROM` must be a permitted sender; `CONTACT_TO` is the private destination. Use an SMTP app password where required. Single-quote values containing a literal `$` for Compose. The current Node writing mount and helper require deployment UID/GID `1000:1000`; align the container user and mount ownership deliberately on a different host. Authelia UID/GID settings must also match its own directories.
+4. Edit `.env.production`. Set `DOMAIN` to the portfolio hostname and `NTFY_DOMAIN` to a separate ntfy hostname, both without a scheme or path. Point both at this server. Add SMTP credentials when ready. `CONTACT_FROM` must be a permitted sender; `CONTACT_TO` is the private destination. Use an SMTP app password where required. Single-quote values containing a literal `$` for Compose. The current Node writing mount and helper require deployment UID/GID `1000:1000`; align the container user and mount ownership deliberately on a different host. Authelia and ntfy UID/GID settings must also match their own directories.
 5. Initialize the administrator as the normal deployment user. The helper uses `sudo -n docker` if required, generates a password/hash and keys, and refuses to overwrite `.auth/`:
 
    ```sh
@@ -265,12 +269,13 @@ On a new server, the repository script works directly. The `/opt/portfolio_redep
 | `.portainer/recovery-password`, `oauth-client.json` | Recovery password and matching OAuth credentials | Portainer helper; preserve privately |
 | `.portainer/data/` | Portainer database, settings, users, and environment | Portainer; back up while stopped |
 | `.notes/` | Private drafts, published snapshots, and trash; mounted at `/writing` | Node app; back up while stopped |
+| `.ntfy/` | Notification accounts, SQLite databases, iPhone login sheet, and ARM alert state | ntfy and its setup/notifier scripts; preserve privately |
 | `portfolio_caddy_data` volume | Certificates and ACME account state | Caddy |
 | `portfolio_caddy_config` volume | Caddy runtime state | Caddy |
 
-`.env*` secrets, `.auth/`, `.portainer/`, and `.notes/` stay out of Git and the image build context. Do not share plain `docker compose config` output or full container inspection: they can reveal resolved SMTP settings. Use `config --quiet` for validation. Certificate volumes and private bind directories survive rebuilds and ordinary `compose down`; `down --volumes` removes named volumes.
+`.env*` secrets, `.auth/`, `.portainer/`, `.notes/`, and `.ntfy/` stay out of Git and the image build context. Do not share plain `docker compose config` output or full container inspection: they can reveal resolved SMTP settings. Use `config --quiet` for validation. Certificate volumes and private bind directories survive rebuilds and ordinary `compose down`; `down --volumes` removes named volumes.
 
-The app image uses Node 24 and pinned pnpm with the frozen lockfile. Node and Authelia run as non-root users with read-only root filesystems and no extra capabilities. Node has writable `/writing` for Fieldnotes; Auth has writable persistent data and temporary `/tmp`. The Compose HTTP health check is active; `server.disable_healthcheck: true` in Authelia only skips writing the image's legacy health-check environment file. Portainer CE 2.45.2 is pinned by digest and runs as root for Docker socket access, without privileged mode. Logs rotate. Limits are 256 MiB each for app and Portainer, 192 MiB each for Caddy and Authelia; Docker and builds need additional memory.
+The app image uses Node 24 and pinned pnpm with the frozen lockfile. Node and Authelia run as non-root users with read-only root filesystems and no extra capabilities. Node has writable `/writing` for Fieldnotes; Auth has writable persistent data and temporary `/tmp`. The Compose HTTP health check is active; `server.disable_healthcheck: true` in Authelia only skips writing the image's legacy health-check environment file. Portainer CE 2.45.2 is pinned by digest and runs as root for Docker socket access, without privileged mode. Logs rotate. Limits are 256 MiB each for app and Portainer, 192 MiB each for Caddy and Authelia, and 128 MiB for ntfy; Docker and builds need additional memory.
 
 ## Caddy changes and new sites
 
@@ -313,6 +318,10 @@ handle_path /tool/* {
 ```
 
 These are documentation examples only; no `tool` service or route is currently deployed.
+
+## Private notifications
+
+Set `NTFY_DOMAIN=ntfy.144.24.135.201.sslip.io` in the AMD server's `.env.production`. Use the [ntfy guide](NTFY.md) for initial setup, private topic permissions, ARM notifications, and iPhone instructions. Keep `.ntfy/` private and preserve it during redeployments. ntfy uses its own authentication for native clients and a separate Caddy hostname; it does not use Authelia redirects.
 
 ## Changing the domain
 

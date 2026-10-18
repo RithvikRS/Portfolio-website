@@ -1,5 +1,15 @@
 :80 {
+    @notifications host {$NTFY_DOMAIN}
+    redir @notifications https://{$NTFY_DOMAIN}{uri} permanent
     redir https://{$DOMAIN}{uri} permanent
+}
+
+{$NTFY_DOMAIN} {
+    # Native ntfy authentication supports the iOS app and publishing API.
+    # Authelia's browser redirects would prevent those clients authenticating.
+    reverse_proxy ntfy:8080 {
+        flush_interval -1
+    }
 }
 
 {$DOMAIN} {
