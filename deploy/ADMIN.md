@@ -1,14 +1,14 @@
 # Admin dashboard and shared login
 
-Stage 1 was deployed on **8 October 2026 (Asia/Kolkata)**. The dashboard is served by the portfolio app. Authelia v4.39.28 handles login; its container image is pinned by digest in `compose.production.yaml`. Caddy checks the session before forwarding administrator requests.
+Use the admin dashboard to open private tools with one sign-in. The portfolio app serves the dashboard, Authelia handles login, and Caddy checks the session before forwarding administrator requests. Keep the Authelia image pinned by digest in `compose.production.yaml` when changing versions.
 
 ## What is available
 
-| Stage | Scope | Status |
+| Tool | Use it to | Guide |
 | --- | --- | --- |
-| 1 | Admin dashboard, Authelia username/password login, HTTPS | Deployed |
-| 2 | Portainer with shared login | Deployed; see [Portainer guide](PORTAINER.md) |
-| 3 | Blog and learning notebook, browser editor | Deployed; see [Fieldnotes guide](FIELDNOTES.md) |
+| Dashboard | Open private tools and manage your session | This guide |
+| Portainer | Manage containers with shared login | [Portainer guide](PORTAINER.md) |
+| Fieldnotes | Write and publish blog posts and learning notes | [Fieldnotes guide](FIELDNOTES.md) |
 
 The dashboard links to the portfolio, Portainer, and Fieldnotes. Portainer uses a registered OpenID Connect client and the same `rithvik` account. Fieldnotes reuses the protected `/admin/*` identity and needs no second application login.
 
@@ -62,7 +62,7 @@ Keep the storage key with its database. Replacing the key while retaining the da
 
 ## First initialization
 
-Already completed on the current Oracle server. On a new Linux checkout, create and configure `.env.production`, then run as the normal deployment user:
+On a new Linux checkout, create and configure `.env.production`, then run as the normal deployment user. For an existing installation, use the [redeployment procedure](DOCKER.md#normal-oracle-redeployment):
 
 ```sh
 cd /opt/portfolio
@@ -89,20 +89,20 @@ sudo docker compose --env-file .env.production -f compose.production.yaml restar
 sudo docker compose --env-file .env.production -f compose.production.yaml ps
 ```
 
-Sign in with the new password and update your password manager. Restarting invalidates existing sessions. The bootstrap file and its local copy are not updated automatically. There is no email password-reset flow in this stage.
+Sign in with the new password and update your password manager and private bootstrap records. Restarting invalidates existing sessions. Use SSH for password recovery; this setup has no email password-reset flow.
 
 ## Backups and recovery data
 
 Preserve `.env.production`, the complete `.auth/` and `.portainer/` directories, and both Caddy named volumes. Store backups privately outside Git. For a consistent filesystem copy, briefly stop `auth` and `portainer`, archive both directories with permissions, and start them again. The portfolio remains available while private tools are temporarily unavailable. Do not run `down --volumes` as a backup step. See the [Portainer backup procedure](PORTAINER.md#backup-and-restore).
 
-Stage 1 created these private recovery items on Oracle:
+For an earlier dashboard recovery point, inspect these private items on Oracle:
 
 - Directory: `/home/opc/.config/portfolio-deploy/admin-stage1-YzXVP4Gu/`.
 - `source-before.tar.gz`: source and private environment before stage 1.
 - `auth-stage1.tar.gz`: new account, keys, and database, archived while auth was stopped.
 - Docker image tag `rithvik-portfolio:before-admin-stage1`: previous app image.
 
-These are deployment-time recovery points, not scheduled backups. The pre-stage-1 source archive does not contain the new auth data. Restore source, Compose/Caddy configuration, and a compatible image together if rolling back; switching an image alone does not undo proxy or auth changes. Preserve current files before restoring. For migration, restore keys and database together, restore ownership for the configured UID/GID, and retain Caddy's certificate volumes.
+Create fresh backups before making changes; these manual recovery points do not update automatically. Use `auth-stage1.tar.gz` for the account data from that recovery point; the earlier source archive excludes it. Restore source, Compose/Caddy configuration, and a compatible image together when reverting infrastructure changes. Preserve current files before restoring. For migration, restore keys and database together, restore ownership for the configured UID/GID, and retain Caddy's certificate volumes. For an app-only recovery, follow the [rollback runbook](DOCKER.md#roll-back-an-app-deployment).
 
 ## Troubleshooting
 
@@ -117,18 +117,20 @@ curl https://rithvik.ddns.net/auth/api/health
 | Symptom | Likely cause or next check |
 | --- | --- |
 | `/admin/` redirects to `/auth/` | Expected when signed out |
-| Logged out after deployment | Expected; auth was recreated and its sessions were in memory |
+| Logged out after deployment | Sign in again; restarting Authelia clears its in-memory sessions |
 | Repeated login attempts stop working | Wait for the ban period; confirm credentials and inspect auth logs |
 | Credentials accepted but dashboard denied | User must match `ADMIN_USERNAME`, belong to `admins`, and reach Node through trusted Caddy |
 | 401 from `localhost:8080/admin/` | Local Compose has no shared-login stack; expected |
 | 502 on `/auth/` or `/admin/` | Check auth health, network, mount permissions, and startup logs |
-| Auth fails before startup checks | Retain the tested Compose HTTP health check and `server.disable_healthcheck: true`; the latter avoids writing a legacy image file on a read-only filesystem |
+| Auth fails before startup checks | Keep the Compose HTTP health check and `server.disable_healthcheck: true`; the latter avoids writing a legacy image file on a read-only filesystem |
 | Decryption failure after restoring | Restore the matching storage key and database together |
 
-## Verification record
+## Check access after changes
 
-Stage 1 checks passed on 8 October 2026: 15 automated app tests; production build/link checks; HTTPS redirects to sign-in; successful credential authentication; authenticated dashboard access; session invalidation on sign-out; rejection of forged identity headers and encoded-path access; private-file denial; public pages and contact availability. Desktop and phone layouts were reviewed locally. No Portainer or writing service was installed, and no test email was sent. The in-app browser could not open the live hostname during review; live auth behavior was verified through HTTPS requests.
-
-Stage 2 adds Portainer and its OIDC client; the stage 1 description above is a historical record. Stage 2 verification and recovery are recorded in [PORTAINER.md](PORTAINER.md). Writing tools require the next approval.
+1. Open `/admin/` while signed out and check that it redirects to sign-in or returns 401.
+2. Sign in, open the dashboard, and follow its links to Portainer and Fieldnotes.
+3. Sign out and check that private pages require authentication again.
+4. Open the public portfolio and contact form on desktop and mobile. Check email delivery separately when changing SMTP settings.
+5. Run `node --test tests/*.test.mjs` after changing application code. Keep the proxy-trust, identity-header, and private-file checks in place.
 
 References: [Authelia with Caddy](https://www.authelia.com/integration/proxies/caddy/), [session configuration](https://www.authelia.com/configuration/session/introduction/), and [private secrets](https://www.authelia.com/configuration/methods/secrets/).

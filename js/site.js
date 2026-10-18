@@ -18,7 +18,7 @@ if (menuButton && navigation) {
     }
   });
   document.addEventListener('click', event => { if (!event.target.closest('.site-header')) closeMenu(); });
-  const mobile = window.matchMedia('(max-width: 860px)');
+  const mobile = window.matchMedia('(max-width: 1100px)');
   mobile.addEventListener('change', closeMenu);
   document.documentElement.classList.add('has-js');
 }
