@@ -4,3 +4,7 @@ tmp/
 .env
 .env.*
 !.env.example
+.auth/
+.portainer/
+__pycache__/
+.notes/

@@ -34,6 +34,7 @@ function header(page) {
       <a href="index.html#experience" ${page === 'home' ? 'data-section="experience"' : ''}>Experience</a>
       <a href="${page === 'home' ? '#projects' : 'Projects.html'}" ${page === 'projects' ? 'aria-current="page"' : page === 'home' ? 'data-section="projects"' : ''}>Projects</a>
       <a href="Awards.html" ${page === 'awards' ? 'aria-current="page"' : ''}>Credentials</a>
+      <a href="/blog/">Writing</a>
       <a href="#contact">Contact</a>
       ${cv('nav-cv')}
     </nav>

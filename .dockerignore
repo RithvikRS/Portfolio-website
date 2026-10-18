@@ -14,6 +14,7 @@
 !data/portfolio.json
 !css/
 !css/site.css
+!css/admin.css
 !js/
 !js/site.js
 !images/
@@ -21,3 +22,6 @@
 !images/Rithu_PresidentAward.jpg
 !documents/
 !documents/Rithvik_CV.pdf
+
+!css/notes.css
+!js/notes.js
