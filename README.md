@@ -1,6 +1,6 @@
 # Rithvik’s portfolio
 
-A responsive professional portfolio for full-stack, cloud, and machine learning engineering roles. The public pages use generated HTML, custom CSS, and vanilla JavaScript. A Node server serves the site, delivers contact messages through Nodemailer, and renders a protected admin dashboard. Production runs on Oracle with Docker Compose, Caddy HTTPS, and Authelia authentication. No external fonts or hosted build service are required.
+A responsive professional portfolio for full-stack, cloud, and machine learning engineering roles. The public pages use generated HTML, custom CSS, and vanilla JavaScript. A Node server serves the site, delivers contact messages through Nodemailer, renders a protected admin dashboard, and runs Fieldnotes for blog posts and learning notes. Production runs on Oracle with Docker Compose, Caddy HTTPS, and Authelia authentication. No external fonts or hosted build service are required.
 
 ## Current deployment
 
@@ -12,11 +12,12 @@ Deployment record updated **8 October 2026 (Asia/Kolkata)**. The Oracle checkout
 | Admin dashboard | [/admin/](https://rithvik.ddns.net/admin/) | Stage 1 deployed; login required |
 | Shared sign-in | [/auth/](https://rithvik.ddns.net/auth/) | Authelia, username/password |
 | Portainer | [/portainer/](https://rithvik.ddns.net/portainer/) | Stage 2 deployed; shared login |
-| Blog and learning notebook | No live route yet | Stage 3, awaiting separate approval |
+| Fieldnotes editor | [/admin/notes/](https://rithvik.ddns.net/admin/notes/) | Stage 3; shared login |
+| Blog / learning notebook | [/blog/](https://rithvik.ddns.net/blog/) / [/learn/](https://rithvik.ddns.net/learn/) | Published entries only |
 
-The dashboard links to the portfolio and Portainer. Portainer CE 2.45.2 uses Authelia OpenID Connect for the existing administrator account and manages the Oracle Docker environment. Blog and learning-note editing remain pending separate approval.
+The dashboard links to the portfolio, Portainer, and Fieldnotes. Portainer CE 2.45.2 uses Authelia OpenID Connect for the existing administrator account and manages the Oracle Docker environment. Fieldnotes supports Markdown, private drafts, explicit publishing, tags/search, export, and recoverable trash. Saving edits to a published post keeps them private until Publish update.
 
-The stage 1 deployment passed 15 automated tests, live HTTPS sign-in/sign-out and access checks, and desktop/mobile layout review. The contact API reported delivery available; these checks did not send email. This is a deployment record, not a continuously monitored status page.
+The stage 1 deployment passed 15 automated tests, live HTTPS sign-in/sign-out and access checks, and desktop/mobile layout review. The contact API reported delivery available; these checks did not send email. Stage 3 passed 19 tests, browser save/preview/publish/unpublish checks, live shared-login and privacy checks, and persistence after an app restart. This is a deployment record, not a continuously monitored status page.
 
 After an outage and reboot on 8 October, the public site and complete dashboard/Portainer SSO flow were verified again. Saved logs showed repeated host memory exhaustion in `dnf-makecache.service`. Its background cache timer is now disabled on Oracle; package updates remain available. See the [incident and recovery record](deploy/DOCKER.md#8-october-2026-memory-exhaustion-and-recovery).
 
@@ -25,6 +26,7 @@ After an outage and reboot on 8 October, the public site and complete dashboard/
 - [Docker and Oracle operation](deploy/DOCKER.md): which file to use, local preview, first deployment, redeployment, and Caddy routing.
 - [Admin dashboard and shared login](deploy/ADMIN.md): account access, password recovery, persistent data, backups, and troubleshooting.
 - [Portainer and SSO](deploy/PORTAINER.md): container management, recovery access, storage, and the stage 2 integration.
+- [Blog and learning notebook](deploy/FIELDNOTES.md): writing, publishing, private storage, exports, backups, and recovery.
 - [Alternative host deployment](deploy/README.md): Node and Caddy with systemd, plus contact behavior and limits.
 - [Docker and Caddy PDF guide](output/pdf/Portfolio%20Docker%20and%20Caddy%20Guide.pdf): a printable guide to the completed setup.
 
@@ -34,7 +36,7 @@ For the current Oracle deployment, commit the development changes, merge into `m
 bash /opt/portfolio_redeploy.sh
 ```
 
-The shortcut already exists. It runs the repository's `portfolio_redeploy.sh`, builds and checks the app, applies production configuration, reconciles Portainer SSO, and verifies HTTPS. No new script needs to be pasted into the terminal. Authelia restarts during redeployment, so sign in again afterward. Stage 1 and 2 files were copied to Oracle before merging into `main`; merge the matching files before a normal redeployment. The script stops if server copies differ from the pushed versions.
+The shortcut already exists. It runs the repository's `portfolio_redeploy.sh`, builds and checks the app, applies production configuration, reconciles Portainer SSO, and verifies HTTPS. No new script needs to be pasted into the terminal. Authelia restarts during redeployment, so sign in again afterward. Stage 1, 2, and 3 files were copied to Oracle before merging into `main`; merge the matching files before a normal redeployment. The script stops if server copies differ from the pushed versions.
 
 ## Preview and check
 
@@ -48,11 +50,15 @@ node --test tests/*.test.mjs
 node --env-file-if-exists=.env server/index.mjs
 ```
 
-Open **http://127.0.0.1:4173**. Stop the server with Ctrl+C. Equivalent pnpm commands are `pnpm build`, `pnpm check`, `pnpm test`, and `pnpm dev`. Build and content checks still run without installing dependencies; running the server requires Nodemailer. The old `node scripts/serve.mjs` preview command also works, but does not automatically load `.env`.
+Open **http://127.0.0.1:4173**. Stop the server with Ctrl+C. Equivalent pnpm commands are `pnpm build`, `pnpm check`, `pnpm test`, and `pnpm dev`. Build and content checks still run without installing dependencies; running the server requires the installed dependencies. The old `node scripts/serve.mjs` preview command also works, but does not automatically load `.env`.
 
 Copy `.env.example` to `.env` and fill in your SMTP provider settings to enable delivery locally. Do not commit this file. Without SMTP configuration, the dialog offers LinkedIn and disables submission. Tests use fake delivery functions and never send real email. Change both `PORT` and `PUBLIC_ORIGIN` if using a different preview port. The form must be tested through HTTP/HTTPS, not by opening an HTML file directly.
 
-This local command previews the public portfolio and contact API. It does not start Caddy or Authelia; `/admin/` remains closed by default. Use the production setup for the complete sign-in flow.
+This local command previews the public portfolio, empty writing collections, and contact API. It does not start Caddy or Authelia; `/admin/` remains closed by default. Use the production setup for the complete sign-in flow.
+
+## Write posts and learning notes
+
+Open [Fieldnotes](https://rithvik.ddns.net/admin/notes/) using your existing login. Save drafts manually (or Ctrl+S / Cmd+S); select Publish when ready to share. Entries are saved in private Oracle `.notes/` storage, survive redeployment, and do not require Git commits. See the [writing guide](deploy/FIELDNOTES.md) for the full workflow and limits.
 
 ## Update the content
 
@@ -67,6 +73,8 @@ This local command previews the public portfolio and contact API. It does not st
 
 ## Files and behavior
 
+- `server/notes.mjs`, `server/notes-store.mjs`, `js/notes.js`, `css/notes.css`: the authenticated editor, private/published content store, and public writing pages.
+- `scripts/setup-notes.py`: prepares private writing storage during deployment.
 - `scripts/build.mjs`: shared HTML templates and page generation.
 - `css/site.css`: colors, type, component styles, responsive layout, print styles, and reduced-motion support.
 - `js/site.js`: mobile navigation, project filters/search, linked project expansion, accessible contact dialog, active navigation, and scroll entrance animations.

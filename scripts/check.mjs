@@ -15,6 +15,7 @@ for (const [name, html] of pages) {
   for (const match of html.matchAll(/\b(?:href|src)="([^"]+)"/g)) {
     const link = match[1].replaceAll('&amp;', '&');
     if (/^(?:https?:|mailto:|data:)/.test(link)) continue;
+    if (['/blog/', '/learn/'].includes(link)) { checkedLinks++; continue; } // Dynamic routes are verified by HTTP tests.
     const [path, hash] = link.split('#');
     const target = path || name;
     await access(new URL(target, root));

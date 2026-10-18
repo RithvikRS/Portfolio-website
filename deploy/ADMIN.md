@@ -8,9 +8,9 @@ Stage 1 was deployed on **8 October 2026 (Asia/Kolkata)**. The dashboard is serv
 | --- | --- | --- |
 | 1 | Admin dashboard, Authelia username/password login, HTTPS | Deployed |
 | 2 | Portainer with shared login | Deployed; see [Portainer guide](PORTAINER.md) |
-| 3 | Blog and learning notebook, browser editor | Awaiting separate approval; not implemented |
+| 3 | Blog and learning notebook, browser editor | Deployed; see [Fieldnotes guide](FIELDNOTES.md) |
 
-The dashboard links to the portfolio and Portainer. Portainer uses a registered OpenID Connect client and the same `rithvik` account. Blog and learning notes remain inactive until separately approved.
+The dashboard links to the portfolio, Portainer, and Fieldnotes. Portainer uses a registered OpenID Connect client and the same `rithvik` account. Fieldnotes reuses the protected `/admin/*` identity and needs no second application login.
 
 ## Sign in
 
@@ -34,7 +34,7 @@ Browser -- HTTPS --> Caddy -- session check --> Authelia
 
 Only Caddy publishes web ports. App, Authelia, and Portainer listen privately on 4173, 9091, and 9000. Auth and Portainer each have a network shared with Caddy, separate from the app backend.
 
-Caddy removes visitor-supplied `Remote-User`, `Remote-Groups`, `Remote-Email`, and `Remote-Name` headers. For `/admin/`, it asks Authelia to verify the session and copies the verified identity. The app also requires `ADMIN_ENABLED=true`, proxy trust, the exact configured proxy peer IP, the configured username, and membership in `admins`. The page is marked `no-store` and `noindex`.
+Caddy removes visitor-supplied `Remote-User`, `Remote-Groups`, `Remote-Email`, and `Remote-Name` headers. For `/admin/` and its writing subpaths, it asks Authelia to verify the session and copies the verified identity. The app also requires `ADMIN_ENABLED=true`, proxy trust, the exact configured proxy peer IP, the configured username, and membership in `admins`. The page is marked `no-store` and `noindex`.
 
 Authelia's default access policy is deny; its rule permits the `admins` group on `/admin` and `/portainer` and their subpaths after password authentication. The Portainer OIDC client separately requires the same group. Portainer automatic account creation is disabled, and the existing `rithvik` account is explicitly provisioned as an administrator. Login regulation allows five retries within two minutes with a ten-minute ban. A dashboard card alone grants no access to an application.
 

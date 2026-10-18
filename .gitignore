@@ -7,3 +7,4 @@ tmp/
 .auth/
 .portainer/
 __pycache__/
+.notes/

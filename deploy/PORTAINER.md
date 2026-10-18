@@ -1,6 +1,6 @@
 # Portainer on Oracle
 
-Stage 2 was deployed on **8 October 2026 (Asia/Kolkata)**. Portainer CE **2.45.2 LTS** is pinned by image digest in `compose.production.yaml`. The dashboard links to it at [https://rithvik.ddns.net/portainer/](https://rithvik.ddns.net/portainer/). Blog and learning-note editing remain pending separate approval.
+Stage 2 was deployed on **8 October 2026 (Asia/Kolkata)**. Portainer CE **2.45.2 LTS** is pinned by image digest in `compose.production.yaml`. The dashboard links to it at [https://rithvik.ddns.net/portainer/](https://rithvik.ddns.net/portainer/). Blog and learning-note editing are now available in [Fieldnotes](FIELDNOTES.md), reusing the same login.
 
 ## Sign in and sign out
 
@@ -80,21 +80,21 @@ If the `admin` password is intentionally changed through Portainer, update the p
 
 ## Backup and restore
 
-Preserve `.env.production`, all of `.auth/`, all of `.portainer/`, the corresponding source version, and Caddy's certificate volumes. The Portainer database contains authentication configuration and must be kept private. For a consistent private-state archive, run in Oracle SSH:
+Preserve `.env.production`, all of `.auth/`, all of `.portainer/`, all of `.notes/`, the corresponding source version, and Caddy's certificate volumes. The Portainer database contains authentication configuration and must be kept private. For a consistent private-state archive, run in Oracle SSH:
 
 ```sh
 cd /opt/portfolio
 umask 077
 backup=$(mktemp -d /home/opc/.config/portfolio-deploy/private-state-XXXXXXXX)
 dc() { sudo docker compose --env-file .env.production -f compose.production.yaml "$@"; }
-dc stop auth portainer
-sudo tar -czf "$backup/private-state.tar.gz" .env.production .auth .portainer
+dc stop app auth portainer
+sudo tar -czf "$backup/private-state.tar.gz" .env.production .auth .portainer .notes
 sudo chmod 600 "$backup/private-state.tar.gz"
-dc start auth portainer
+dc start app auth portainer
 dc ps
 ```
 
-If archiving fails, start both services again before troubleshooting. Public portfolio pages remain available during this brief pause. This archive does not include Caddy's named volumes; back those up separately for a full migration. Restore the matched directories while their services are stopped, preserve owners/modes, and use the compatible source and image version. Never restore an old Authelia encryption key over a newer database without its matching backup.
+If archiving fails, start all three services again before troubleshooting. The public app is briefly unavailable while its writing data is backed up. This archive does not include Caddy's named volumes; back those up separately for a full migration. Restore the matched directories while their services are stopped, preserve owners/modes, and use the compatible source and image version. Never restore an old Authelia encryption key over a newer database without its matching backup.
 
 The deployment recovery directory is `/home/opc/.config/portfolio-deploy/portainer-stage2-6erYb3rT/`. It contains the pre-stage-2 source/private configuration archive and a SQLite backup of the earlier auth database. The previous app image is `rithvik-portfolio:before-portainer-stage2`. The post-deployment private-state backup in the same directory preserves the completed integration. These are manual recovery points, not scheduled backups.
 
@@ -120,6 +120,6 @@ python3 scripts/setup-portainer.py --configure
 | Setup returns 422 | Recovery password must match initial `admin`; changing its file alone cannot reset an existing password |
 | Memory pressure on the micro instance | Inspect `docker stats --no-stream`; avoid simultaneous builds/heavy tools |
 
-Verified at deployment: 15 app tests; production build and link checks; configuration validation; repeated helper execution; one shared login followed by a successful OAuth exchange as `rithvik` with administrator role; four running containers readable through the public protected API and browser UI; Portainer assets and translation labels; signed-out/forged-header rejection; shared sign-out protection; private-file denial; and unchanged public/contact health. No email was sent. The writing service remains unimplemented.
+Verified at deployment: 15 app tests; production build and link checks; configuration validation; repeated helper execution; one shared login followed by a successful OAuth exchange as `rithvik` with administrator role; four running containers readable through the public protected API and browser UI; Portainer assets and translation labels; signed-out/forged-header rejection; shared sign-out protection; private-file denial; and unchanged public/contact health. No email was sent. Stage 3 adds Fieldnotes inside the existing app; see the [writing guide](FIELDNOTES.md).
 
 References: [Authelia Portainer integration](https://www.authelia.com/integration/openid-connect/clients/portainer/), [Portainer OAuth settings](https://docs.portainer.io/admin/settings/authentication/oauth), [Portainer CLI options](https://docs.portainer.io/advanced/cli).

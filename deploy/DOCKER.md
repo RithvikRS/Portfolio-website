@@ -2,7 +2,7 @@
 
 Updated **8 October 2026 (Asia/Kolkata)**. The active deployment is at `/opt/portfolio` on Oracle, using `main` and `compose.production.yaml`. Its hostname is `rithvik.ddns.net`, pointing to `144.24.135.201` through No-IP. Caddy serves HTTPS; Node serves the portfolio and admin dashboard; Authelia handles administrator sign-in.
 
-Stages 1 and 2 are deployed: dashboard, shared login, and Portainer. The blog and learning notebook remain stage 3, pending separate approval. See the [admin guide](ADMIN.md) and [Portainer guide](PORTAINER.md) for access, recovery, and backups.
+All three stages are deployed: dashboard/shared login, Portainer, and Fieldnotes for blog posts and learning notes inside the Node app. See the [writing guide](FIELDNOTES.md) for editing and content backups. See the [admin guide](ADMIN.md) and [Portainer guide](PORTAINER.md) for access, recovery, and backups.
 
 ## Which file should I use?
 
@@ -15,6 +15,7 @@ Stages 1 and 2 are deployed: dashboard, shared login, and Portainer. The blog an
 | `.dockerignore` | Allows only named inputs into the image build | Update when adding assets or changing the CV filename |
 | `deploy/Caddyfile.docker` | HTTP redirect, HTTPS, `/auth/`, `/admin/`, and `/portainer/` routing | Mounted at `/etc/caddy/site/Caddyfile.docker` |
 | `deploy/authelia/configuration.yml` | Non-secret login, session and access rules | Loaded with the template filter and runtime `DOMAIN` |
+| `scripts/setup-notes.py` | Creates/verifies private `.notes/` for the Node user | Called on every redeploy; preserves entries |
 | `scripts/setup-portainer.py` | Private key preparation and Portainer SSO reconciliation | Called by the redeploy script |
 | `deploy/Caddyfile`, `deploy/portfolio.service` | Alternative host Caddy/systemd setup | Not used by the active Docker stack |
 
@@ -33,7 +34,8 @@ Use one Compose configuration for each deployment; the production and IP files a
 | `/admin/` | Authelia session check, then `app:4173` | Administrator only |
 | `/portainer/` | Authelia session check, strip prefix, then `portainer:9000` | Administrator via OAuth |
 | `/locales/*/translation.json` | Redirect to protected `/portainer/locales/` | Portainer 2.45 translation compatibility |
-| `/learn/` | No application installed | No live route |
+| `/blog/`, `/learn/` and their article paths | `app:4173` | Published writing only |
+| `/admin/notes/` and `/admin/notes/api/*` | Existing `/admin/*` gate, then app | Administrator only |
 
 Only Caddy publishes web ports: TCP 80 and 443, plus UDP 443 for HTTP/3. App port 4173, auth port 9091, and Portainer ports 8000/9000/9443 are not published on the host. SSH is a separate host service.
 
@@ -76,11 +78,11 @@ The server already uses `main`; its earlier migration from `V2` is complete. Do 
 
 `/opt/portfolio_redeploy.sh` is an existing wrapper for `/opt/portfolio/portfolio_redeploy.sh`. Run it inside SSH; do not paste Bash commands into Windows PowerShell. No new script file is needed.
 
-The script locks against concurrent deployments, fetches `main`, permits only a fast-forward update, prepares missing Portainer/OIDC private files, validates Compose/Authelia/Caddy, and builds the app. The image build generates five pages, checks links and the CV, and runs tests with fake mail delivery. It starts auth and Portainer, reconciles Portainer OAuth settings through its private API, verifies Docker access, updates the rest of the stack, and reloads Caddy. Final checks cover the homepage, contact API, auth health, and signed-out dashboard/Portainer access. A Portainer API failure stops deployment before the final Caddy reload.
+The script locks against concurrent deployments, fetches `main`, permits only a fast-forward update, prepares `.notes/` and missing Portainer/OIDC private files, validates Compose/Authelia/Caddy, and builds the app. The image build generates five pages, checks links and the CV, and runs tests with fake mail delivery. It starts auth and Portainer, reconciles Portainer OAuth settings through its private API, verifies Docker access, updates the rest of the stack, and reloads Caddy. Final checks cover the homepage, contact API, auth health, and signed-out dashboard/Portainer/writing-export access and both public writing collections. A Portainer API failure stops deployment before the final Caddy reload.
 
 The current containers serve during the build. Authelia is recreated to load its configuration; its in-memory sessions expire, so sign in again after deployment. The app may briefly restart during replacement. Persistent data and certificates remain.
 
-Stage 1 and 2 files were copied to Oracle before merging into `main`. Include all corresponding code, deployment, and documentation changes in the next merge. The script backs up copied files in a Git stash only when they exactly match `origin/main`; it stops when they differ. Reconcile a reported difference rather than discarding server files or private settings. A Git push alone does not deploy the site.
+Stage 1, 2, and 3 files were copied to Oracle before merging into `main`. Include all corresponding code, deployment, and documentation changes in the next merge. The script backs up copied files in a Git stash only when they exactly match `origin/main`; it stops when they differ. Reconcile a reported difference rather than discarding server files or private settings. A Git push alone does not deploy the site.
 
 After changing only the server's saved environment or configuration, rebuild the existing checkout without pulling:
 
@@ -104,7 +106,7 @@ This has already been completed on the current Oracle instance.
    chmod 600 .env.production
    ```
 
-4. Edit `.env.production`. Set `DOMAIN` to the hostname only, without a scheme or path. Add SMTP credentials when ready. `CONTACT_FROM` must be a permitted sender; `CONTACT_TO` is the private destination. Use an SMTP app password where required. Single-quote values containing a literal `$` for Compose. Set `AUTHELIA_UID` and `AUTHELIA_GID` to `id -u` and `id -g` if they are not `1000`.
+4. Edit `.env.production`. Set `DOMAIN` to the hostname only, without a scheme or path. Add SMTP credentials when ready. `CONTACT_FROM` must be a permitted sender; `CONTACT_TO` is the private destination. Use an SMTP app password where required. Single-quote values containing a literal `$` for Compose. The current Node writing mount and helper require deployment UID/GID `1000:1000`; align the container user and mount ownership deliberately on a different host. Authelia UID/GID settings must also match its own directories.
 5. Initialize the administrator as the normal deployment user. The helper uses `sudo -n docker` if required, generates a password/hash and keys, and refuses to overwrite `.auth/`:
 
    ```sh
@@ -130,12 +132,13 @@ On a new server, the repository script works directly. The `/opt/portfolio_redep
 | `.auth/secrets/oidc-*`, `portainer-client-hash` | OIDC signing keys and hashed client secret | Portainer helper; preserve |
 | `.portainer/recovery-password`, `oauth-client.json` | Recovery password and matching OAuth credentials | Portainer helper; preserve privately |
 | `.portainer/data/` | Portainer database, settings, users, and environment | Portainer; back up while stopped |
+| `.notes/` | Private drafts, published snapshots, and trash; mounted at `/writing` | Node app; back up while stopped |
 | `portfolio_caddy_data` volume | Certificates and ACME account state | Caddy |
 | `portfolio_caddy_config` volume | Caddy runtime state | Caddy |
 
-`.env*` secrets, `.auth/`, and `.portainer/` stay out of Git and the image build context. Do not share plain `docker compose config` output or full container inspection: they can reveal resolved SMTP settings. Use `config --quiet` for validation. Certificate volumes and private bind directories survive rebuilds and ordinary `compose down`; `down --volumes` removes named volumes.
+`.env*` secrets, `.auth/`, `.portainer/`, and `.notes/` stay out of Git and the image build context. Do not share plain `docker compose config` output or full container inspection: they can reveal resolved SMTP settings. Use `config --quiet` for validation. Certificate volumes and private bind directories survive rebuilds and ordinary `compose down`; `down --volumes` removes named volumes.
 
-The app image uses Node 24 and pinned pnpm with the frozen lockfile. Node and Authelia run as non-root users with read-only root filesystems and no extra capabilities. Auth has writable persistent data and temporary `/tmp`. The Compose HTTP health check is active; `server.disable_healthcheck: true` in Authelia only skips writing the image's legacy health-check environment file. Portainer CE 2.45.2 is pinned by digest and runs as root for Docker socket access, without privileged mode. Logs rotate. Limits are 256 MiB each for app and Portainer, 192 MiB each for Caddy and Authelia; Docker and builds need additional memory.
+The app image uses Node 24 and pinned pnpm with the frozen lockfile. Node and Authelia run as non-root users with read-only root filesystems and no extra capabilities. Node has writable `/writing` for Fieldnotes; Auth has writable persistent data and temporary `/tmp`. The Compose HTTP health check is active; `server.disable_healthcheck: true` in Authelia only skips writing the image's legacy health-check environment file. Portainer CE 2.45.2 is pinned by digest and runs as root for Docker socket access, without privileged mode. Logs rotate. Limits are 256 MiB each for app and Portainer, 192 MiB each for Caddy and Authelia; Docker and builds need additional memory.
 
 ## Caddy changes and new sites
 
@@ -157,7 +160,7 @@ For a future site, decide whether its application supports a path such as `/tool
 
 `handle` preserves the request path; `handle_path` strips the matched prefix. For example, `handle_path /tool/*` sends `/tool/page` upstream as `/page`. The application must still generate working asset URLs and redirects for its public base URL. The current `/auth/` route preserves its path because Authelia is configured with that base path. See [Caddy's path handling](https://caddyserver.com/docs/caddyfile/directives/handle_path).
 
-A separate hostname needs its own DNS record and Caddy site block, with DNS pointing to this server. Use the same Caddy service to terminate HTTPS. For a private site, add the appropriate Authelia access rule and the application's supported identity integration before publishing access. Forward authentication alone does not automatically replace an application's own login. See [Authelia's Caddy integration](https://www.authelia.com/integration/proxies/caddy/). Portainer demonstrates both layers: `route` checks the original `/portainer/` URL before stripping its prefix, and OAuth reuses the Authelia identity inside Portainer. Writing services remain pending approval.
+A separate hostname needs its own DNS record and Caddy site block, with DNS pointing to this server. Use the same Caddy service to terminate HTTPS. For a private site, add the appropriate Authelia access rule and the application's supported identity integration before publishing access. Forward authentication alone does not automatically replace an application's own login. See [Authelia's Caddy integration](https://www.authelia.com/integration/proxies/caddy/). Portainer demonstrates both layers: `route` checks the original `/portainer/` URL before stripping its prefix, and OAuth reuses the Authelia identity inside Portainer. Fieldnotes uses the existing authenticated `/admin/*` handler; its public `/blog/*` and `/learn/*` pages use the existing fallback. No extra Caddy rule is needed for its articles.
 
 For example, after a **public** `tool` service is running on an appropriate shared network and you control the DNS for `tool.example.com`, a new top-level site block would be:
 
@@ -181,9 +184,9 @@ These are documentation examples only; no `tool` service or route is currently d
 
 ## Changing the domain
 
-Point the new hostname at Oracle, change `DOMAIN` in `.env.production`, and run `bash /opt/portfolio_redeploy.sh --no-pull`. Compose derives `PUBLIC_ORIGIN`, the build's `SITE_URL`, Authelia's URLs, and Portainer's trusted origin from `DOMAIN`. The helper updates Portainer's authorization, token, user-info, callback, and logout URLs. Caddy requests a certificate for the hostname; Authelia uses it for sign-in and cookies. Keep persistent storage, then sign in again on the new address. Confirm both `/admin/` and `/portainer/` on the new hostname.
+Point the new hostname at Oracle, change `DOMAIN` in `.env.production`, and run `bash /opt/portfolio_redeploy.sh --no-pull`. Compose derives `PUBLIC_ORIGIN`, the build's `SITE_URL`, Authelia's URLs, and Portainer's trusted origin from `DOMAIN`. The helper updates Portainer's authorization, token, user-info, callback, and logout URLs. Caddy requests a certificate for the hostname; Authelia uses it for sign-in and cookies. Keep persistent storage, then sign in again on the new address. Confirm `/admin/`, `/portainer/`, `/admin/notes/`, `/blog/`, and `/learn/` on the new hostname.
 
-DNS directs a browser to the server's IP. The HTTPS request still carries the hostname for TLS and HTTP routing, which Caddy uses to choose a certificate and site. The app's public origin controls contact requests; Authelia uses the hostname for session scope and redirects. This setup redirects HTTP on the IP to the hostname; it is not configured to serve HTTPS directly on the raw IP. This is a configuration description, not a claim that IP certificates are impossible.
+DNS directs a browser to the server's IP. The HTTPS request still carries the hostname for TLS and HTTP routing, which Caddy uses to choose a certificate and site. The app's public origin controls contact and writing mutations and canonical article URLs; Authelia uses the hostname for session scope and redirects. This setup redirects HTTP on the IP to the hostname; it is not configured to serve HTTPS directly on the raw IP. This is a configuration description, not a claim that IP certificates are impossible.
 
 Keep the No-IP hostname renewed according to its account requirements. If Oracle's public IP changes, update its DNS record. There is no Cloudflare Pages, Worker, tunnel, or dynamic DNS updater deployed by this setup.
 

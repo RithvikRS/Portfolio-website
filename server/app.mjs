@@ -4,19 +4,23 @@ import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createContactHandler } from './contact.mjs';
 import { adminIdentity, renderAdmin } from './admin.mjs';
+import { createNotesHandler } from './notes.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.png': 'image/png', '.pdf': 'application/pdf', '.xml': 'application/xml' };
-export async function createPortfolioServer({ origin = 'http://127.0.0.1:4173', sendMessage, trustProxy = false, trustedProxyIPs = [], requestLimit, adminEnabled = false, adminUsername = 'rithvik' } = {}) {
+export async function createPortfolioServer({ origin = 'http://127.0.0.1:4173', sendMessage, trustProxy = false, trustedProxyIPs = [], requestLimit, adminEnabled = false, adminUsername = 'rithvik', notesDirectory = null } = {}) {
   const profile = JSON.parse(await readFile(new URL('../data/portfolio.json', import.meta.url), 'utf8'));
-  const publicFiles = new Set(['/', '/index.html', '/Projects.html', '/Awards.html', '/404.html', '/error.html', '/sitemap.xml', '/css/site.css', '/css/admin.css', '/js/site.js', `/${profile.cv}`]);
+  const publicFiles = new Set(['/', '/index.html', '/Projects.html', '/Awards.html', '/404.html', '/error.html', '/sitemap.xml', '/css/site.css', '/css/admin.css', '/js/site.js', '/css/notes.css', '/js/notes.js', `/${profile.cv}`]);
   const contact = createContactHandler({ sendMessage, origin, trustProxy, trustedProxyIPs, requestLimit });
+  const notes = await createNotesHandler({ directory: notesDirectory, origin, identityOptions: { enabled: adminEnabled && trustProxy, trustedProxyIPs, username: adminUsername } });
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     try {
-      const pathname = decodeURIComponent(new URL(req.url, origin).pathname);
+      const url = new URL(req.url, origin);
+      const pathname = decodeURIComponent(url.pathname);
+      if (await notes(req, res, url)) return;
       if (pathname === '/admin' || pathname === '/admin/') {
         res.setHeader('Cache-Control', 'no-store');
         res.setHeader('X-Robots-Tag', 'noindex, nofollow');

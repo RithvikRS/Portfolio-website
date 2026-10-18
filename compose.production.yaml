@@ -17,8 +17,11 @@ services:
       PUBLIC_ORIGIN: https://${DOMAIN:?Set DOMAIN in .env.production}
       TRUST_PROXY: "true"
       TRUSTED_PROXY_IPS: ${CADDY_IP:-172.30.0.3}
+      NOTES_DATA_DIR: /writing
       ADMIN_ENABLED: "true"
       ADMIN_USERNAME: ${ADMIN_USERNAME:-rithvik}
+    volumes:
+      - ./.notes:/writing
     networks: [backend]
     read_only: true
     cap_drop: [ALL]

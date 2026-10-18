@@ -86,6 +86,7 @@ main() {
     printf 'Initialize the administrator once with: python3 scripts/setup-admin.py\n' >&2
     return 1
   fi
+  python3 scripts/setup-notes.py
   python3 scripts/setup-portainer.py --prepare
   printf 'Validating the production configuration...\n'
   "${compose[@]}" config --quiet
@@ -126,6 +127,13 @@ main() {
   admin_status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null --write-out '%{http_code}' "https://$domain/admin/")"
   [[ "$admin_status" == 302 || "$admin_status" == 303 || "$admin_status" == 401 ]] || {
     printf 'Unexpected unauthenticated dashboard response: %s\n' "$admin_status" >&2; return 1;
+  }
+  curl --fail --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null "https://$domain/blog/"
+  curl --fail --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null "https://$domain/learn/"
+  local notes_status
+  notes_status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null --write-out '%{http_code}' "https://$domain/admin/notes/api/export")"
+  [[ "$notes_status" == 302 || "$notes_status" == 303 || "$notes_status" == 401 ]] || {
+    printf 'Unexpected unauthenticated writing export response: %s\n' "$notes_status" >&2; return 1;
   }
   local portainer_status
   portainer_status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null --write-out '%{http_code}' "https://$domain/portainer/")"
