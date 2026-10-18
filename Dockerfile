@@ -22,6 +22,9 @@ RUN node scripts/build.mjs && node scripts/check.mjs && node --test tests/*.test
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=4173
+ARG VCS_REF=unknown
+LABEL io.github.rithvikrs.portfolio.app="true" \
+      org.opencontainers.image.revision="${VCS_REF}"
 
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules/

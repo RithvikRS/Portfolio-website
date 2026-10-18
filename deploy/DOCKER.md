@@ -1,6 +1,6 @@
 # Docker and Oracle deployment
 
-Updated **8 October 2026 (Asia/Kolkata)**. The active deployment is at `/opt/portfolio` on Oracle, using `main` and `compose.production.yaml`. Its hostname is `rithvik.ddns.net`, pointing to `144.24.135.201` through No-IP. Caddy serves HTTPS; Node serves the portfolio and admin dashboard; Authelia handles administrator sign-in.
+Updated **19 October 2026 (Asia/Kolkata)**. The active deployment is at `/opt/portfolio` on Oracle, using `main` and `compose.production.yaml`. Its hostname is `rithvik.ddns.net`, pointing to `144.24.135.201` through No-IP. Caddy serves HTTPS; Node serves the portfolio and admin dashboard; Authelia handles administrator sign-in.
 
 All three stages are deployed: dashboard/shared login, Portainer, and Fieldnotes for blog posts and learning notes inside the Node app. See the [writing guide](FIELDNOTES.md) for editing and content backups. See the [admin guide](ADMIN.md) and [Portainer guide](PORTAINER.md) for access, recovery, and backups.
 
@@ -12,11 +12,13 @@ All three stages are deployed: dashboard/shared login, Portainer, and Fieldnotes
 | `compose.yaml` | Local public-site preview, one app container | `docker compose up --build -d --wait` |
 | `compose.ip.yaml` | Earlier HTTP preview at a public IP, no SMTP or shared login | Use only for a separate temporary preview |
 | `compose.production.yaml` | Current Oracle stack: app, Caddy, Authelia, Portainer, networks and storage | `bash /opt/portfolio_redeploy.sh` on Oracle |
+| `compose.rollback.yaml` | App-only overlay using the retained previous image | See [image cleanup and rollback](#image-cleanup-and-rollback) |
 | `.dockerignore` | Allows only named inputs into the image build | Update when adding assets or changing the CV filename |
 | `deploy/Caddyfile.docker` | HTTP redirect, HTTPS, `/auth/`, `/admin/`, and `/portainer/` routing | Mounted at `/etc/caddy/site/Caddyfile.docker` |
 | `deploy/authelia/configuration.yml` | Non-secret login, session and access rules | Loaded with the template filter and runtime `DOMAIN` |
 | `scripts/setup-notes.py` | Creates/verifies private `.notes/` for the Node user | Called on every redeploy; preserves entries |
 | `scripts/setup-portainer.py` | Private key preparation and Portainer SSO reconciliation | Called by the redeploy script |
+| `scripts/deploy-images.py` | Retains successful app images and cleans unused images/cache | Called before the build and after all deployment checks |
 | `deploy/Caddyfile`, `deploy/portfolio.service` | Alternative host Caddy/systemd setup | Not used by the active Docker stack |
 
 A Dockerfile produces an image. Compose describes how to run images together: ports, settings, networks, health checks, and storage. `build` creates an image; `up` creates or updates containers. `up --build` does both. A plain `restart` does not rebuild code or reload changed Compose environment values.
@@ -69,8 +71,8 @@ After source or asset changes, rerun `docker compose up --build -d --wait`. Ther
 The server already uses `main`; its earlier migration from `V2` is complete. Do not repeat the old branch-creation or IP-preview setup. For each update:
 
 1. Commit development changes locally, including generated public pages when content/templates changed.
-2. Merge the development branch (currently `V2`) into `main` and push `main` to GitHub.
-3. Connect to Oracle over SSH and run:
+2. Push the development branch (currently `V2`) and merge its pull request into `main`.
+3. The **Deploy portfolio** GitHub Actions workflow connects over SSH and runs the deployment script automatically. Check the run in the Actions tab. To deploy manually instead, connect to Oracle over SSH and run:
 
    ```sh
    bash /opt/portfolio_redeploy.sh
@@ -82,7 +84,7 @@ The script locks against concurrent deployments, fetches `main`, permits only a 
 
 The current containers serve during the build. Authelia is recreated to load its configuration; its in-memory sessions expire, so sign in again after deployment. The app may briefly restart during replacement. Persistent data and certificates remain.
 
-Stage 1, 2, and 3 files were copied to Oracle before merging into `main`. Include all corresponding code, deployment, and documentation changes in the next merge. The script backs up copied files in a Git stash only when they exactly match `origin/main`; it stops when they differ. Reconcile a reported difference rather than discarding server files or private settings. A Git push alone does not deploy the site.
+The original copied server files have been reconciled with `main`. For any future uncommitted server edits, the script saves a Git stash only when they exactly match `origin/main`; it stops when they differ. Reconcile a reported difference rather than discarding server files or private settings. Pushing `V2` alone does not deploy; merging its PR into `main` does. The workflow uses `pull_request_target` with a merged-only condition, no PR checkout, and the `production` environment restricted to `main`.
 
 After changing only the server's saved environment or configuration, rebuild the existing checkout without pulling:
 
@@ -91,6 +93,44 @@ bash /opt/portfolio_redeploy.sh --no-pull
 ```
 
 Both commands use private `/opt/portfolio/.env.production`. Editing `.env` on your computer does not update that server file. `scripts/setup-admin.py` is a one-time initializer, not part of every redeployment.
+
+## Image cleanup and rollback
+
+The deployment runs the image-retention tests, then preserves the healthy running app before building. It updates the recovery tags and performs cleanup **only after every container and HTTP check succeeds**:
+
+| Image tag | Purpose |
+| --- | --- |
+| `rithvik-portfolio:production` | Most recently built candidate; it can be a failed deployment |
+| `rithvik-portfolio:current` | Last app image that passed the complete deployment checks |
+| `rithvik-portfolio:previous` | Successful app image before `current`, retained for rollback |
+
+On the first run, `current` is initialized from the actual healthy app container, not the mutable `production` tag. A failed build/start/check does not rotate the recovery tags or run cleanup. A retry retains the last successful image even if a failed candidate is still running. Redeploying the same image keeps the existing distinct rollback. A brand-new installation has no previous image until a second distinct image succeeds.
+
+Cleanup removes untagged, unused portfolio app images bearing `io.github.rithvikrs.portfolio.app=true`. When the previous tag rotates, its retired image is also eligible for non-forced removal if it has no other tags or digest references; Docker protects images used by containers. Explicit manual backup tags, other applications' images, containers, volumes, networks, certificates, `.env.production`, `.auth/`, `.portainer/`, and `.notes/` are preserved. No `docker system prune`, volume prune, or `docker image prune --all` is used.
+
+Unused cache in the Docker daemon's **shared default builder** is pruned with `docker buildx prune --builder default --all --force --max-used-space 256MB`. This cache is shared with other builds on the host, so future builds of any project may take longer; it is not application data. Docker removes the least recently used reclaimable records to target 256 MB; records/layers still in use may prevent reaching that target. Other Buildx builders are not cleaned. Cleanup errors are logged as warnings after a healthy deployment; failure to establish the recovery tags stops before cleanup.
+
+**First rollout:** the currently running deployment script finishes its loaded version even when Git updates the file. After merging this change and letting that deployment finish, re-run that successful GitHub Actions run once (or run `bash /opt/portfolio_redeploy.sh --no-pull`) to activate retention and cleanup immediately. Subsequent deployments use it automatically.
+
+For an **app-only manual rollback**, run inside Oracle SSH:
+
+```sh
+cd /opt/portfolio
+(
+  set -e
+  flock -n 9 || { printf 'Another deployment is running.\n' >&2; exit 1; }
+  sudo docker image inspect rithvik-portfolio:previous \
+    --format '{{.Id}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
+  sudo docker compose --env-file .env.production \
+    -f compose.production.yaml -f compose.rollback.yaml \
+    up --no-build --pull never --no-deps -d --wait --wait-timeout 180 app
+  curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+    --output /dev/null https://rithvik.ddns.net/
+  sudo docker image tag rithvik-portfolio:previous rithvik-portfolio:current
+) 9>.git/portfolio-deploy.lock
+```
+
+This uses the retained local image without rebuilding or downloading an image. It keeps the current Compose settings and persistent data, so confirm that the older app supports those settings and the current writing format. It does not restore Caddy/Authelia/Portainer configuration, source files, or data snapshots. Verify private/public writing and login after rollback. The next normal deployment resumes from `main`, using the restored app as the recovery baseline. Image revision labels identify new builds; images created before this feature may have no revision or `unknown`.
 
 ## First setup on a new Linux server
 
