@@ -1,7 +1,9 @@
 name: Deploy portfolio
 
 on:
-  pull_request:
+  # Use the trusted main branch context so production's main-only rule applies.
+  # Never check out or execute an unmerged PR's code in this workflow.
+  pull_request_target:
     branches: [main]
     types: [closed]
 
