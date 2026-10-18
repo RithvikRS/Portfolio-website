@@ -116,9 +116,12 @@ After **all deployment checks pass**, the script retains successful app images a
 
 Cleanup removes unused, untagged portfolio images and eligible retired rollback images. Explicit backup tags and other applications’ images are preserved. The default builder’s shared cache is pruned toward **256 MB**; records still in use may keep it above that target. Future builds can take longer as cache is rebuilt. Runtime data, volumes, and containers are preserved.
 
-A failed build, startup, or endpoint check does not rotate the recovery tags or run cleanup. There is **no automatic rollback**. Use the [manual rollback instructions](deploy/DOCKER.md#image-cleanup-and-rollback) to restore the previous app image without rebuilding. This restores the app only; configuration and stored data stay at their current versions. A fresh installation gains a previous image after a second distinct image succeeds.
+A failed build, startup, or endpoint check does not rotate the recovery tags or run cleanup. There is **no automatic rollback**. The [rollback runbook](deploy/DOCKER.md#roll-back-an-app-deployment) includes the SSH commands, image selection, health checks, and steps for resuming deployment:
 
-**First rollout of cleanup:** after merging this change and allowing its deployment to finish, re-run that successful GitHub Actions run once, or run `bash /opt/portfolio_redeploy.sh --no-pull` on Oracle. The first run finishes the script version loaded before Git updated it; the next run activates the new retention and cleanup steps. Later deployments use them automatically.
+- **Failed deployment:** restore `current`, which still holds the last successful app image. If the build failed and the existing site works, an app rollback is usually unnecessary.
+- **Deployment succeeded but a bug appeared later:** restore `previous`, the successful image before that update.
+
+Rollback restores the app only; configuration and stored data stay at their current versions. Fix or revert the faulty change through a PR before deploying again. A fresh installation gains a previous image after a second distinct image succeeds.
 
 ## Documentation
 
@@ -133,7 +136,7 @@ A failed build, startup, or endpoint check does not rotate the recovery tags or 
 
 ## Current deployment
 
-Deployment record updated **19 October 2026 (Asia/Kolkata)**. Oracle serves production from `/opt/portfolio` on `main` at `rithvik.ddns.net`; Caddy supplies HTTPS. **GitHub Pages is disabled.**
+Use `/opt/portfolio` on the server's `main` branch for production at `rithvik.ddns.net`. Caddy handles HTTPS. Keep GitHub Pages disabled when using this deployment.
 
 | Resource | Address | Access |
 | --- | --- | --- |
@@ -143,17 +146,6 @@ Deployment record updated **19 October 2026 (Asia/Kolkata)**. Oracle serves prod
 | Shared sign-in | [/auth/](https://rithvik.ddns.net/auth/) | Authelia, username/password |
 | Portainer | [/portainer/](https://rithvik.ddns.net/portainer/) | Shared login |
 | Fieldnotes editor | [/admin/notes/](https://rithvik.ddns.net/admin/notes/) | Shared login |
-
-<details>
-<summary>Deployment verification and recovery history</summary>
-
-The automatic deployment completed successfully on 19 October. The server checkout matched `main`; public portfolio, contact, writing, and auth health endpoints returned HTTP 200, and private routes rejected signed-out requests. The cleanup feature described above requires its first-rollout step. This is a verification record, not continuous uptime monitoring.
-
-The original dashboard deployment passed 15 automated tests, live sign-in/sign-out and access checks, and desktop/mobile review. Fieldnotes passed 19 tests, browser save/preview/publish/unpublish checks, shared-login and privacy checks, and persistence after an app restart. Contact checks confirmed configured delivery without sending email.
-
-Following an outage and reboot on 8 October, the public site and full Portainer SSO flow were verified again. Logs showed repeated host memory exhaustion in `dnf-makecache.service`; its background cache timer is disabled on Oracle, while package updates remain available. See the [incident and recovery record](deploy/DOCKER.md#8-october-2026-memory-exhaustion-and-recovery).
-
-</details>
 
 ## Repository map
 
