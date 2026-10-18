@@ -1,8 +1,8 @@
 # Docker and Oracle deployment
 
-Updated **19 October 2026 (Asia/Kolkata)**. The active deployment is at `/opt/portfolio` on Oracle, using `main` and `compose.production.yaml`. Its hostname is `rithvik.ddns.net`, pointing to `144.24.135.201` through No-IP. Caddy serves HTTPS; Node serves the portfolio and admin dashboard; Authelia handles administrator sign-in.
+Use `/opt/portfolio` on Oracle with the `main` branch and `compose.production.yaml`. Point `rithvik.ddns.net` to `144.24.135.201`. Caddy handles HTTPS, Node serves the portfolio and admin dashboard, and Authelia handles administrator sign-in.
 
-All three stages are deployed: dashboard/shared login, Portainer, and Fieldnotes for blog posts and learning notes inside the Node app. See the [writing guide](FIELDNOTES.md) for editing and content backups. See the [admin guide](ADMIN.md) and [Portainer guide](PORTAINER.md) for access, recovery, and backups.
+Use the dashboard for shared access to Portainer and Fieldnotes. Follow the [writing guide](FIELDNOTES.md) to edit posts and back up content, the [admin guide](ADMIN.md) to manage account access, and the [Portainer guide](PORTAINER.md) to manage containers.
 
 ## Which file should I use?
 
@@ -57,7 +57,7 @@ docker compose ps
 
 Open **http://localhost:8080**, using that exact hostname for the contact form's origin check. The app listens on 4173 inside the container; Docker maps host port 8080 to it. A container being healthy does not mean host port 4173 is published. Set `CONTAINER_PORT=8081` in `.env` if 8080 is occupied, then run `up` again.
 
-The optional `.env` supplies SMTP settings at runtime. Without them, the contact dialog offers LinkedIn. Local Compose does not start Caddy or Authelia, and the dashboard remains inaccessible. The direct Node preview at `http://127.0.0.1:4173` is a separate workflow in the [project README](../README.md#preview-and-check).
+The optional `.env` supplies SMTP settings at runtime. Without them, the contact dialog offers LinkedIn. Local Compose does not start Caddy or Authelia, and the dashboard remains inaccessible. The direct Node preview at `http://127.0.0.1:4173` is a separate workflow in the [project README](../README.md#run-locally).
 
 ```sh
 docker compose logs --tail=100 app
@@ -68,7 +68,7 @@ After source or asset changes, rerun `docker compose up --build -d --wait`. Ther
 
 ## Normal Oracle redeployment
 
-The server already uses `main`; its earlier migration from `V2` is complete. Do not repeat the old branch-creation or IP-preview setup. For each update:
+Keep the server checkout on `main` and make development changes on `V2`. For each update:
 
 1. Commit development changes locally, including generated public pages when content/templates changed.
 2. Push the development branch (currently `V2`) and merge its pull request into `main`.
@@ -84,7 +84,7 @@ The script locks against concurrent deployments, fetches `main`, permits only a 
 
 The current containers serve during the build. Authelia is recreated to load its configuration; its in-memory sessions expire, so sign in again after deployment. The app may briefly restart during replacement. Persistent data and certificates remain.
 
-The original copied server files have been reconciled with `main`. For any future uncommitted server edits, the script saves a Git stash only when they exactly match `origin/main`; it stops when they differ. Reconcile a reported difference rather than discarding server files or private settings. Pushing `V2` alone does not deploy; merging its PR into `main` does. The workflow uses `pull_request_target` with a merged-only condition, no PR checkout, and the `production` environment restricted to `main`.
+Keep server edits in sync with `origin/main`. The script saves uncommitted server edits in a Git stash only when they exactly match `origin/main`; it stops when they differ. Reconcile any reported differences before deploying. Pushing `V2` alone does not deploy; merging its PR into `main` does. The workflow uses `pull_request_target` with a merged-only condition, no PR checkout, and the `production` environment restricted to `main`.
 
 After changing only the server's saved environment or configuration, rebuild the existing checkout without pulling:
 
@@ -110,31 +110,119 @@ Cleanup removes untagged, unused portfolio app images bearing `io.github.rithvik
 
 Unused cache in the Docker daemon's **shared default builder** is pruned with `docker buildx prune --builder default --all --force --max-used-space 256MB`. This cache is shared with other builds on the host, so future builds of any project may take longer; it is not application data. Docker removes the least recently used reclaimable records to target 256 MB; records/layers still in use may prevent reaching that target. Other Buildx builders are not cleaned. Cleanup errors are logged as warnings after a healthy deployment; failure to establish the recovery tags stops before cleanup.
 
-**First rollout:** the currently running deployment script finishes its loaded version even when Git updates the file. After merging this change and letting that deployment finish, re-run that successful GitHub Actions run once (or run `bash /opt/portfolio_redeploy.sh --no-pull`) to activate retention and cleanup immediately. Subsequent deployments use it automatically.
+Use the normal deployment command to run retention and cleanup automatically after successful checks. When first introducing these steps on another existing server, run deployment twice: the initial run finishes the script version loaded before Git updates it.
 
-For an **app-only manual rollback**, run inside Oracle SSH:
+## Roll back an app deployment
+
+Rollback is manual. Use your normal interactive SSH login to the AMD server; the dedicated Actions key is restricted to running the deployment script. Run the commands below in the **server's Bash shell**, not Windows PowerShell. Let an active deployment finish and avoid new PR merges or reruns until recovery is complete. The rollback command also takes the deployment lock so it refuses to overlap a running deployment.
+
+### 1. Choose the recovery image
+
+| Situation | Recovery choice |
+| --- | --- |
+| Configuration validation or the image build failed, and the existing site still works | Usually no app rollback is needed. Fix the reported error before deploying again. |
+| A deployment failed during app startup or endpoint checks | Use `current`: it still points to the last successful app image. |
+| Deployment passed all checks, but a functional problem was discovered afterward | Use `previous`: the successful deployment already moved the new image to `current`. |
+| Only image/cache cleanup reported a warning | The app passed deployment checks; investigate cleanup separately. |
+
+For example, if B was successful and deployment C fails, `current` remains B and `previous` remains A. Restoring `previous` would skip B. If C passes deployment checks, the tags become `current=C` and `previous=B`.
+
+Inspect the available images and container state before choosing:
+
+```sh
+cd /opt/portfolio
+sudo docker compose --env-file .env.production -f compose.production.yaml ps --all
+for tag in current previous; do
+  printf '\n%s\n' "$tag"
+  sudo docker image inspect "rithvik-portfolio:$tag" \
+    --format '{{.Id}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
+done
+sudo docker container inspect portfolio-app-1 \
+  --format '{{.Image}} running={{.State.Running}} health={{if .State.Health}}{{.State.Health.Status}}{{end}}'
+```
+
+Use the image IDs and revision labels to identify the intended version. Older retained images may report `revision=unknown`. If the chosen tag is missing, stop and inspect the available manual backup tags; do not substitute `production`, which may contain the failed build. A failure in the image-retention step itself also needs inspection of the actual tags before selecting a recovery image.
+
+### 2. Restore the app and check it
+
+The block below defaults to **`rollback_tag=current` for a failed deployment**. Change that one line to **`rollback_tag=previous`** when undoing a deployment that passed its checks. Update `site_origin` if the domain has changed. Paste the entire block into the server's Bash shell:
 
 ```sh
 cd /opt/portfolio
 (
-  set -e
+  set -euo pipefail
   flock -n 9 || { printf 'Another deployment is running.\n' >&2; exit 1; }
-  sudo docker image inspect rithvik-portfolio:previous \
+
+  rollback_tag=current
+  site_origin=https://rithvik.ddns.net
+  case "$rollback_tag" in
+    current|previous) ;;
+    *) printf 'Choose current or previous.\n' >&2; exit 1 ;;
+  esac
+  rollback_image="$(sudo -n docker image inspect "rithvik-portfolio:$rollback_tag" --format '{{.Id}}')"
+  sudo -n docker image inspect "$rollback_image" \
     --format '{{.Id}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
-  sudo docker compose --env-file .env.production \
-    -f compose.production.yaml -f compose.rollback.yaml \
-    up --no-build --pull never --no-deps -d --wait --wait-timeout 180 app
-  curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
-    --output /dev/null https://rithvik.ddns.net/
-  sudo docker image tag rithvik-portfolio:previous rithvik-portfolio:current
+
+  sudo -n docker compose --env-file .env.production \
+    -f compose.production.yaml -f - \
+    up --no-build --pull never --no-deps -d --wait --wait-timeout 180 app <<EOF
+services:
+  app:
+    image: "$rollback_image"
+EOF
+
+  app_state="$(sudo -n docker container inspect portfolio-app-1 \
+    --format '{{.Image}} {{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{end}}')"
+  [[ "$app_state" == "$rollback_image true healthy" ]] || {
+    printf 'The selected app image is not running and healthy.\n' >&2; exit 1;
+  }
+  for path in / /api/contact /blog/ /learn/ /auth/api/health; do
+    status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+      --output /dev/null --write-out '%{http_code}' "$site_origin$path")"
+    [[ "$status" == 200 ]] || {
+      printf 'Public check failed: %s returned %s\n' "$path" "$status" >&2; exit 1;
+    }
+  done
+  for path in /admin/ /portainer/ /admin/notes/api/export; do
+    status="$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+      --output /dev/null --write-out '%{http_code}' "$site_origin$path")"
+    case "$status" in
+      302|303|401) ;;
+      *) printf 'Private access check failed: %s returned %s\n' "$path" "$status" >&2; exit 1 ;;
+    esac
+  done
+
+  sudo -n docker image tag "$rollback_image" rithvik-portfolio:current
+  printf 'Restored %s and recorded it as current.\n' "$rollback_image"
 ) 9>.git/portfolio-deploy.lock
 ```
 
-This uses the retained local image without rebuilding or downloading an image. It keeps the current Compose settings and persistent data, so confirm that the older app supports those settings and the current writing format. It does not restore Caddy/Authelia/Portainer configuration, source files, or data snapshots. Verify private/public writing and login after rollback. The next normal deployment resumes from `main`, using the restored app as the recovery baseline. Image revision labels identify new builds; images created before this feature may have no revision or `unknown`.
+This resolves the chosen tag to an image ID and replaces only the app container. It does not build or download an image, restart dependencies, or run cleanup. The temporary Compose override comes from standard input and leaves repository files unchanged. The existing `compose.rollback.yaml` always selects `previous`; the block above supports either recovery target. See the [Compose file override reference](https://docs.docker.com/reference/cli/docker/compose/) and [startup options](https://docs.docker.com/reference/cli/docker/compose/up/).
+
+The command records the restored image as `current` only after container health, public endpoints, and signed-out access checks pass. After restoring `previous`, both `current` and `previous` can temporarily refer to that same image. If a check fails, the app may already have been replaced; the command stops without promoting the image and does not automatically undo the attempted rollback.
+
+### 3. Verify the problem is fixed
+
+Open the portfolio, `/blog/`, and `/learn/`, then sign in and check `/admin/`, `/admin/notes/`, and `/portainer/`. Exercise the specific feature that prompted the rollback; automated health checks cannot catch every functional problem. The contact health check confirms configuration without sending email.
+
+If the app does not recover, inspect recent logs privately:
+
+```sh
+cd /opt/portfolio
+sudo docker compose --env-file .env.production -f compose.production.yaml logs --tail=100 app caddy auth
+```
+
+Image rollback keeps the current Compose settings, `.env.production`, `.auth/`, `.portainer/`, `.notes/`, and certificate volumes. It does **not** restore source files, infrastructure configuration, or data snapshots. An older app must support the current settings and writing format. If a deployment broke Caddy/Authelia/Portainer configuration or changed data incompatibly, app rollback alone will not repair it; use the relevant configuration fix or [data recovery guide](ADMIN.md#backups-and-recovery-data).
+
+### 4. Resume normal deployments
+
+Fix or revert the faulty change in a development branch, then merge its PR into `main`. The next normal deployment rebuilds from `main`, using the restored `current` image as the recovery baseline. Do not rerun the failed deployment or run the normal redeploy shortcut before the fix is ready: both can replace the restored app with the same faulty version. `--no-pull` is also a rebuild of the server checkout, not an image rollback.
+
+The rollback itself does not change Git history or the `production` tag. A successful new deployment updates the normal tags and resumes cleanup. The retained image remains available locally until a later successful deployment rotates it out of retention; it is not a substitute for backups of persistent data.
 
 ## First setup on a new Linux server
 
-This has already been completed on the current Oracle instance.
+Follow these steps when provisioning a new server. For an existing installation, use [normal redeployment](#normal-oracle-redeployment).
 
 1. Install Docker Engine, Compose, Git, Python 3, OpenSSL, curl, and flock. Clone the repository's `main` branch into `/opt/portfolio`. Docker builds Node and pnpm inside the image; they are not needed on the host.
 2. Point the hostname at the server. Allow inbound TCP 80/443 in the host firewall and Oracle network rules; UDP 443 is optional. Allow outbound DNS, HTTPS, and SMTP traffic. Keep app/auth ports unpublished.
@@ -255,24 +343,20 @@ The public page should return 200; a signed-out admin request should redirect to
 | Redeploy reports server changes differ from `origin/main` | Commit/merge the matching files or reconcile the named server change |
 | `Address already in use` on 80/443 | An IP-preview container or host Caddy may still own the port |
 
-## 8 October 2026: memory exhaustion and recovery
+## Manage memory on the AMD server
 
-The site and SSH became unresponsive while Oracle still reported the VM as Running. A user-initiated reboot restored access. Post-reboot checks confirmed HTTP 200 for the portfolio/auth health, expected signed-out redirects for the dashboard and Portainer, all four containers running, and successful shared login, OAuth, Docker container listing, and logout. Docker is enabled at boot. Load was about 0.1, with approximately 415 MB available RAM and 36% root-disk usage.
+If the site and SSH become unresponsive, check `/var/log/messages` for out-of-memory events after recovering access. Inspect available memory with `free -h` and follow the [status checks](#status-and-troubleshooting) to check containers and endpoints.
 
-The persistent `/var/log/messages` file recorded global out-of-memory events at **7 October 23:31 UTC**, **8 October 06:56 UTC**, and **8 October 09:29 UTC**. All three selected the `dnf` process in `dnf-makecache.service` for termination. At 09:29, DNF held roughly 596 MiB resident memory and the host had only 252 KiB free out of roughly 2.5 GiB swap. That event overlaps the outage and strongly suggests host memory/swap exhaustion; no live resource sample was obtainable during the SSH failure. Earlier events predated Portainer's installation.
-
-The enabled `dnf-makecache.timer` invoked `/usr/bin/dnf makecache --timer`, a background repository-metadata refresh. To prevent that recurring job from exhausting this 1 GB VM again, the following targeted change was applied:
+Keep `dnf-makecache.timer` disabled on this 1 GB VM to avoid scheduled package-metadata refreshes competing with the application for memory. Apply this host setting with:
 
 ```sh
 sudo systemctl disable --now dnf-makecache.timer
 sudo systemctl stop dnf-makecache.service
 ```
 
-The timer is now **disabled/inactive** and the service **inactive**. This does not disable package installation or upgrades, change repositories, or change any update-agent configuration. DNF can refresh metadata during later package operations; those operations can still need significant memory and should be planned for a maintenance window on this small VM. This host setting is separate from Docker Compose and persists across reboots. It is not applied automatically to a new server by `portfolio_redeploy.sh`.
+Check the timer with `systemctl is-enabled dnf-makecache.timer` and `systemctl is-active dnf-makecache.timer`; expect `disabled` and `inactive`. Continue installing packages and updates as needed, but plan memory-intensive package operations for a maintenance window. Disabling the timer leaves package installation and upgrades available.
 
-The prior unit definitions and state are saved privately at `/home/opc/.config/portfolio-deploy/dnf-cache-outage-MGfiPW0L/`. To restore scheduled caching after resolving memory capacity, use `sudo systemctl enable --now dnf-makecache.timer`.
-
-The journal was not persistent across the reboot; `/var/log/messages` supplied the evidence. The unrelated failed `mcelog` service reports that it does not support this VM's AMD processor. No package upgrade, reboot, container restart, or logging-service change was performed during this post-reboot check.
+Apply this setting separately from Docker Compose; `portfolio_redeploy.sh` does not configure it on a new server. To restore scheduled caching after increasing available memory, run `sudo systemctl enable --now dnf-makecache.timer`. Find the saved timer configuration under `/home/opc/.config/portfolio-deploy/dnf-cache-outage-MGfiPW0L/` if you need the earlier host settings.
 
 References: [DNF makecache command](https://dnf.readthedocs.io/en/latest/command_ref.html#makecache-command) and [DNF metadata timer configuration](https://dnf.readthedocs.io/en/latest/conf_ref.html#metadata-timer-sync).
 
