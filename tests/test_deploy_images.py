@@ -1,7 +1,9 @@
 """Exercise retention across success, failed deployment, retries and cleanup errors."""
 import contextlib
+import hashlib
 import importlib.util
 import io
+import json
 from pathlib import Path
 import subprocess
 import unittest
@@ -30,6 +32,12 @@ class FakeDocker:
         self.disk_changes = {}
         self.disk_reads = 0
         self.disk_errors = {}
+        self.manifests = {}
+        self.platform = {'os': 'linux', 'architecture': 'amd64'}
+        self.missing_manifest = False
+
+    def manifest_id(self, reference):
+        return self.manifests.get(reference, 'sha256:' + hashlib.sha256(reference.encode()).hexdigest())
 
     def disk_usage(self, path):
         self.calls.append(('filesystem', 'usage', path))
@@ -49,11 +57,16 @@ class FakeDocker:
         if args[0] == 'ps':
             return 'app-container' if self.running else ''
         if args[:2] == ('container', 'inspect'):
-            return self.running + (' true healthy' if self.healthy else ' true unhealthy')
+            descriptor = None if self.missing_manifest else {
+                'mediaType': 'application/vnd.oci.image.manifest.v1+json',
+                'digest': self.manifest_id(self.running), 'platform': self.platform,
+            }
+            return self.running + (' true healthy' if self.healthy else ' true unhealthy') + '|' + json.dumps(descriptor)
         if args[:2] == ('image', 'tag'):
             self.tags[args[3]] = args[2]
         elif args[:2] == ('image', 'inspect'):
-            import json
+            if args[2] == '--platform':
+                return self.manifest_id(args[-1])
             aliases = [tag for tag, image in self.tags.items() if image == args[-1]]
             return json.dumps(aliases) + '|' + json.dumps(self.digests.get(args[-1], []))
         elif args[:2] == ('image', 'rm'):
@@ -140,6 +153,58 @@ class ImageRetentionTests(unittest.TestCase):
         self.assertEqual(docker.tags[images.PREVIOUS], 'A')
         self.assertFalse(any(call[:2] == ('image', 'tag') for call in docker.calls))
         self.assertNotIn('A', docker.deleted)
+
+    def test_rebuilt_attestations_with_unchanged_container_allow_cleanup(self):
+        docker = FakeDocker({images.PRODUCTION: 'B-rebuilt', images.CURRENT: 'B', images.PREVIOUS: 'A'}, running='B')
+        docker.manifests['B-rebuilt'] = docker.manifest_id('B')
+        images.complete(docker)
+        self.assertEqual(docker.tags[images.CURRENT], 'B')
+        self.assertEqual(docker.tags[images.PREVIOUS], 'A')
+        self.assertNotIn('A', docker.deleted)
+        self.assertIn('executable manifest matches', self.output.getvalue())
+        self.assertTrue(any(call[:2] == ('buildx', 'prune') for call in docker.calls))
+
+    def test_equivalent_recreated_container_keeps_distinct_rollback(self):
+        docker = FakeDocker({images.PRODUCTION: 'B-rebuilt', images.CURRENT: 'B', images.PREVIOUS: 'A'}, running='B-rebuilt')
+        docker.manifests['B-rebuilt'] = docker.manifest_id('B')
+        images.complete(docker)
+        self.assertEqual(docker.tags[images.CURRENT], 'B-rebuilt')
+        self.assertEqual(docker.tags[images.PREVIOUS], 'A')
+        self.assertNotIn('A', docker.deleted)
+
+    def test_manifest_lookup_uses_actual_container_platform_and_variant(self):
+        docker = FakeDocker({images.PRODUCTION: 'B-new-index', images.CURRENT: 'B'}, running='B')
+        docker.platform = {'os': 'linux', 'architecture': 'arm64', 'variant': 'v8'}
+        docker.manifests['B-new-index'] = docker.manifest_id('B')
+        images.complete(docker)
+        self.assertIn(('image', 'inspect', '--platform', 'linux/arm64/v8', '--format', '{{.Id}}', 'B-new-index'), docker.calls)
+
+    def test_missing_or_invalid_identity_metadata_never_rotates_or_prunes(self):
+        for invalid in ('descriptor', 'platform', 'digest', 'lookup'):
+            with self.subTest(invalid=invalid):
+                docker = FakeDocker({images.PRODUCTION: 'B', images.CURRENT: 'A', images.PREVIOUS: 'older'}, running='A')
+                if invalid == 'descriptor':
+                    docker.missing_manifest = True
+                elif invalid == 'platform':
+                    docker.platform = {'os': 'linux'}
+                elif invalid == 'digest':
+                    docker.manifests['A'] = ''
+                else:
+                    docker.manifests['B'] = ''
+                before = docker.tags.copy()
+                with self.assertRaises(RuntimeError):
+                    images.complete(docker)
+                self.assertEqual(docker.tags, before)
+                self.assert_no_cleanup(docker)
+
+    def test_failed_platform_inspection_keeps_tags_and_skips_cleanup(self):
+        docker = FakeDocker({images.PRODUCTION: 'B', images.CURRENT: 'A'}, running='A')
+        docker.fail.add(('image', 'inspect', '--platform', 'linux/amd64', '--format', '{{.Id}}', 'B'))
+        before = docker.tags.copy()
+        with self.assertRaises(subprocess.CalledProcessError):
+            images.complete(docker)
+        self.assertEqual(docker.tags, before)
+        self.assert_no_cleanup(docker)
 
     def test_unhealthy_result_never_rotates_or_prunes(self):
         docker = FakeDocker({images.PRODUCTION: 'B', images.CURRENT: 'A', images.PREVIOUS: 'older'}, running='B', healthy=False)
