@@ -22,7 +22,9 @@ class MergedPRGate(unittest.TestCase):
             env = {'GITHUB_SHA': 'abc123', 'GITHUB_REPOSITORY': 'owner/repo',
                    'GITHUB_API_URL': 'https://api.github.test', 'GH_TOKEN': 'fixture-token',
                    'GITHUB_OUTPUT': str(output)}
-            def response(*args, **kwargs):
+            def response(request, **kwargs):
+                # This contract includes merge_commit_sha; the 2026 API omits it.
+                self.assertEqual(request.get_header('X-github-api-version'), '2022-11-28')
                 value = next(responses)
                 if isinstance(value, Exception):
                     raise value
@@ -37,6 +39,12 @@ class MergedPRGate(unittest.TestCase):
 
     def test_direct_push_has_no_merged_pr_and_skips(self):
         self.assertEqual(self.gate(iter([[], [], []])), 'eligible=false\n')
+
+    def test_missing_merge_sha_fails_instead_of_silently_skipping(self):
+        pr = copy.deepcopy(PR)
+        del pr['merge_commit_sha']
+        with self.assertRaisesRegex(RuntimeError, 'omitted merge_commit_sha'):
+            self.gate(iter([[pr]]))
 
     def test_open_closed_unmerged_wrong_branch_repo_or_sha_skip(self):
         variants = []

@@ -90,6 +90,8 @@ The current containers serve during the build. Authelia is recreated to load its
 
 Keep server edits in sync with `origin/main`. The script saves uncommitted server edits in a Git stash only when they exactly match `origin/main`; it stops when they differ. Reconcile any reported differences before deploying. Pushing `V2` alone does not deploy; merging its PR into `main` does. The workflow runs on `push` to `main` and first queries GitHub for a merged PR whose merge commit equals the pushed SHA. This check has only read access to PR metadata and no production environment. Only a matching PR unlocks the SSH deployment job in the `production` environment, still restricted to `main`; no PR code is checked out. Direct pushes start the check but skip deployment. API failures fail closed; rerun the workflow if metadata lookup fails. This removes the dependency on the public-repository `pull_request_target` policy scheduled for enforcement on November 2, 2026.
 
+Keep the PR lookup pinned to REST API `2022-11-28`: the `2026-03-10` API removed `merge_commit_sha`, which the deployment gate requires. Review [GitHub's breaking changes](https://docs.github.com/en/rest/about-the-rest-api/breaking-changes) before changing the version. A missing field now fails the check instead of silently skipping a merged PR. Check the **deploy** job itself when verifying a run; a green workflow with a skipped deploy job did not update production.
+
 After changing only the server's saved environment or configuration, rebuild the existing checkout without pulling:
 
 ```sh
