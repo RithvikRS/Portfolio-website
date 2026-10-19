@@ -8,6 +8,8 @@ from pathlib import Path
 import secrets
 import subprocess
 import sys
+import time
+import uuid
 from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
@@ -17,10 +19,45 @@ TOPIC = 'arm-provisioning'
 
 
 def run(command, data=None):
-    result = subprocess.run(command, input=data, text=True, capture_output=True, cwd=ROOT)
+    result = subprocess.run(command, input=data, text=True, capture_output=True, cwd=ROOT, timeout=120)
     if result.returncode:
         raise RuntimeError('An ntfy setup command failed; private command output was withheld.')
     return result.stdout
+
+
+def validate(config, docker):
+    """Boot the candidate config offline with disposable databases and no host ports."""
+    service = config['services']['ntfy']
+    uid, gid = service['user'].split(':')
+    if not uid.isdigit() or not gid.isdigit():
+        raise RuntimeError('ntfy validation requires numeric UID and GID.')
+    name = 'portfolio-ntfy-validate-' + uuid.uuid4().hex
+    command = docker + ['run', '--detach', '--name', name, '--network', 'none',
+        '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
+        '--memory', '128m', '--pids-limit', '64', '--user', service['user'],
+        '--tmpfs', f'/var/lib/ntfy:size=16m,mode=0700,uid={uid},gid={gid}',
+        '--tmpfs', '/tmp:size=8m,mode=1777',
+        '--mount', f'type=bind,src={ROOT / "deploy/ntfy"},dst=/etc/ntfy,readonly']
+    for key, value in service['environment'].items():
+        command += ['--env', f'{key}={value}']
+    command += [service['image'], 'serve']
+    try:
+        run(command)
+        for _ in range(30):
+            if run(docker + ['inspect', '--format', '{{.State.Running}}', name]).strip() != 'true':
+                break
+            try:
+                result = run(docker + ['exec', name, 'wget', '-q', '-T', '2', '-O', '-',
+                                      'http://127.0.0.1:8080/v1/health'])
+                if json.loads(result).get('healthy') is True:
+                    print('ntfy candidate configuration passed isolated startup and health checks.')
+                    return
+            except (RuntimeError, ValueError):
+                pass
+            time.sleep(1)
+        raise RuntimeError('ntfy candidate configuration failed isolated startup; the running service was not replaced.')
+    finally:
+        run(docker + ['rm', '--force', name])
 
 
 def prepare(config):
@@ -101,7 +138,7 @@ def check(config):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['prepare', 'configure', 'check'])
+    parser.add_argument('mode', choices=['prepare', 'validate', 'configure', 'check'])
     args = parser.parse_args()
     os.umask(0o077)
     docker = ['docker']
@@ -111,6 +148,8 @@ def main():
     config = json.loads(run(compose + ['config', '--format', 'json']))
     if args.mode == 'prepare':
         prepare(config)
+    elif args.mode == 'validate':
+        validate(config, docker)
     elif args.mode == 'configure':
         configure(compose)
     else:

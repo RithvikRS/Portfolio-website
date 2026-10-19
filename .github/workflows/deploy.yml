@@ -1,11 +1,9 @@
 name: Deploy portfolio
 
 on:
-  # Use the trusted main branch context so production's main-only rule applies.
-  # Never check out or execute an unmerged PR's code in this workflow.
-  pull_request_target:
+  # Use main's workflow and ref; avoid the public pull_request_target policy.
+  push:
     branches: [main]
-    types: [closed]
 
 permissions: {}
 
@@ -14,8 +12,56 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  merged-pr:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      pull-requests: read
+    outputs:
+      eligible: ${{ steps.check.outputs.eligible }}
+    steps:
+      - name: Require a merged PR for this main commit
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          from urllib.request import Request, urlopen
+
+          def eligible(pr):
+              return (pr.get('merged_at') is not None
+                      and pr.get('merge_commit_sha') == os.environ['GITHUB_SHA']
+                      and pr.get('base', {}).get('ref') == 'main'
+                      and pr.get('base', {}).get('repo', {}).get('full_name') == os.environ['GITHUB_REPOSITORY'])
+
+          matched = False
+          for attempt in range(3):
+              for page in range(1, 11):
+                  url = (f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}"
+                         f"/commits/{os.environ['GITHUB_SHA']}/pulls?per_page=100&page={page}")
+                  request = Request(url, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                      'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10'})
+                  with urlopen(request, timeout=20) as response:
+                      prs = json.load(response)
+                  matched = any(eligible(pr) for pr in prs)
+                  if matched or len(prs) < 100:
+                      break
+              else:
+                  raise RuntimeError('PR lookup exceeded its page limit; deployment refused.')
+              if matched:
+                  break
+              if attempt < 2:
+                  time.sleep(5)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('eligible=' + str(matched).lower() + '\n')
+          print('Merged PR confirmed.' if matched else 'No matching merged PR; skip production deployment.')
+          PY
+
   deploy:
-    if: github.event.pull_request.merged == true
+    needs: merged-pr
+    if: needs.merged-pr.outputs.eligible == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: production

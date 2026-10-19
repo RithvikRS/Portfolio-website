@@ -24,6 +24,9 @@ stop_after_success() {
     fi
 }
 
+# Flush saved alerts even if this attempt later times out or finds only capacity errors.
+notify retry || true
+
 # A failed list request must never be interpreted as an empty instance list.
 if ! "$OCI_BIN" compute instance list --compartment-id "$COMPARTMENT_ID" \
     --display-name "$INSTANCE_NAME" \

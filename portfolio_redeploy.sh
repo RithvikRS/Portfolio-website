@@ -102,9 +102,9 @@ main() {
   "${docker_cmd[@]}" run --rm --network none -e "DOMAIN=$domain" -e "NTFY_DOMAIN=$ntfy_domain" \
     -v "$repo_dir/deploy:/etc/caddy/site:ro" "$caddy_image" caddy validate \
     --config /etc/caddy/site/Caddyfile.docker --adapter caddyfile </dev/null
+  python3 scripts/setup-ntfy.py validate
 
-  python3 -m unittest discover -s tests -p 'test_deploy_images.py'
-  python3 -m unittest discover -s tests -p 'test_ntfy.py'
+  python3 -m unittest discover -s tests -p 'test_*.py'
   local -a image_manager=(python3 scripts/deploy-images.py)
   if [[ "${docker_cmd[0]}" == sudo ]]; then image_manager+=(--sudo); fi
   "${image_manager[@]}" prepare
@@ -118,8 +118,9 @@ main() {
   # Initialize and reconcile the private API before exposing a new public route.
   "${compose[@]}" up --no-build -d portainer </dev/null
   python3 scripts/setup-portainer.py --configure
-  # First start creates ntfy's databases with deny-all access before users exist.
-  "${compose[@]}" up --no-build -d --no-deps --wait --wait-timeout 120 ntfy </dev/null
+  # Recreate on every deployment so bind-mounted server.yml changes take effect.
+  # Private databases and credentials stay on disk; the first start is deny-all.
+  "${compose[@]}" up --no-build -d --no-deps --force-recreate --wait --wait-timeout 120 ntfy </dev/null
   python3 scripts/setup-ntfy.py configure
   "${compose[@]}" up --no-build -d --wait --wait-timeout 180 </dev/null
   "${compose[@]}" exec -T caddy caddy reload --config /etc/caddy/site/Caddyfile.docker --adapter caddyfile </dev/null

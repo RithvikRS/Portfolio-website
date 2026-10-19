@@ -93,6 +93,8 @@ Sign in with the new password and update your password manager and private boots
 
 ## Backups and recovery data
 
+Use the [private-state backup and restore guide](BACKUPS.md) for the complete current stack, including Portainer, writing, and ntfy state.
+
 Preserve `.env.production`, the complete `.auth/` and `.portainer/` directories, and both Caddy named volumes. Store backups privately outside Git. For a consistent filesystem copy, briefly stop `auth` and `portainer`, archive both directories with permissions, and start them again. The portfolio remains available while private tools are temporarily unavailable. Do not run `down --volumes` as a backup step. See the [Portainer backup procedure](PORTAINER.md#backup-and-restore).
 
 For an earlier dashboard recovery point, inspect these private items on Oracle:

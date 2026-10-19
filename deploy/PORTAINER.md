@@ -80,21 +80,9 @@ If the `admin` password is intentionally changed through Portainer, update the p
 
 ## Backup and restore
 
-Preserve `.env.production`, all of `.auth/`, all of `.portainer/`, all of `.notes/`, the corresponding source version, and Caddy's certificate volumes. The Portainer database contains authentication configuration and must be kept private. For a consistent private-state archive, run in Oracle SSH:
+Back up `.env.production`, `.auth/`, `.portainer/`, `.notes/`, and `.ntfy/` together. Follow the [private-state backup and restore guide](BACKUPS.md) and run `bash scripts/backup-private-state.sh` from `/opt/portfolio` in Oracle SSH. The helper locks deployments and ARM/notifier writers, stops the state-writing services, and restarts them even if archiving fails. Expect a brief public-site interruption.
 
-```sh
-cd /opt/portfolio
-umask 077
-backup=$(mktemp -d /home/opc/.config/portfolio-deploy/private-state-XXXXXXXX)
-dc() { sudo docker compose --env-file .env.production -f compose.production.yaml "$@"; }
-dc stop app auth portainer
-sudo tar -czf "$backup/private-state.tar.gz" .env.production .auth .portainer .notes
-sudo chmod 600 "$backup/private-state.tar.gz"
-dc start app auth portainer
-dc ps
-```
-
-If archiving fails, start all three services again before troubleshooting. The public app is briefly unavailable while its writing data is backed up. This archive does not include Caddy's named volumes; back those up separately for a full migration. Restore the matched directories while their services are stopped, preserve owners/modes, and use the compatible source and image version. Never restore an old Authelia encryption key over a newer database without its matching backup.
+Keep the archive private and copy it off the VM. Restore each matching credential/database set with its original owners and modes and a compatible source/image version. Preserve Caddy volumes and private OCI/cron configuration separately for full VM recovery, as described in the shared guide.
 
 For an earlier Portainer recovery point, inspect `/home/opc/.config/portfolio-deploy/portainer-stage2-6erYb3rT/` and the image tag `rithvik-portfolio:before-portainer-stage2`. Match the source, private configuration, and auth database archives before restoring. Create fresh backups for ongoing use; these manual recovery points do not update automatically. Use the [app rollback runbook](DOCKER.md#roll-back-an-app-deployment) for routine app recovery.
 

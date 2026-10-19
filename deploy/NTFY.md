@@ -44,8 +44,10 @@ The upstream request contains a message ID and a hash of the topic URL, rather t
 
 - **No host capacity:** keep retrying every five minutes, without sending notifications. Try the three fault domains in sequence.
 - **Instance provisioning or running:** send **ARM instance claimed**, then remove the provisioning cron entry. Provisioning means Oracle accepted the instance; it does not guarantee the server is ready for SSH yet.
-- **Authentication, SSH key, quota, or unexpected failures:** send **ARM provisioning needs attention**. Suppress the same error category for 24 hours. A different error category alerts immediately; a complete capacity-only cycle clears the prior error.
-- **ntfy unavailable:** retain the cron entry and retry delivery on the next run. An existing instance prevents additional launches. A failed instance lookup also prevents launch requests.
+- **Authentication, SSH key, quota, or unexpected failures:** send **ARM provisioning needs attention**. Send each error category at most once per 24 hours after successful delivery. Capacity-only cycles clear the current error condition but preserve that cooldown; alternating error categories also keep their own cooldowns.
+- **ntfy unavailable:** persist up to six pending alerts (one per error category plus one success), retain the cron entry, and retry at the start of the next run even if Oracle later returns only capacity failures. Label alerts delayed by a minute or more so you can distinguish earlier failures. An existing instance prevents additional launches. A failed instance lookup also prevents launch requests.
+
+The notifier saves pending records before sending and saves delivery history after each successful response. A lost HTTP response or process crash after server acceptance can still cause a duplicate on retry; delivery is at least once, not exactly once. Keep `.ntfy/arm-notifications.json` during routine deployments.
 
 Messages use fixed summaries. Raw Oracle output, OCIDs, credentials, and private keys stay out of notifications. Inspect `~/stack-latest-job.json` and `~/stack-summary.log` over SSH for details. The original provisioning parameters stay at `VM.Standard.A1.Flex`, 2 OCPUs, and 12 GB RAM.
 
@@ -58,7 +60,8 @@ Messages use fixed summaries. Raw Oracle output, OCIDs, credentials, and private
 
    ```sh
    python3 scripts/setup-ntfy.py prepare
-   sudo docker compose --env-file .env.production -f compose.production.yaml up -d --no-deps --wait ntfy
+   python3 scripts/setup-ntfy.py validate
+   sudo docker compose --env-file .env.production -f compose.production.yaml up -d --no-deps --force-recreate --wait ntfy
    python3 scripts/setup-ntfy.py configure
    sudo docker compose --env-file .env.production -f compose.production.yaml up -d --no-deps caddy
    python3 scripts/setup-ntfy.py check
@@ -75,11 +78,11 @@ Messages use fixed summaries. Raw Oracle output, OCIDs, credentials, and private
 
    Keep its executable permission and the existing five-minute cron entry. Review the instance name, paths, and shape in the repository script before enabling it for another account. Deploying the portfolio does not create or re-enable the provisioning cron job.
 
-After setup, the normal portfolio deployment prepares ntfy files, starts the service, reconciles access, and tests HTTPS and topic permissions before app image cleanup. Merge all the corresponding local files into `main` before the next deployment; the deployment script rejects conflicting server edits.
+After setup, the normal portfolio deployment prepares ntfy files, validates the candidate settings in an offline disposable container, recreates ntfy to apply `server.yml` changes, reconciles access, and tests HTTPS and topic permissions before app image cleanup. The validation container uses temporary databases and publishes no ports. Recreation briefly interrupts ntfy; credentials, cached messages, and notification state persist. Merge all the corresponding local files into `main` before the next deployment; the deployment script rejects conflicting server edits.
 
 ## Private storage and maintenance
 
-`.ntfy/` is ignored by Git. It contains the databases in `data/`, the two account credential files, the iPhone login sheet, and notification state. Back up the whole directory privately while ntfy is stopped so the SQLite files and credentials stay together. Never copy it into the repository or an image.
+`.ntfy/` is ignored by Git. It contains the databases in `data/`, the two account credential files, the iPhone login sheet, and notification state. Use the [private-state backup and restore guide](BACKUPS.md) to archive it with the other services. The helper stops ntfy and locks ARM/notifier writers so SQLite, credentials, pending alerts, and cooldown timestamps stay together. Never copy private data into the repository or an image.
 
 ntfy runs as UID/GID 1000 by default, with a read-only root filesystem, a 128 MiB memory cap, rotating logs, and a seven-day message cache. Its API port binds only to `127.0.0.1:2586`; Caddy exposes HTTPS publicly. Attachments, email, calls, and public signup stay disabled. The notification network connects only Caddy and ntfy.
 
@@ -90,10 +93,12 @@ cd /opt/portfolio
 sudo docker compose --env-file .env.production -f compose.production.yaml ps ntfy
 sudo docker compose --env-file .env.production -f compose.production.yaml logs --tail 50 ntfy
 python3 scripts/setup-ntfy.py check
-python3 -m unittest discover -s tests -p 'test_ntfy.py'
+python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
 The tests fake Oracle commands and notification delivery; they never provision a real instance. A successful server test cannot confirm that iOS displayed an alert, so complete the locked-phone test too.
+
+If connection alerts repeat within 24 hours, check that the notifier includes the cooldown fix and that `.ntfy/arm-notifications.json` remains writable and persists between runs. Do not delete it to silence alerts; that resets suppression. Read the category and timestamps over SSH, keeping credentials private. Ordinary no-capacity results never generate a new alert.
 
 If messages arrive only while the app is open, check iOS notification permissions, the saved server URL and user, ntfy logs for upstream errors, and the `upstream-base-url` setting. Avoid sharing logs publicly without reviewing them. If the AMD public IP changes, update `NTFY_DOMAIN`, redeploy, and update both the server credentials entry and subscription URL on the phone.
 

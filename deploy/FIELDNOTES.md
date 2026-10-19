@@ -64,23 +64,9 @@ Use the script to prepare `.notes/`, build the app, run checks, and update servi
 
 **Download Markdown** saves the current editor text, including unsaved changes. **Export library** downloads JSON containing all saved drafts, published versions, and trash. Keep that export private. It is a data export, not a complete server backup. There is no browser import tool in this version; a full restore uses the original `.notes/` files.
 
-For a consistent complete private-state archive on Oracle, briefly stop the three services that write private state. This also pauses the public app:
+Back up `.env.production`, `.auth/`, `.portainer/`, `.notes/`, and `.ntfy/` together using the [private-state backup and restore guide](BACKUPS.md). Run `bash scripts/backup-private-state.sh` from `/opt/portfolio` in Oracle SSH. The helper locks deployments and ARM/notifier writers, stops the state-writing services, and restarts them even if archiving fails. Expect a brief public-site interruption. Keep the archive private and copy it off the VM.
 
-```sh
-cd /opt/portfolio
-umask 077
-backup=$(mktemp -d /home/opc/.config/portfolio-deploy/private-state-XXXXXXXX)
-dc() { sudo docker compose --env-file .env.production -f compose.production.yaml "$@"; }
-dc stop app auth portainer
-sudo tar -czf "$backup/private-state.tar.gz" .env.production .auth .portainer .notes
-sudo chmod 600 "$backup/private-state.tar.gz"
-dc start app auth portainer
-dc ps
-```
-
-If the archive command fails, start the services again before troubleshooting. Also preserve the matching source version and Caddy named volumes for a full migration. Copy the private archive to separate, secure storage; on-instance backups alone do not survive loss of the VM.
-
-To restore, stop the affected services and preserve the current directories as a separate recovery point. Check the archive's contents, extract it into a staging directory, and restore the matching private directories with owners/modes intact. Do not overlay a library backup onto newer files: entries absent from the backup could otherwise remain published. Replace the directory as a unit while the app is stopped. Start services with the compatible source/image version and check public/private visibility. Never mix an old Authelia encryption key with an unmatched database.
+Restore the matched private directories with the compatible source and image version. Replace `.notes/` as a complete unit while the app is stopped; overlaying files can leave entries published that are absent from the backup. Use the shared guide for locks, staging, ownership, ntfy credentials/databases, and checks.
 
 For an earlier Fieldnotes recovery point, inspect `/home/opc/.config/portfolio-deploy/fieldnotes-stage3-DtZPMrmu/`. Use `private-after.tar.gz` for the private state from that backup. The image `rithvik-portfolio:before-fieldnotes-stage3` predates writing support and cannot restore later writing. Create fresh private-state backups regularly; manual recovery archives do not update automatically.
 
