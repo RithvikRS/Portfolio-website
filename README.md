@@ -94,9 +94,9 @@ Open [Fieldnotes](https://rithvik.ddns.net/admin/notes/) using your existing log
 2. Open a pull request into `main` and merge it when ready.
 3. Follow the [Deploy portfolio workflow](https://github.com/RithvikRS/Portfolio-website/actions/workflows/deploy.yml) until the deployment succeeds.
 
-A push to `V2`, a closed but unmerged PR, or a direct push to `main` does not trigger this workflow. The [workflow file](.github/workflows/deploy.yml) uses the trusted `main` context and connects over SSH to run `/opt/portfolio/portfolio_redeploy.sh`. GitHub supplies `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`, and `SSH_KNOWN_HOSTS` from the `production` environment, which is restricted to `main`. It does not check out or execute unmerged PR code.
+The [workflow file](.github/workflows/deploy.yml) starts on pushes to `main`, then checks GitHub for a merged PR whose merge commit matches the pushed commit. Only a matching merged PR proceeds to production. A direct push starts the check but skips deployment; pushes to `V2` and closing an unmerged PR do not start this workflow. The check uses read-only PR access and receives no production secrets. The deployment uses the trusted `main` context and connects over SSH to run `/opt/portfolio/portfolio_redeploy.sh`. GitHub supplies `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`, and `SSH_KNOWN_HOSTS` from the `production` environment, which is restricted to `main`. It does not check out or execute unmerged PR code.
 
-The server fetches the latest `main`, updates its checkout with a fast-forward merge, validates Compose/Authelia/Caddy, and builds the app image. The build generates pages, checks links, and runs tests. The script then updates services, reconciles Portainer SSO, reloads Caddy, and checks public endpoints and private access gates. A conflicting server edit stops the deployment for reconciliation.
+The server fetches the latest `main`, updates its checkout with a fast-forward merge, validates Compose/Authelia/Caddy and ntfy, and builds the app image. The build generates pages, checks links, and runs tests. The script then updates services, reconciles Portainer SSO, recreates ntfy to apply its settings, reloads Caddy, and checks public endpoints and private access gates. A conflicting server edit stops the deployment for reconciliation.
 
 Git updates tracked source files, including removing files deleted in `main`; it does not wipe the server directory. Docker replaces containers as needed. `.env.production`, `.auth/`, `.portainer/`, `.notes/`, `.ntfy/`, and Caddy certificate volumes persist. The existing app serves during the build, but container replacement may briefly interrupt requests. Authelia restarts, so sign in again afterward.
 
@@ -136,6 +136,7 @@ Set up private ARM alerts and your iPhone with the [ntfy guide](deploy/NTFY.md).
 | Guide | Start here for |
 | --- | --- |
 | [Docker and Oracle operation](deploy/DOCKER.md) | Setup, deployment, cleanup, rollback, Caddy routing, and troubleshooting |
+| [Private-state backups](deploy/BACKUPS.md) | Consistent archives, ntfy state, and recovery |
 | [Admin dashboard and shared login](deploy/ADMIN.md) | Account access, password recovery, persistent data, and backups |
 | [Portainer and SSO](deploy/PORTAINER.md) | Container management, recovery access, and storage |
 | [Blog and learning notebook](deploy/FIELDNOTES.md) | Drafts, publishing, exports, backups, and recovery |

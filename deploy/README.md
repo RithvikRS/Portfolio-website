@@ -52,3 +52,5 @@ The Caddy template replaces `X-Real-IP` with the connected client's IP. Enable `
 - Successful submissions are deduplicated by an opaque request ID plus a hashed payload for one hour, within the process. The app does not write messages to disk or log them; memory holds the payload while sending. Your email provider and destination mailbox receive and retain the message.
 - A provider timeout can leave delivery uncertain. The form preserves the draft and does not retry automatically. After a restart or an ambiguous SMTP failure, retrying can produce a duplicate email. Use LinkedIn for urgent follow-up.
 - The static-file allowlist serves public pages, assets, and the current CV. The separately handled admin route requires a verified identity when enabled. `.env`, `.auth/`, server source, content data, and the old CV are excluded from static serving. A public Git repository and downloadable CV can still expose contact details independently of the website; review those separately before publishing.
+
+Use the [private-state backup and restore guide](BACKUPS.md) to preserve all service credentials, databases, writing, and ntfy delivery state together.
