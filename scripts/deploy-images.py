@@ -3,6 +3,7 @@
 import argparse
 from collections import namedtuple
 import json
+import re
 import subprocess
 import sys
 
@@ -11,6 +12,7 @@ CURRENT = 'rithvik-portfolio:current'
 PREVIOUS = 'rithvik-portfolio:previous'
 APP_LABEL = 'io.github.rithvikrs.portfolio.app=true'
 DiskUsage = namedtuple('DiskUsage', 'total used available')
+AppImage = namedtuple('AppImage', 'id manifest')
 
 
 class Docker:
@@ -59,14 +61,46 @@ def healthy_app_image(docker, required=True):
         return None
     if len(containers) != 1:
         raise RuntimeError('Expected exactly one portfolio app container.')
-    state = docker.run(
+    state, descriptor = docker.run(
         'container', 'inspect', '--format',
-        '{{.Image}} {{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{end}}',
+        '{{.Image}} {{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{end}}|{{json .ImageManifestDescriptor}}',
         containers[0], capture=True,
-    ).split()
+    ).split('|', 1)
+    state = state.split()
     if len(state) != 3 or state[1:] != ['true', 'healthy']:
         raise RuntimeError('The portfolio app must be running and healthy before retaining its image.')
-    return state[0]
+    return AppImage(state[0], json.loads(descriptor))
+
+
+def matches_runtime(docker, running, reference):
+    if not reference:
+        return False
+    if running.id == reference:
+        return True
+    # Build attestations can change the index ID without changing the executable
+    # manifest. Use Docker's actual container descriptor, never a revision label
+    # or layer list: the manifest also identifies the complete image config.
+    manifest = running.manifest
+    if not isinstance(manifest, dict) or manifest.get('mediaType') not in (
+        'application/vnd.oci.image.manifest.v1+json',
+        'application/vnd.docker.distribution.manifest.v2+json',
+    ):
+        raise RuntimeError('Cannot establish the running image manifest; skipping cleanup.')
+    digest = manifest.get('digest', '')
+    platform = manifest.get('platform')
+    if not isinstance(digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', digest) or not isinstance(platform, dict):
+        raise RuntimeError('Invalid running image manifest metadata; skipping cleanup.')
+    parts = [platform.get('os'), platform.get('architecture')]
+    if platform.get('variant'):
+        parts.append(platform['variant'])
+    if any(not isinstance(part, str) or not re.fullmatch(r'[a-z0-9_.-]+', part) for part in parts):
+        raise RuntimeError('Cannot establish the running image platform; skipping cleanup.')
+    candidate = docker.run(
+        'image', 'inspect', '--platform', '/'.join(parts), '--format', '{{.Id}}', reference, capture=True,
+    )
+    if not re.fullmatch(r'sha256:[0-9a-f]{64}', candidate):
+        raise RuntimeError('Cannot establish the candidate image manifest; skipping cleanup.')
+    return candidate == digest
 
 
 def prepare(docker):
@@ -76,7 +110,7 @@ def prepare(docker):
         return
     running = healthy_app_image(docker, required=False)
     if running:
-        docker.run('image', 'tag', running, CURRENT)
+        docker.run('image', 'tag', running.id, CURRENT)
         print('Retained the running app as ' + CURRENT)
 
 
@@ -142,19 +176,23 @@ def remove_retired_image(docker, retired):
 def complete(docker):
     # Call only after ALL deployment checks, including public/private HTTP gates.
     running = healthy_app_image(docker)
-    if running != image_id(docker, PRODUCTION):
+    production = image_id(docker, PRODUCTION)
+    if not matches_runtime(docker, running, production):
         raise RuntimeError('The running app does not use the newly built production image; skipping cleanup.')
+    if running.id != production:
+        print('Production and running image indexes differ; their executable manifest matches.', flush=True)
     current = image_id(docker, CURRENT)
     previous = image_id(docker, PREVIOUS)
+    changed = bool(current) and not matches_runtime(docker, running, current)
 
     # Re-running the same image must not replace a useful rollback with itself.
     # Tagging must finish successfully before any cleanup is attempted.
-    if current and current != running:
+    if changed:
         docker.run('image', 'tag', current, PREVIOUS)
-    if current != running:
-        docker.run('image', 'tag', running, CURRENT)
+    if current != running.id:
+        docker.run('image', 'tag', running.id, CURRENT)
     print('Retained successful app image as ' + CURRENT, flush=True)
-    if (current and current != running) or previous:
+    if changed or previous:
         print('Rollback app image is available as ' + PREVIOUS, flush=True)
 
     path = warn_cleanup('Docker data location lookup', lambda: docker.run(
@@ -163,7 +201,7 @@ def complete(docker):
     before = measure_cleanup_disk(docker, path, 'before')
 
     # Only retire it when the previous tag actually moved to another image.
-    if current and current != running and previous and previous not in (current, running):
+    if changed and previous and previous not in (current, running.id):
         warn_cleanup('retired app image removal', lambda: remove_retired_image(docker, previous))
     # Deliberately omit --all: tagged current/previous/manual backups must survive.
     print('Cleanup: pruning unused portfolio images...', flush=True)
