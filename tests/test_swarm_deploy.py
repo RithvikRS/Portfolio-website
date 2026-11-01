@@ -47,6 +47,30 @@ class SwarmConfigurationTests(unittest.TestCase):
     def test_escape_preserves_literal_secret_dollars(self):
         self.assertEqual(swarm.escape({'environment': {'VALUE': '${UNSET}$hash$$'}}), {'environment': {'VALUE': '$${UNSET}$$hash$$$$'}})
 
+class ImageResolutionTests(unittest.TestCase):
+    def test_backup_alias_cannot_replace_worker_registry(self):
+        digest = 'sha256:' + 'a' * 64
+        reference = 'traefik/whoami@' + digest
+        info = [{'RepoDigests': ['portfolio-node2@' + digest, reference]}]
+        with patch.object(swarm, 'docker', return_value=json.dumps(info)):
+            self.assertEqual(swarm.image(reference), reference)
+
+    def test_tag_resolves_only_the_requested_repository(self):
+        digest = 'sha256:' + 'b' * 64
+        info = [{'RepoDigests': ['backup@' + digest, 'docker.io/library/caddy@' + digest]}]
+        with patch.object(swarm, 'docker', return_value=json.dumps(info)):
+            self.assertEqual(swarm.image('caddy:2-alpine'), info[0]['RepoDigests'][1])
+
+    def test_wrong_repository_or_explicit_digest_fails_closed(self):
+        for candidates in [['backup@sha256:abc'], ['traefik/whoami@sha256:other']]:
+            with self.subTest(candidates=candidates), patch.object(swarm, 'docker', return_value=json.dumps([{'RepoDigests': candidates}])):
+                with self.assertRaises(RuntimeError):
+                    swarm.image('traefik/whoami@sha256:requested')
+
+    def test_registry_port_is_not_removed_as_an_image_tag(self):
+        self.assertEqual(swarm.registry_repository('registry.example:5000/team/app:v1'), 'registry.example:5000/team/app')
+
+
 class SwarmReleaseTests(unittest.TestCase):
     def test_failed_health_restores_previous_spec_without_rotating_pointers(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -55,7 +79,7 @@ class SwarmReleaseTests(unittest.TestCase):
             candidate = {'file': '/private/new.json', 'image': 'app:new'}
             (private / 'current.json').write_text(json.dumps(old))
             (private / 'candidate.json').write_text(json.dumps(candidate))
-            with patch.object(swarm, 'PRIVATE', private), patch.object(swarm, 'docker') as docker, patch.object(swarm, 'check', side_effect=[RuntimeError('unhealthy'), None]), patch.object(swarm, 'run') as run:
+            with patch.object(swarm, 'PRIVATE', private), patch.object(swarm, 'docker') as docker, patch.object(swarm, 'check', side_effect=[RuntimeError('unhealthy'), None]), patch.object(swarm, 'report_failed_tasks') as report, patch.object(swarm, 'run') as run:
                 with self.assertRaisesRegex(RuntimeError, 'unhealthy'):
                     swarm.apply()
                 self.assertEqual(docker.call_args_list[0].args[-2], candidate['file'])
@@ -63,6 +87,7 @@ class SwarmReleaseTests(unittest.TestCase):
                 self.assertEqual(json.loads((private / 'current.json').read_text()), old)
                 self.assertFalse((private / 'previous.json').exists())
                 run.assert_not_called()
+                report.assert_called_once()
 
     def test_initial_rollback_has_clear_error_without_docker_changes(self):
         with tempfile.TemporaryDirectory() as directory:
