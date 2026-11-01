@@ -53,6 +53,24 @@ def escape(value):
     return value
 
 
+def registry_repository(reference):
+    repository = reference.split('@', 1)[0]
+    head, slash, tail = repository.rpartition('/')
+    if ':' in tail:
+        tail = tail.rsplit(':', 1)[0]
+    repository = head + slash + tail
+    parts = repository.split('/')
+    if len(parts) == 1:
+        return 'docker.io/library/' + repository
+    if '.' not in parts[0] and ':' not in parts[0] and parts[0] != 'localhost':
+        return 'docker.io/' + repository
+    if parts[0] in ('index.docker.io', 'registry-1.docker.io'):
+        parts[0] = 'docker.io'
+    if parts[0] == 'docker.io' and len(parts) == 2:
+        parts.insert(1, 'library')
+    return '/'.join(parts)
+
+
 def image(reference):
     try:
         info = json.loads(docker('image', 'inspect', reference))[0]
@@ -60,9 +78,17 @@ def image(reference):
         print('Pulling required image ' + reference, flush=True)
         docker('pull', reference, timeout=600)
         info = json.loads(docker('image', 'inspect', reference))[0]
-    if info.get('RepoDigests'):
-        return info['RepoDigests'][0]
-    raise RuntimeError('A service image has no immutable registry digest: ' + reference)
+    # A local backup tag can become the first RepoDigest. Never change registries
+    # or repositories when resolving a configured image for another Swarm node.
+    repository = registry_repository(reference)
+    requested_digest = reference.split('@', 1)[1] if '@' in reference else None
+    for candidate in info.get('RepoDigests', []):
+        if '@' not in candidate:
+            continue
+        digest = candidate.split('@', 1)[1]
+        if registry_repository(candidate) == repository and (requested_digest is None or digest == requested_digest):
+            return reference if requested_digest else candidate
+    raise RuntimeError('No immutable digest matches the configured registry repository: ' + reference)
 
 
 def render(compose, settings, app_image, pins, secret, release, root=ROOT):
@@ -129,7 +155,8 @@ def render(compose, settings, app_image, pins, secret, release, root=ROOT):
 
 def prepare(reuse_image=None):
     PRIVATE.mkdir(mode=0o700, exist_ok=True)
-    print(run(['python3', '-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_*.py']), flush=True)
+    run(['python3', '-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_*.py'])
+    print('Deployment tests passed.', flush=True)
     settings = json.loads((ROOT / 'deploy/swarm.json').read_text())
     compose = json.loads(docker('compose', '--env-file', '.env.production', '-f', 'compose.production.yaml', 'config', '--format', 'json'))
     nodes = json.loads(docker('node', 'inspect', *docker('node', 'ls', '-q').split()))
@@ -228,6 +255,19 @@ def check():
     print('All seven services converged; HTTPS, protected routes, node 2, Portainer and ntfy access checks passed.', flush=True)
 
 
+def report_failed_tasks():
+    # Save the task error history before rollback replaces failed task entries.
+    try:
+        summaries = docker('stack', 'ps', 'portfolio', '--no-trunc', '--format',
+                           '{{.Name}} | {{.Node}} | {{.CurrentState}} | {{.Error}}')
+        path = PRIVATE / 'last-failed-tasks.txt'
+        path.write_text(summaries + '\n', encoding='utf-8')
+        path.chmod(0o600)
+        print('Swarm task history before rollback:\n' + summaries, flush=True)
+    except Exception:
+        print('Could not capture task history; inspect docker stack ps portfolio.', flush=True)
+
+
 def apply():
     candidate = json.loads((PRIVATE / 'candidate.json').read_text())
     old = json.loads((PRIVATE / 'current.json').read_text()) if (PRIVATE / 'current.json').exists() else None
@@ -238,6 +278,7 @@ def apply():
         print(run(['python3', 'scripts/setup-portainer.py', '--configure', '--swarm']), flush=True)
         print(run(['python3', 'scripts/swarm-portainer.py']), flush=True)
     except Exception:
+        report_failed_tasks()
         if old:
             print('Validation failed; restoring the last successful Swarm specification.', flush=True)
             docker('stack', 'deploy', '--resolve-image', 'never', '-c', old['file'], 'portfolio')
