@@ -21,9 +21,9 @@ Both accounts have the regular user role. Neither can access another topic or ma
 
    This displays the server, topic, username, and generated password. Save the password in your password manager; keep the output out of screenshots, Git, and workflow logs.
 
-3. In ntfy, open **Settings â†’ Users â†’ Add user**. Enter the service URL `https://ntfy.144.24.135.201.sslip.io`, username `iphone`, and the password from SSH. Save.
+3. In ntfy, open **Settings → Users → Add user**. Enter the service URL `https://ntfy.144.24.135.201.sslip.io`, username `iphone`, and the password from SSH. Save.
 4. Return to the subscription list and tap **+**. Enter topic `arm-provisioning`, enable **Use another server**, and enter the same service URL. Tap **Subscribe**. Do not leave the server set to `https://ntfy.sh`.
-5. In iPhone **Settings â†’ Notifications â†’ ntfy**, enable **Allow Notifications**, **Lock Screen**, **Banners**, and **Sounds**. If using Focus or Scheduled Summary, allow ntfy through Focus and keep it out of the summary for prompt alerts.
+5. In iPhone **Settings → Notifications → ntfy**, enable **Allow Notifications**, **Lock Screen**, **Banners**, and **Sounds**. If using Focus or Scheduled Summary, allow ntfy through Focus and keep it out of the summary for prompt alerts.
 6. Lock the phone, then run this command in your AMD SSH session:
 
    ```sh

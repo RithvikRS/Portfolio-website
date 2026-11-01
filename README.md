@@ -1,14 +1,14 @@
-# Rithvikâ€™s portfolio
+# Rithvik’s portfolio
 
 **A portfolio, a publishing space, and a self-hosted engineering project.**
 
-A home for my work across full-stack development, cloud infrastructure, and machine learning. Explore the projects, read what Iâ€™m learning, or look behind the scenes at the application and deployment code that run this site on Oracle Cloud.
+A home for my work across full-stack development, cloud infrastructure, and machine learning. Explore the projects, read what I’m learning, or look behind the scenes at the application and deployment code that run this site on Oracle Cloud.
 
-[**Visit the portfolio â†’**](https://rithvik.ddns.net/) Â· [Projects](https://rithvik.ddns.net/Projects.html) Â· [Blog](https://rithvik.ddns.net/blog/) Â· [Learning notebook](https://rithvik.ddns.net/learn/)
+[**Visit the portfolio →**](https://rithvik.ddns.net/) · [Projects](https://rithvik.ddns.net/Projects.html) · [Blog](https://rithvik.ddns.net/blog/) · [Learning notebook](https://rithvik.ddns.net/learn/)
 
-[Run locally](#run-locally) Â· [How it works](#how-it-works) Â· [Deploy to production](#deploy-to-production) Â· [Documentation](#documentation)
+[Run locally](#run-locally) · [How it works](#how-it-works) · [Deploy to production](#deploy-to-production) · [Documentation](#documentation)
 
-## Whatâ€™s inside
+## What’s inside
 
 | Experience | What it offers |
 | --- | --- |
@@ -66,7 +66,7 @@ This local command previews the public portfolio, empty writing collections, and
 
 Prefer Docker? Run `docker compose up --build -d --wait` and open **http://localhost:8080**. See the [container guide](deploy/DOCKER.md) for runtime settings.
 
-The deployment image-retention tests use Pythonâ€™s standard library and a fake Docker client:
+The deployment image-retention tests use Python’s standard library and a fake Docker client:
 
 ```sh
 python3 -m unittest discover -s tests -p 'test_deploy_images.py'
@@ -107,7 +107,7 @@ For a manual deployment, run **inside Oracle SSH**:
 bash /opt/portfolio_redeploy.sh
 ```
 
-The existing shortcut runs the repository script. Use `bash /opt/portfolio_redeploy.sh --no-pull` to rebuild the current server checkout after a server-only settings change. Local `.env` edits do not update Oracleâ€™s `.env.production`.
+The existing shortcut runs the repository script. Use `bash /opt/portfolio_redeploy.sh --no-pull` to rebuild the current server checkout after a server-only settings change. Local `.env` edits do not update Oracle’s `.env.production`.
 
 ### Image cleanup and rollback
 
@@ -119,7 +119,7 @@ After **all deployment checks pass**, the script retains successful app images a
 | `rithvik-portfolio:current` | Last app image to pass the complete deployment checks. |
 | `rithvik-portfolio:previous` | Previous successful app image, retained for manual rollback. |
 
-Cleanup removes unused, untagged portfolio images and eligible retired rollback images. Explicit backup tags and other applicationsâ€™ images are preserved. The default builderâ€™s shared cache is pruned toward **256 MB**; records still in use may keep it above that target. Future builds can take longer as cache is rebuilt. Runtime data, volumes, and containers are preserved.
+Cleanup removes unused, untagged portfolio images and eligible retired rollback images. Explicit backup tags and other applications’ images are preserved. The default builder’s shared cache is pruned toward **256 MB**; records still in use may keep it above that target. Future builds can take longer as cache is rebuilt. Runtime data, volumes, and containers are preserved.
 
 Read the **Cleanup disk usage before/after** lines and the **Net disk space freed during cleanup** summary in the deployment log to see the overall change across image removal and both prune steps. The measurements show used and available space on Docker's filesystem, in readable units and exact bytes. Other server activity and delayed Docker reclamation can affect this net change; an increase appears explicitly instead of being reported as zero.
 
