@@ -4,6 +4,11 @@ set -Eeuo pipefail
 umask 077
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
+if [[ -f .swarm/enabled ]]; then
+  printf 'Use the private PC Backup-Portfolio.ps1 script for a consistent Swarm backup. See deploy/BACKUPS.md.\n' >&2
+  exit 1
+fi
+
 exec 9>"$(git rev-parse --git-path portfolio-deploy.lock)"
 flock -n 9 || { printf 'Wait for the deployment to finish before backing up.\n' >&2; exit 1; }
 exec 8>/tmp/ampere-launch.lock

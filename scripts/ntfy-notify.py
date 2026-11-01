@@ -59,10 +59,17 @@ def write_private(path, value):
 def publish(title, message, priority=3):
     credentials = json.loads((PRIVATE / 'publisher.json').read_text())
     authorization = base64.b64encode((credentials['username'] + ':' + credentials['password']).encode()).decode()
-    request = Request('http://127.0.0.1:2586/' + credentials['topic'], data=message.encode(),
+    base = 'http://127.0.0.1:2586'
+    if (ROOT / '.swarm/enabled').exists():
+        current = json.loads((ROOT / '.swarm/current.json').read_text())
+        stack = json.loads(Path(current['file']).read_text())
+        base = stack['services']['ntfy']['environment']['NTFY_BASE_URL']
+        if not base.startswith('https://'):
+            raise RuntimeError('Swarm notification publishing requires HTTPS.')
+    request = Request(base.rstrip('/') + '/' + credentials['topic'], data=message.encode(),
                       headers={'Authorization': 'Basic ' + authorization, 'Title': title,
                                'Priority': str(priority), 'Content-Type': 'text/plain; charset=utf-8'})
-    # Keep local credentials on this machine and reject unexpected redirects.
+    # Reject redirects; Swarm uses the configured HTTPS endpoint.
     from urllib.request import HTTPRedirectHandler
     class NoRedirect(HTTPRedirectHandler):
         def redirect_request(self, *args, **kwargs):

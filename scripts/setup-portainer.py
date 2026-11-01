@@ -102,7 +102,7 @@ class API:
             return json.loads(body) if body else None
 
 
-def configure(config, docker, compose):
+def configure(config, docker, compose, swarm=False):
     service = config['services']['app']
     username = service['environment']['ADMIN_USERNAME']
     if username == 'admin':
@@ -110,16 +110,24 @@ def configure(config, docker, compose):
     users = json.loads((ROOT / '.auth/secrets/users.yml').read_text())['users']
     if username not in users or 'admins' not in users[username]['groups']:
         raise RuntimeError('ADMIN_USERNAME must already exist in the Authelia admins group.')
-    container = run(compose + ['ps', '-q', 'portainer'])
-    if not container:
-        raise RuntimeError('Start Portainer before running --configure.')
-    inspected = json.loads(run(docker + ['inspect', container]))[0]
-    networks = inspected['NetworkSettings']['Networks']
-    address = next(value['IPAddress'] for name, value in networks.items() if name.endswith('_management'))
-    if not ipaddress.ip_address(address).is_private:
-        raise RuntimeError('Refusing to send credentials outside the private Docker network.')
     origin = 'https://' + config['services']['auth']['environment']['DOMAIN']
-    api = API(address, origin)
+    if swarm or (ROOT / '.swarm/enabled').exists():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('swarm_portainer', ROOT / 'scripts/swarm-portainer.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        api = module.API()
+    else:
+        container = run(compose + ['ps', '-q', 'portainer'])
+        if not container:
+            raise RuntimeError('Start Portainer before running --configure.')
+        inspected = json.loads(run(docker + ['inspect', container]))[0]
+        networks = inspected['NetworkSettings']['Networks']
+        address = next(value['IPAddress'] for name, value in networks.items() if name.endswith('_management'))
+        if not ipaddress.ip_address(address).is_private:
+            raise RuntimeError('Refusing to send credentials outside the private Docker network.')
+        origin = 'https://' + config['services']['auth']['environment']['DOMAIN']
+        api = API(address, origin)
     for attempt in range(60):
         try:
             api.call('GET', '/status')
@@ -175,6 +183,7 @@ def main():
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument('--prepare', action='store_true')
     modes.add_argument('--configure', action='store_true')
+    parser.add_argument('--swarm', action='store_true', help='Use the running Swarm task network.')
     args = parser.parse_args()
     os.chdir(ROOT)
     os.umask(0o077)
@@ -186,7 +195,7 @@ def main():
     if args.prepare:
         prepare(config, docker)
     else:
-        configure(config, docker, compose)
+        configure(config, docker, compose, args.swarm)
 
 
 if __name__ == '__main__':

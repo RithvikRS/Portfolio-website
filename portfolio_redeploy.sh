@@ -81,6 +81,11 @@ main() {
     printf 'Using the existing server checkout without pulling Git changes.\n'
   fi
 
+  if [[ -f .swarm/enabled ]]; then
+    PORTFOLIO_DEPLOY_LOCK_HELD=1 python3 scripts/swarm-deploy.py deploy
+    return
+  fi
+
   local -a compose=("${docker_cmd[@]}" compose --env-file .env.production -f compose.production.yaml)
   if [[ ! -f .auth/secrets/users.yml || ! -f .auth/secrets/session-secret || ! -f .auth/secrets/storage-key ]]; then
     printf 'Initialize the administrator once with: python3 scripts/setup-admin.py\n' >&2

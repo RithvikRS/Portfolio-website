@@ -9,3 +9,5 @@ tmp/
 .ntfy/
 __pycache__/
 .notes/
+
+.swarm/

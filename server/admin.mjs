@@ -1,9 +1,9 @@
+import { proxyMatcher } from './proxy-trust.mjs';
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-const normalizeIP = value => value?.startsWith('::ffff:') ? value.slice(7) : value;
 
 export function adminIdentity(req, { enabled = false, trustedProxyIPs = [], username = 'rithvik' } = {}) {
   // Identity headers are accepted only from the explicitly configured proxy.
-  if (!enabled || !trustedProxyIPs.includes(normalizeIP(req.socket.remoteAddress))) return null;
+  if (!enabled || !proxyMatcher(trustedProxyIPs)(req.socket.remoteAddress)) return null;
   if (req.headers['remote-user'] !== username) return null;
   const groups = String(req.headers['remote-groups'] || '').split(',').map(value => value.trim());
   if (!groups.includes('admins')) return null;

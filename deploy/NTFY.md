@@ -1,6 +1,6 @@
 # Private notifications
 
-Run ntfy on the AMD server at **https://ntfy.144.24.135.201.sslip.io**. Caddy handles HTTPS; ntfy handles API and app authentication. The `arm-provisioning` topic carries ARM provisioning alerts.
+Run ntfy on the AMD server at **https://ntfy.144.24.135.201.sslip.io**. Caddy handles HTTPS; ntfy handles API and app authentication. The existing `arm-provisioning` topic and iPhone credentials remain available. ARM provisioning and its cron trigger are retired; the topic name is retained for compatibility.
 
 | Account | Access |
 | --- | --- |
@@ -33,6 +33,8 @@ Both accounts have the regular user role. Neither can access another topic or ma
    Look for **ntfy test** on the lock screen. This tests delivery without running an Oracle launch request. The iPhone account cannot publish; send tests from SSH.
 
 The server retains messages for seven days. A message already in the topic can confirm authenticated reading, but use a new test after subscribing to check background delivery.
+
+> Production uses [Swarm](SWARM.md). Do not run Compose setup/recreation commands below on the live stack. Keep the provisioning integration below as historical reference; do not reinstall its cron. Run `python3 scripts/setup-ntfy.py check` for a quiet access check. Manual test publishing uses the configured HTTPS endpoint.
 
 ## How iPhone delivery works
 
