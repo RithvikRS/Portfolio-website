@@ -1,14 +1,14 @@
-# Rithvik’s portfolio
+# Rithvikâ€™s portfolio
 
 **A portfolio, a publishing space, and a self-hosted engineering project.**
 
-A home for my work across full-stack development, cloud infrastructure, and machine learning. Explore the projects, read what I’m learning, or look behind the scenes at the application and deployment code that run this site on Oracle Cloud.
+A home for my work across full-stack development, cloud infrastructure, and machine learning. Explore the projects, read what Iâ€™m learning, or look behind the scenes at the application and deployment code that run this site on Oracle Cloud.
 
-[**Visit the portfolio →**](https://rithvik.ddns.net/) · [Projects](https://rithvik.ddns.net/Projects.html) · [Blog](https://rithvik.ddns.net/blog/) · [Learning notebook](https://rithvik.ddns.net/learn/)
+[**Visit the portfolio â†’**](https://rithvik.ddns.net/) Â· [Projects](https://rithvik.ddns.net/Projects.html) Â· [Blog](https://rithvik.ddns.net/blog/) Â· [Learning notebook](https://rithvik.ddns.net/learn/)
 
-[Run locally](#run-locally) · [How it works](#how-it-works) · [Deploy to production](#deploy-to-production) · [Documentation](#documentation)
+[Run locally](#run-locally) Â· [How it works](#how-it-works) Â· [Deploy to production](#deploy-to-production) Â· [Documentation](#documentation)
 
-## What’s inside
+## Whatâ€™s inside
 
 | Experience | What it offers |
 | --- | --- |
@@ -22,7 +22,7 @@ The interface uses semantic HTML, custom CSS, and vanilla JavaScript. Public por
 
 ## How it works
 
-Generated portfolio pages and a Node.js backend run together in one app container. Caddy handles HTTPS and routing, Authelia handles shared sign-in, Portainer manages Docker, and ntfy delivers private server notifications. All five services run through Docker Compose on the Oracle AMD server.
+Generated portfolio pages and a Node.js backend run together in one app container. Caddy handles HTTPS and routing, Authelia handles shared sign-in, Portainer manages Docker, and ntfy delivers private server notifications. Docker Swarm manages two Oracle AMD nodes: node 1 hosts the five core services and their data; node 2 runs the authenticated demo service. A Portainer agent runs on each node.
 
 ```mermaid
 flowchart LR
@@ -31,19 +31,20 @@ flowchart LR
     caddy --> auth[Authelia: shared sign-in]
     caddy --> portainer[Portainer: Docker management]
     caddy --> ntfy[ntfy: private notifications]
-    arm[ARM provisioning cron] --> ntfy
+    caddy --> worker[Node 2: authenticated demo]
+    portainer --> agents[Swarm agents on both nodes]
     portainer -. OpenID Connect .-> auth
     app --> notes[(Persistent writing storage)]
 ```
 
-Only Caddy publishes public web ports. ntfy also binds its API to loopback for the local ARM cron job. Administrator and Portainer routes require authentication; public portfolio pages and published writing remain open to visitors.
+Only Caddy publishes public web ports. Private overlay networks connect the services; state remains pinned to node 1. ARM provisioning is retired. Administrator and Portainer routes require authentication; public portfolio pages and published writing remain open to visitors.
 
 | Layer | Tools |
 | --- | --- |
 | Public interface | Generated HTML, custom CSS, vanilla JavaScript, local SVG illustrations |
 | Application | Node.js 24 in Docker, Nodemailer, Markdown rendering and HTML sanitization |
 | Access and routing | Caddy HTTPS, Authelia, Portainer OpenID Connect |
-| Hosting and delivery | Oracle Cloud AMD, Docker Compose, GitHub Actions, SSH |
+| Hosting and delivery | Oracle Cloud AMD, Docker Swarm, GitHub Actions, SSH |
 
 ## Run locally
 
@@ -65,7 +66,7 @@ This local command previews the public portfolio, empty writing collections, and
 
 Prefer Docker? Run `docker compose up --build -d --wait` and open **http://localhost:8080**. See the [container guide](deploy/DOCKER.md) for runtime settings.
 
-The deployment image-retention tests use Python’s standard library and a fake Docker client:
+The deployment image-retention tests use Pythonâ€™s standard library and a fake Docker client:
 
 ```sh
 python3 -m unittest discover -s tests -p 'test_deploy_images.py'
@@ -96,9 +97,9 @@ Open [Fieldnotes](https://rithvik.ddns.net/admin/notes/) using your existing log
 
 The [workflow file](.github/workflows/deploy.yml) starts on pushes to `main`, then checks GitHub for a merged PR whose merge commit matches the pushed commit. Only a matching merged PR proceeds to production. A direct push starts the check but skips deployment; pushes to `V2` and closing an unmerged PR do not start this workflow. The check uses read-only PR access and receives no production secrets. The deployment uses the trusted `main` context and connects over SSH to run `/opt/portfolio/portfolio_redeploy.sh`. GitHub supplies `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`, and `SSH_KNOWN_HOSTS` from the `production` environment, which is restricted to `main`. It does not check out or execute unmerged PR code.
 
-The server fetches the latest `main`, updates its checkout with a fast-forward merge, validates Compose/Authelia/Caddy and ntfy, and builds the app image. The build generates pages, checks links, and runs tests. The script then updates services, reconciles Portainer SSO, recreates ntfy to apply its settings, reloads Caddy, and checks public endpoints and private access gates. A conflicting server edit stops the deployment for reconciliation.
+The server fetches `main`, reconciles matching server edits, and builds and tests the app. Swarm updates services, then checks HTTPS, authentication gates, node 2, Portainer, and ntfy privacy. Failed service checks trigger an attempt to restore the last successful Swarm specification. A conflicting server edit stops deployment for reconciliation. Follow the [Swarm runbook](deploy/SWARM.md) for placement, maintenance, and recovery.
 
-Git updates tracked source files, including removing files deleted in `main`; it does not wipe the server directory. Docker replaces containers as needed. `.env.production`, `.auth/`, `.portainer/`, `.notes/`, `.ntfy/`, and Caddy certificate volumes persist. The existing app serves during the build, but container replacement may briefly interrupt requests. Authelia restarts, so sign in again afterward.
+Git updates tracked source files, including removing files deleted in `main`; it does not wipe the server directory. Docker replaces containers as needed. `.env.production`, `.auth/`, `.portainer/`, `.notes/`, `.ntfy/`, `.swarm/`, and Caddy certificate volumes persist. The existing app serves during the build, but container replacement may briefly interrupt requests. Authelia restarts, so sign in again afterward.
 
 For a manual deployment, run **inside Oracle SSH**:
 
@@ -106,7 +107,7 @@ For a manual deployment, run **inside Oracle SSH**:
 bash /opt/portfolio_redeploy.sh
 ```
 
-The existing shortcut runs the repository script. Use `bash /opt/portfolio_redeploy.sh --no-pull` to rebuild the current server checkout after a server-only settings change. Local `.env` edits do not update Oracle’s `.env.production`.
+The existing shortcut runs the repository script. Use `bash /opt/portfolio_redeploy.sh --no-pull` to rebuild the current server checkout after a server-only settings change. Local `.env` edits do not update Oracleâ€™s `.env.production`.
 
 ### Image cleanup and rollback
 
@@ -118,20 +119,15 @@ After **all deployment checks pass**, the script retains successful app images a
 | `rithvik-portfolio:current` | Last app image to pass the complete deployment checks. |
 | `rithvik-portfolio:previous` | Previous successful app image, retained for manual rollback. |
 
-Cleanup removes unused, untagged portfolio images and eligible retired rollback images. Explicit backup tags and other applications’ images are preserved. The default builder’s shared cache is pruned toward **256 MB**; records still in use may keep it above that target. Future builds can take longer as cache is rebuilt. Runtime data, volumes, and containers are preserved.
+Cleanup removes unused, untagged portfolio images and eligible retired rollback images. Explicit backup tags and other applicationsâ€™ images are preserved. The default builderâ€™s shared cache is pruned toward **256 MB**; records still in use may keep it above that target. Future builds can take longer as cache is rebuilt. Runtime data, volumes, and containers are preserved.
 
 Read the **Cleanup disk usage before/after** lines and the **Net disk space freed during cleanup** summary in the deployment log to see the overall change across image removal and both prune steps. The measurements show used and available space on Docker's filesystem, in readable units and exact bytes. Other server activity and delayed Docker reclamation can affect this net change; an increase appears explicitly instead of being reported as zero.
 
-A failed build, startup, or endpoint check does not rotate the recovery tags or run cleanup. There is **no automatic rollback**. The [rollback runbook](deploy/DOCKER.md#roll-back-an-app-deployment) includes the SSH commands, image selection, health checks, and steps for resuming deployment:
-
-- **Failed deployment:** restore `current`, which still holds the last successful app image. If the build failed and the existing site works, an app rollback is usually unnecessary.
-- **Deployment succeeded but a bug appeared later:** restore `previous`, the successful image before that update.
-
-Rollback restores the app only; configuration and stored data stay at their current versions. Fix or revert the faulty change through a PR before deploying again. A fresh installation gains a previous image after a second distinct image succeeds.
+A failed build leaves running services in place. Failed Swarm health checks attempt to restore the last successful stack. After two successful Swarm releases, use `python3 scripts/swarm-deploy.py rollback` on node 1 to restore the previous service specification. Rollback leaves database contents unchanged. Read the [Swarm rollback runbook](deploy/SWARM.md#roll-back), including the initial migration fallback, before using it.
 
 ## Documentation
 
-Set up private ARM alerts and your iPhone with the [ntfy guide](deploy/NTFY.md). Capacity retries stay quiet; a claimed instance or actionable error sends a notification.
+Use the [ntfy guide](deploy/NTFY.md) for private notifications and iPhone setup. ARM provisioning is retired; no capacity retry job runs.
 
 | Guide | Start here for |
 | --- | --- |

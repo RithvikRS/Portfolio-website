@@ -41,6 +41,7 @@
     # Send them through the same protected route; do not expose a second proxy.
     @portainerTranslations path /locales/*/translation.json
     redir @portainerTranslations /portainer{uri} 307
+
     @containers path /portainer/*
     handle @containers {
         # Authorize the original URL before removing Portainer's path prefix.
@@ -50,6 +51,20 @@
             }
             uri strip_prefix /portainer
             reverse_proxy portainer:9000
+        }
+    }
+
+    # Require administrator access before forwarding to node 2.
+    @node2 path /node2 /node2/*
+    handle @node2 {
+        route {
+            forward_auth auth:9091 {
+                uri /api/authz/forward-auth?authelia_url=https://{$DOMAIN}/auth/
+                # Supply identity only after authorization.
+                copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+            }
+            uri strip_prefix /node2
+            reverse_proxy 10.0.0.13:8080
         }
     }
 

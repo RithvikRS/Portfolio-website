@@ -1,5 +1,7 @@
 # Docker and Oracle deployment
 
+> Production runs on two-node Swarm. Use [SWARM.md](SWARM.md) for deployment, status, rollback, and node placement. Compose/systemd commands below apply only to their named legacy or local setup; do not start them alongside production Swarm.
+
 Use `/opt/portfolio` on Oracle with the `main` branch and `compose.production.yaml`. Point `rithvik.ddns.net` to `144.24.135.201`. Caddy handles HTTPS, Node serves the portfolio and admin dashboard, and Authelia handles administrator sign-in.
 
 Use the dashboard for shared access to Portainer and Fieldnotes. Follow the [writing guide](FIELDNOTES.md) to edit posts and back up content, the [admin guide](ADMIN.md) to manage account access, and the [Portainer guide](PORTAINER.md) to manage containers.

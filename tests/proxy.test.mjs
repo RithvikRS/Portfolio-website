@@ -40,8 +40,8 @@ test('disabled proxy trust and invalid forwarded addresses fall back to the peer
   assert.equal(await proxied('172.30.0.3', '198.51.100.1, 198.51.100.2'), 429);
 });
 
-test('proxy configuration rejects wildcards, subnets, and hostnames', () => {
-  for (const ip of ['*', '172.30.0.0/24', 'caddy', 'not-an-ip']) {
+test('proxy configuration rejects wildcards, unrestricted networks, and hostnames', () => {
+  for (const ip of ['*', '0.0.0.0/0', 'caddy', 'not-an-ip']) {
     assert.throws(() => fixture({ trustProxy: true, trustedProxyIPs: [ip] }), /TRUSTED_PROXY_IPS/);
   }
 });

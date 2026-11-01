@@ -16,7 +16,8 @@ AppImage = namedtuple('AppImage', 'id manifest')
 
 
 class Docker:
-    def __init__(self, sudo=False):
+    def __init__(self, sudo=False, swarm=False):
+        self.swarm = swarm
         self.command = ['sudo', '-n', 'docker'] if sudo else ['docker']
 
     def run(self, *args, capture=False):
@@ -51,7 +52,10 @@ def image_id(docker, reference):
 
 
 def healthy_app_image(docker, required=True):
-    containers = docker.run(
+    if getattr(docker, 'swarm', False):
+        containers = docker.run('ps', '--quiet', '--filter', 'label=com.docker.swarm.service.name=portfolio_app', capture=True).splitlines()
+    else:
+        containers = docker.run(
         'ps', '--all', '--quiet',
         '--filter', 'label=com.docker.compose.project=portfolio',
         '--filter', 'label=com.docker.compose.service=app',
@@ -219,11 +223,12 @@ def complete(docker):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--swarm', action='store_true', help='Inspect the running Swarm app task.')
     parser.add_argument('--sudo', action='store_true', help='Use sudo -n docker.')
     parser.add_argument('phase', choices=['prepare', 'complete'])
     args = parser.parse_args()
     try:
-        {'prepare': prepare, 'complete': complete}[args.phase](Docker(args.sudo))
+        {'prepare': prepare, 'complete': complete}[args.phase](Docker(args.sudo, args.swarm))
     except (subprocess.CalledProcessError, OSError, RuntimeError, ValueError) as error:
         parser.exit(1, 'Image retention failed; cleanup was not started: ' + str(error) + '\n')
 

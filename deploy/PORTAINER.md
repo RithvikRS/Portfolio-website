@@ -1,5 +1,7 @@
 # Portainer on Oracle
 
+> Production runs on two-node Swarm. Use [SWARM.md](SWARM.md) for deployment, status, rollback, and node placement. Compose/systemd commands below apply only to their named legacy or local setup; do not start them alongside production Swarm.
+
 Open [Portainer](https://rithvik.ddns.net/portainer/) to manage containers on the AMD server. Keep Portainer CE **2.45.2 LTS** pinned by image digest in `compose.production.yaml` until you choose to upgrade. Use [Fieldnotes](FIELDNOTES.md) to edit blog posts and learning notes with the same login.
 
 ## Sign in and sign out

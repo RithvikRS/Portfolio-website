@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
+import { normalizeIP, proxyMatcher } from './proxy-trust.mjs';
 
 const MAX_BYTES = 32 * 1024;
 const EMAIL = /^[^\s@<>,;:\x00-\x1f\x7f]+@[^\s@<>,;:\x00-\x1f\x7f]+\.[^\s@<>,;:\x00-\x1f\x7f]+$/;
@@ -39,17 +40,16 @@ async function readBody(req) {
   catch { throw problem(400, 'Please check the form and try again.'); }
 }
 
-const normalizeIP = value => value.startsWith('::ffff:') && isIP(value.slice(7)) === 4 ? value.slice(7) : value;
 
 function clientIP(req, trustedProxies) {
   const peer = normalizeIP(req.socket.remoteAddress || 'unknown');
   const forwarded = req.headers['x-real-ip'];
-  return trustedProxies.has(peer) && typeof forwarded === 'string' && isIP(forwarded) ? normalizeIP(forwarded) : peer;
+  return trustedProxies(peer) && typeof forwarded === 'string' && isIP(forwarded) ? normalizeIP(forwarded) : peer;
 }
 
 export function createContactHandler({ sendMessage, origin, trustProxy = false, trustedProxyIPs = [], now = Date.now, requestLimit = 5 }) {
-  if (!Array.isArray(trustedProxyIPs) || trustedProxyIPs.some(ip => typeof ip !== 'string' || !isIP(ip))) throw new Error('TRUSTED_PROXY_IPS must contain only IP addresses.');
-  const trustedProxies = new Set(trustProxy ? ['127.0.0.1', '::1', ...trustedProxyIPs.map(normalizeIP)] : []);
+  proxyMatcher(trustedProxyIPs);
+  const trustedProxies = proxyMatcher(trustProxy ? ['127.0.0.1', '::1', ...trustedProxyIPs] : []);
   const clients = new Map();
   const deliveries = new Map();
   let globalWindow = { count: 0, expires: 0 };

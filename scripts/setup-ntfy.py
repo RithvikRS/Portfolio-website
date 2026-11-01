@@ -151,6 +151,8 @@ def main():
     elif args.mode == 'validate':
         validate(config, docker)
     elif args.mode == 'configure':
+        if (ROOT / '.swarm/enabled').exists():
+            raise RuntimeError('Swarm preserves the existing ntfy accounts. Change accounts through the running ntfy task; do not start a second database writer.')
         configure(compose)
     else:
         check(config)
