@@ -11,3 +11,7 @@ __pycache__/
 .notes/
 
 .swarm/
+
+# Additional service credentials and persistent bind data
+.secrets/
+.services/

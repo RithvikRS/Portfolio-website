@@ -1,8 +1,12 @@
-# Run production with Docker Swarm
+# Operate and extend the production Swarm
 
-Use node 1 as the manager and data host. Keep node 2 as a worker. Run the commands below as `opc` on node 1, from `/opt/portfolio`.
+Run manager commands as `opc` on node 1 in `/opt/portfolio`. Make public configuration changes locally, push to `V2`, and merge a PR into `main`. Do not make persistent service edits through Portainer: the next deployment restores the Git configuration.
 
-## Placement and storage
+[Architecture](#architecture) | [Add a service](#add-a-stateless-service) | [Storage](#add-a-service-with-persistent-storage) | [Configuration](#update-configuration) | [Add nodes](#add-a-worker-node) | [Maintenance](#maintain-or-remove-a-node) | [Rollback](#roll-back)
+
+## Architecture
+
+Node 1 is the manager, data host, build host, and public ingress. Node 2 is a worker. Additional Linux workers can join without changing a node count in Python.
 
 | Service | Placement | Persistent state |
 | --- | --- | --- |
@@ -11,51 +15,259 @@ Use node 1 as the manager and data host. Keep node 2 as a worker. Run the comman
 | ntfy | Node 1 | `.ntfy/` |
 | portainer | Node 1 | `.portainer/` |
 | caddy | Node 1 | `portfolio_caddy_data`, `portfolio_caddy_config` |
-| node2 | Node 2 | None; authenticated demo at `/node2/` |
-| agent | Both nodes | Docker socket and volume access for Portainer |
+| node2 demo | A node with `portfolio.worker=true` | None |
+| agent | Every eligible Linux node | Docker socket/volume access for Portainer |
+| Additional services | Their catalog placement constraints | Explicit mounts, if configured |
 
-Keep `portfolio.data=true` on node 1 only and `portfolio.worker=true` on node 2. The five core services each run one replica and use stop-first updates. Never scale these services above one replica: their local databases and certificate storage do not support this deployment pattern.
+```mermaid
+flowchart LR
+    visitor[Browser / iPhone] --> caddy[Caddy on node 1: HTTPS]
+    caddy --> app[Portfolio + Fieldnotes on node 1]
+    caddy --> auth[Authelia on node 1]
+    caddy --> ntfy[ntfy on node 1]
+    caddy --> portainer[Portainer on node 1]
+    caddy --> worker[Additional services on worker nodes]
+    portainer --> agents[Global agent on eligible nodes]
+    app --> data[Node 1 persistent storage]
+    auth --> data
+    ntfy --> data
+    portainer --> data
+```
 
-Caddy publishes 80/TCP and 443/TCP+UDP on node 1. Overlay networks carry service traffic. The dedicated app/Caddy network uses `10.42.0.0/24`; only that network supplies trusted proxy headers. Keep the subnet exclusive to those two services. Agents have no public host port. Open Swarm transport only between the nodes: 7946/TCP+UDP and 4789/UDP, plus 2377/TCP to the manager.
+Only Caddy publishes application ports: 80/TCP and 443/TCP+UDP on node 1. DNS stays pointed at node 1. Private overlay networks connect services across nodes. The `swarm_backend` network, `10.42.0.0/24`, is exclusive to Caddy and the portfolio app because the app trusts identity headers from that subnet. Each additional service uses catalog networks; attach Caddy only when it needs to proxy that service.
 
-This setup does not provide data failover. If node 1 goes offline, the website and stateful services wait for node 1 to return. A single manager also cannot schedule replacements while offline. Adding shared storage alone does not fix manager quorum, ingress, or application consistency; design those together when adding failover.
+Keep `portfolio.data=true` on node 1 only. Core services each use one replica and stop-first updates. Additional services with writable bind mounts or volumes must also use one stop-first replica on the data node. This prevents simultaneous writers; it does not replicate storage.
 
-## Deploy a change
+There is no automatic data failover. Losing node 1 stops ingress and the stateful services, and the single manager cannot schedule replacements while offline. Adding workers does not solve this. Plan manager quorum, storage replication, application consistency, and ingress together before enabling failover.
 
-Push to `V2`, then merge a PR into `main`. GitHub Actions connects to node 1 and runs `portfolio_redeploy.sh`. The `.swarm/enabled` marker selects Swarm deployment.
+## Which file controls what?
 
-Keep public service settings in `compose.production.yaml`, placement/image settings in `deploy/swarm.json`, and routing in `deploy/Caddyfile.swarm`. Compose supplies normalized settings to the renderer; **do not run Compose up against production**. Use `deploy/Caddyfile.docker` only for legacy Compose recovery.
+| File | Purpose |
+| --- | --- |
+| `compose.production.yaml` | Settings for the five core services; input to the Swarm renderer |
+| `deploy/swarm.json` | Dedicated proxy subnet, data-node constraint, Portainer agent image |
+| `deploy/swarm-services.json` | Additional services, including `node2`; their networks, resources, storage and route checks |
+| `deploy/Caddyfile.swarm` | Live HTTPS routing and forward authentication |
+| `deploy/authelia/configuration.yml` | Access rules and shared sign-in configuration |
+| `deploy/ntfy/server.yml` | ntfy server configuration |
+| `.env.production` | Private core service environment values on node 1 |
+| `.swarm/services.private.json` | Optional private environment values for catalog services |
+| `.secrets/` | Optional private source files for catalog Docker secrets |
+| `.services/` | Optional private bind data for new stateful services |
+| `.swarm/releases/` | Private rendered stacks, versioned configs/secrets, and checks for each release |
 
-The deployment builds and tests the app before replacing tasks, pins other images by digest, creates versioned Docker configs, and checks all services and public/private routes. A failed Swarm update attempts to restore the last successful stack. Fix or revert a bad change through a PR before deploying again.
+Use `compose.production.yaml` only as renderer input on production. Do not run `docker compose up` there. New services belong in the catalog; the renderer rejects extra core-Compose services rather than silently dropping them. The legacy `Caddyfile.docker` does not control Swarm routing.
 
-For a deliberate deployment of the current server checkout:
+## Add a stateless service
+
+Example: add a second authenticated diagnostic endpoint at `/tools/echo/`. This uses the existing demo image and needs no database. Merge the following entries into `deploy/swarm-services.json`; keep existing entries and valid JSON commas.
+
+Add inside `services`:
+
+```json
+"echo": {
+  "image": "traefik/whoami@sha256:c4717a8d1f0134a7444e24f881160e033991f23027c6c5a9a3f8fd22e70d1d44",
+  "networks": ["swarm_echo"],
+  "read_only": true,
+  "cap_drop": ["ALL"],
+  "deploy": {
+    "replicas": 2,
+    "placement": {"constraints": ["node.labels.portfolio.worker == true"]},
+    "resources": {"limits": {"memory": "64M"}}
+  }
+}
+```
+
+Add `"swarm_echo": {"driver": "overlay", "attachable": false}` inside `networks`, and append `"swarm_echo"` to `caddy_networks`. Replicas may share one worker; adding workers does not automatically rebalance existing tasks. Use placement preferences or `max_replicas_per_node` only after ensuring enough eligible nodes exist. Memory limits are ceilings, not reservations; add `deploy.resources.reservations` when you need scheduler capacity guarantees.
+
+For a private route, add this block inside the main `{$DOMAIN}` site in `deploy/Caddyfile.swarm`, before its final fallback `handle`:
+
+```caddyfile
+@echo path /tools/echo /tools/echo/*
+handle @echo {
+    route {
+        forward_auth auth:9091 {
+            uri /api/authz/forward-auth?authelia_url=https://{$DOMAIN}/auth/
+        }
+        uri strip_prefix /tools/echo
+        reverse_proxy echo:80
+    }
+}
+```
+
+Append `'^/tools/echo(/.*)?$'` to the admin rule's `resources` in `deploy/authelia/configuration.yml`. Do not change the default deny policy. This example checks browser access but does not make the application trust identity headers. Add identity integration only if the application supports it and configure its trusted proxy boundary explicitly.
+
+Append `{"url": "https://{DOMAIN}/tools/echo/", "statuses": [302, 303, 401]}` to `http_checks`, and `"http://echo:80"` to `internal_checks`. The public check tests the authentication gate without following redirects; the internal check tests the upstream from Caddy. Both must pass. For a deliberately public route, omit forward authentication and use an appropriate expected status such as 200. For a new hostname, configure DNS, Caddy, and Authelia's domain/session rules as needed; use its literal HTTPS URL in the check.
+
+For other images, select an upstream version/digest, use its real internal port, and add its documented container health check. A path prefix works only if the application supports that deployment; otherwise use a hostname. Keep host ports unpublished. New catalog services cannot join core networks or replace core service names.
+
+Build custom images separately and publish them to a registry reachable by each eligible node. This deployment only builds the portfolio app locally, pinned to node 1. Catalog services do not support `build`. The renderer pins the configured registry repository by digest and never substitutes a local backup alias. For a private registry, arrange Docker registry authentication on every eligible node; the workflow does not forward registry credentials automatically. Check image support for every target architecture before adding ARM workers; keep `node.platform.arch` constraints until the image and agent support those nodes.
+
+## Catalog format and limits
+
+The catalog uses Docker stack service syntax expressed as JSON, not full modern Compose syntax. Top-level keys are `services`, `networks`, `caddy_networks`, `volumes`, `configs`, `secrets`, `http_checks`, and `internal_checks`.
+
+Supported service fields: `image`, `command`, `entrypoint`, `user`, `environment` (object), `read_only`, `healthcheck`, `stop_grace_period`, `logging`, `cap_drop`, `cap_add`, `tmpfs`, `deploy`, `networks` (array), `volumes` (long syntax), `configs`, `secrets`, `working_dir`, `hostname`, `dns`, `dns_search`, and `extra_hosts`. Unknown fields fail validation. Set explicit placement constraints and a memory limit for each service. Supported modes are `replicated` and `global`; jobs are not supported.
+
+Update/restart policies default to one-at-a-time stop-first updates, pause on update failure, and restart on any exit. `deploy.replicas: 0` intentionally disables a replicated service. A global service must have at least one eligible target; checks use Docker's desired task count as nodes join or drain.
+
+Catalog strings are literal: `${VARIABLE}` is not expanded from `.env.production`. The renderer escapes dollar signs for Docker. Use private overrides or Docker secrets for credentials. Optional checks accept HTTPS URLs with `{DOMAIN}` or `{NTFY_DOMAIN}` placeholders and expected HTTP status arrays. Internal HTTP checks run from Caddy, so Caddy must share the service network. Do not put credentials in check URLs. Services that are scaled to zero must have their route checks removed too.
+
+## Add a service with persistent storage
+
+Choose its state directory, backup procedure, image version, and restore process before enabling it. New persistent data is not automatically added to the existing private PC backup. Extend and test that backup's service quiescing, mount inventory, archives, and restore instructions first; see [BACKUPS.md](BACKUPS.md#extend-backup-coverage-for-new-services).
+
+For an external volume, create it on node 1:
+
+```sh
+sudo docker volume create portfolio_example_data
+```
+
+Add `"example_data": {"external": true, "name": "portfolio_example_data"}` under catalog `volumes`, and use this mount in the new service:
+
+```json
+"volumes": [
+  {"type": "volume", "source": "example_data", "target": "/data"}
+],
+"deploy": {
+  "replicas": 1,
+  "placement": {"constraints": ["node.labels.portfolio.data == true"]},
+  "resources": {"limits": {"memory": "128M"}},
+  "update_config": {"parallelism": 1, "order": "stop-first", "failure_action": "pause"},
+  "rollback_config": {"parallelism": 1, "order": "stop-first"}
+}
+```
+
+Replace `/data` with the image's documented data path and size memory for the application. A bind alternative uses `{"type":"bind","source":"/opt/portfolio/.services/example","target":"/data"}`. Create the directory on node 1 with the ownership and mode required by the image before deploying. Read-only bind files must exist on every eligible node; prefer Swarm configs/secrets for distributing small files.
+
+Do not label another node as the data node or scale a local database to multiple replicas. Volumes with the same name on separate nodes are separate storage. Removing a service does not delete its external volume or bind data.
+
+## Update configuration
+
+For existing or new services, use this sequence: edit the appropriate source, validate locally, push V2, merge, inspect the workflow and service tasks, then check application behavior. Do not edit generated files in `.swarm/releases`.
+
+| Change | Where to make it | How it takes effect |
+| --- | --- | --- |
+| Core environment/image/limits | `compose.production.yaml` | Rendered into the next stack update |
+| Catalog image, replicas, limits, placement | `deploy/swarm-services.json` | Next deployment reconciles the service |
+| Public routing | `deploy/Caddyfile.swarm` plus catalog `caddy_networks` | A versioned Docker config restarts Caddy |
+| Access rule | `deploy/authelia/configuration.yml` | A versioned config updates Authelia; sessions may expire |
+| Core private environment | `.env.production` on node 1 | Redeploy the current checkout deliberately |
+| Catalog private environment | `.swarm/services.private.json` on node 1 | Merge into that service's environment on next deployment |
+| Catalog config/secret file | A declared source file or versioned external resource | New immutable resource reference updates the service |
+
+### Public config files
+
+Store non-secret configuration under `deploy/`. For example, declare `"example_settings": {"file":"deploy/example/settings.conf"}` under catalog `configs`, then add `"configs": [{"source":"example_settings","target":"/etc/example/settings.conf"}]` to the service. The renderer copies the bytes into the private release and uses a content-hashed Docker config name. Editing the source creates a new version; rollback uses the earlier saved bytes. This avoids bind-mounted files changing under running containers without a controlled restart.
+
+### Private environment values and secrets
+
+On node 1, keep `.swarm/services.private.json` mode 600 with this structure (replace the example values privately):
+
+```json
+{"example": {"API_TOKEN": "replace-on-server", "LOG_LEVEL": "info"}}
+```
+
+Only configured catalog service names are accepted. These values override the service's public environment. Environment credentials remain visible to Docker administrators through service inspection. They are saved in private release snapshots, not Git.
+
+Prefer Docker secrets when the application supports reading a file. Create its source on node 1 using a private editor session:
+
+```sh
+cd /opt/portfolio
+umask 077
+mkdir -p .secrets
+chmod 700 .secrets
+nano .secrets/example-token
+chmod 600 .secrets/example-token
+```
+
+Enter the credential in the editor, not in a shell command or Git file. Then declare `"example_token": {"file":".secrets/example-token"}` under catalog `secrets`. Attach `"secrets": [{"source":"example_token","target":"api_token"}]` to the service, and set the application's supported file setting, for example `API_TOKEN_FILE=/run/secrets/api_token`. A `_FILE` setting works only if the application implements it.
+
+The renderer snapshots file-backed secrets into the private release, creates a content-hashed Swarm secret, and preserves the mount target. It also accepts `{"external":true,"name":"example_token_v1"}` for a pre-created Docker secret/config. Create a new versioned external name when rotating; keep old versions for rollback. Do not delete old Docker configs/secrets or release folders until their rollback/backup retention has expired. Secret names and content hashes are metadata, not encryption; keep source files and releases private.
+
+Public settings go through Git. Private-only changes can be applied deliberately on node 1 with:
 
 ```sh
 cd /opt/portfolio
 python3 scripts/swarm-deploy.py deploy
 ```
 
-This command does not pull Git. Keep server source changes synchronized with the repository. Private settings stay in `.env.production`, `.auth`, `.ntfy`, `.portainer`, and `.notes`. Rendered stack files under `.swarm/` contain credentials; keep the directory private and out of Git and logs. Docker administrators can inspect service environment values.
+This does not pull Git. It builds and validates before updating services. To validate and render without updating running services, use `python3 scripts/swarm-deploy.py prepare`; it still builds/pulls images, writes a private candidate, and runs isolated validation containers. `apply` deploys that prepared candidate; do not run it if the source/private settings have changed since preparation.
 
-The app image stays on node 1, where it is built and pinned. A registry is unnecessary for this placement. Add a registry or distribute compatible images before allowing the app onto another node.
+### Changing the domain
 
-## Check production
+Configure the new DNS record to point at node 1, then update `DOMAIN` privately in `.env.production`. Update `NTFY_DOMAIN` separately if moving ntfy. Update any literal hostnames in catalog HTTP checks and application callback/origin settings through Git. Deploy the reconciled source: the renderer supplies the core Caddy/Authelia environment, the app build URL, and Portainer trusted/OAuth origins. Check the new certificate, sign-in callback, public pages, and private routes before removing old DNS. Update the iPhone server/user subscription if ntfy moves. Keep local portfolio content `siteUrl` consistent for previews and generated assets.
+
+### Remove a service
+
+Remove its catalog service, route, access rule, dedicated network/Caddy attachment, checks, and private environment override together. Keep data and backup copies. Deployment uses `docker stack deploy --prune` to remove services absent from the target release; rollback also prunes services introduced by the failed/newer release. Only put Git-managed services in the `portfolio` stack. Unrelated stacks are unaffected. External volumes/configs/secrets remain until explicitly retired.
+
+## Add a worker node
+
+1. Install a compatible Docker Engine on the new Linux server. Use a private IP reachable by the other nodes. Check RAM/disk capacity and image architecture support. Keep public SSH restricted to your normal administrative access.
+2. In both Oracle security lists/NSGs and each host firewall, permit **bidirectional peer traffic** for 7946/TCP+UDP and 4789/UDP among all Swarm nodes. Permit 2377/TCP from workers to the manager. Add the new private IP to existing nodes' peer rules as well as the reverse rules on the new node. Do not open these ports to the Internet. New workers need no public web ports for this host-mode Caddy layout.
+3. On node 1, retrieve the worker join command privately:
+
+   ```sh
+   sudo docker swarm join-token worker
+   ```
+
+   On the new node, run the returned command using node 1's private address (`10.0.0.249:2377` in the current setup). Add `--advertise-addr <new-private-ip>` and `--data-path-addr <new-private-ip>` if needed to select the private interface. Keep join tokens out of Git, screenshots, and workflow logs.
+4. On node 1, inspect the hostname and apply the worker label:
+
+   ```sh
+   sudo docker node ls
+   sudo docker node update --label-add portfolio.worker=true <new-node-name>
+   ```
+
+   Never add `portfolio.data=true` to a worker. An optional label such as `workload.tools=true` lets a service target a narrower pool. A service constraint `node.hostname == <name>` pins it to one machine; a shared label allows scheduling across that pool.
+5. The global Portainer agent should start automatically on the new eligible Linux node. It uses the private overlay and shared agent secret; do not install a separate agent or publish 9001. If adding a different architecture, verify the pinned agent image has that platform before expecting the task to start.
+6. Run the checks below from node 1, then open Portainer's **Oracle Swarm** environment. The helpers compare discovered node IDs and desired task counts; there is no fixed two-node limit.
+
+   ```sh
+   sudo docker node ls
+   sudo docker service ps portfolio_agent --no-trunc
+   python3 scripts/swarm-deploy.py check
+   python3 scripts/swarm-portainer.py
+   ```
+
+Joining adds capacity; it does not increase a service's replica count. Change catalog replicas and merge to use more instances. Check distributed services from Caddy and verify logs. Repeated UDP-probe or missing-network-attachment errors require checking both cloud and host network rules and resource pressure; do not assume a healthy TCP connection proves UDP works.
+
+The portfolio app remains locally built and pinned to node 1. Workers pull catalog images from their configured registry. Additional workers do not need a clone of this repo unless a service explicitly uses host bind files there. Revisit backup image/platform coverage before adding non-amd64 images; the current private full backup exporter is amd64-specific.
+
+## Maintain or remove a node
+
+Drain a worker before maintenance so Swarm reschedules eligible tasks:
+
+```sh
+sudo docker node update --availability drain <worker-name>
+sudo docker node ps <worker-name> --no-trunc
+```
+
+Ensure other nodes satisfy its service constraints and have enough capacity. A service pinned only to the drained node will remain pending. Health checks accept a reduced global-agent target count but still require all configured replicated services. Portainer checks permit drained nodes to be offline. Do not drain node 1 for routine worker maintenance; its pinned stateful services cannot fail over.
+
+After maintenance, run `sudo docker node update --availability active <worker-name>` from node 1 and repeat service checks. For permanent removal, drain, wait for tasks to leave, run `sudo docker swarm leave` on the worker, then `sudo docker node rm <worker-name>` on the manager. Remove obsolete firewall peer rules and configuration constraints after confirming the node is no longer needed. Do not force-remove an active data node. Manager promotion/removal and quorum changes are a separate availability design; do not promote workers merely to spread application load.
+
+## Deploy and check production
+
+A merged PR starts GitHub Actions, which connects to node 1 and runs `portfolio_redeploy.sh`. `.swarm/enabled` selects Swarm. The script builds/tests the app, resolves catalog image digests, snapshots configs/secrets and HTTP checks, validates the stack, and updates services. It waits for the target release's service set, replica counts and running tasks, checks local core-container health, then HTTP access and Portainer. Add HTTP/container health checks for new applications: a running process alone does not prove the application works. Remote catalog readiness relies on Swarm task status plus your configured HTTP checks; the script does not SSH into workers to inspect health manually.
 
 ```sh
 sudo docker node ls
 sudo docker stack services portfolio
 sudo docker stack ps portfolio --no-trunc
+sudo docker service logs --tail 50 portfolio_<service>
 python3 scripts/swarm-deploy.py check
 python3 scripts/setup-ntfy.py check
 ```
 
-Expect seven services and eight running tasks: one per service plus the second agent. Open Portainer through `/portainer/` and select **Oracle Swarm** to manage both nodes. Reconnect its environment with `python3 scripts/swarm-portainer.py`; reconcile SSO with `python3 scripts/setup-portainer.py --configure`.
+Run `python3 -B -m unittest discover -s tests -p 'test_*.py'` locally before pushing. JSON syntax can be checked with `python3 -m json.tool deploy/swarm-services.json`; do not print private rendered stacks into logs. The full prepare/deploy validation needs Linux, Docker and server-private files. On Windows, Linux-only tests are skipped.
 
-Keep ARM provisioning retired. The migration does not install cron jobs or run Oracle stack triggers. Existing ntfy accounts and iPhone subscriptions continue to work. Health/access checks do not send successful notifications.
+At the initial two-node size, expect seven services/eight tasks. After adding services or nodes, totals depend on replica counts and eligible nodes. Inspect the **current** tasks rather than treating old rejected/shutdown history as a new failure. Failed rollouts save task history to `.swarm/last-failed-tasks.txt` before attempting to restore the last successful release. Keep ARM provisioning retired; no capacity retry cron runs. Quiet ntfy access checks do not send successful notifications.
 
 ## Roll back
 
-After a second successful Swarm release, restore the previous complete service specification:
+After at least two successful releases:
 
 ```sh
 cd /opt/portfolio
@@ -63,14 +275,12 @@ python3 scripts/swarm-deploy.py rollback
 python3 scripts/swarm-deploy.py check
 ```
 
-The command checks health, swaps the current/previous release pointers, and updates app image tags. It restores service configuration and image selection, **not database contents**. Use a matched private backup for data recovery.
+Rollback deploys the saved stack, configs/secrets and checks, then swaps current/previous release pointers and image tags. It uses the old release's service set even if today's catalog has added or removed services. A failed manual rollback attempts to restore the current release. Keep external config/secret versions and registry images available for both releases. Rollback does not undo database migrations or restore data; take a matched backup before stateful upgrades.
 
-Immediately after the initial migration there is only one Swarm release. The old Compose app remains available as `rithvik-portfolio:previous`, but it predates Swarm proxy trust and is not a supported drop-in Swarm rollback. Use the pre-migration recovery set if the migration itself must be reversed. Stop/remove all Swarm core tasks and confirm they have exited before restoring original Compose source and starting the stopped Compose containers. Never run both against the same data directories. Use the saved original tag inventory and source archive; do not restore old database files unless data recovery is actually needed.
+The app's `current` and `previous` tags remain available after successful cleanup. The default builder cache is trimmed toward 256 MB. Explicit tags and release snapshots may retain additional images; review them deliberately before removal. Read the disk-before/after summary in deployment logs. The retained original Compose containers are only initial-migration fallback: never start them while Swarm writers run against the same directories.
 
-Cleanup runs only after health checks. It retains current/previous app images, preserves volumes and explicit backup tags, and trims the default build cache toward 256 MB. Swarm release tags/specifications remain available for deliberate recovery; they may retain additional images. Review old releases before removing their tags. Read the disk-before/after summary in deployment logs.
+## Backup and reference
 
-## Back up and restore
+Use [BACKUPS.md](BACKUPS.md) and extend coverage whenever storage changes. Config snapshots are not database backups. The private PC helper currently covers the original node-1 services; new service data, worker-local files, new image architectures, and external secrets need explicit coverage.
 
-Use the [Swarm backup guide](BACKUPS.md). The private PC backup pauses the five core services by scaling them to zero, snapshots all state plus Caddy volumes, restores the replica counts, and checks health. Do not use `docker stop` on a Swarm task for a consistent backup: Swarm will replace it.
-
-Keep the original stopped Compose containers until you no longer need migration fallback. Their restart policy is disabled. Do not start them while Swarm runs.
+Docker references: [stack deployment format](https://docs.docker.com/engine/swarm/stack-deploy/), [joining worker nodes](https://docs.docker.com/engine/swarm/swarm-tutorial/add-nodes/), and [actual/desired replica counts](https://docs.docker.com/reference/cli/docker/service/ls/).

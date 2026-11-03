@@ -48,7 +48,7 @@ Authelia's default access policy is deny; its rule permits the `admins` group on
 | `css/admin.css` | Desktop and mobile styling |
 | `tests/admin.test.mjs` | Trusted proxy, identity, escaping, caching and HTTP checks |
 | `deploy/authelia/configuration.yml` | Versioned non-secret auth configuration |
-| `deploy/Caddyfile.docker` | Login and dashboard routes; identity-header stripping |
+| `deploy/Caddyfile.swarm` | Login and dashboard routes; identity-header stripping |
 | `scripts/setup-admin.py` | One-time Linux account/key generation |
 | `.auth/secrets/users.yml` | Account metadata, Argon2id hash, `admins` group |
 | `.auth/secrets/session-secret` | Session secret |
@@ -64,7 +64,7 @@ Keep the storage key with its database. Replacing the key while retaining the da
 
 ## First initialization
 
-On a new Linux checkout, create and configure `.env.production`, then run as the normal deployment user. For an existing installation, use the [redeployment procedure](DOCKER.md#normal-oracle-redeployment):
+On a new Linux checkout, create and configure `.env.production`, then run as the normal deployment user. For an existing installation, use the [redeployment procedure](SWARM.md#deploy-and-check-production):
 
 ```sh
 cd /opt/portfolio
@@ -80,15 +80,15 @@ Use SSH if the password is lost or needs changing. Back up the current account f
 
 ```sh
 cd /opt/portfolio
-sudo docker compose --env-file .env.production -f compose.production.yaml exec auth \
-  authelia crypto hash generate argon2 --parallelism 1
+auth_task=$(sudo docker ps -q --filter label=com.docker.swarm.service.name=portfolio_auth)
+sudo docker exec -it "$auth_task" authelia crypto hash generate argon2 --parallelism 1
 ```
 
 Enter the new password at the prompt, not as a command argument. Copy the generated digest, then edit `.auth/secrets/users.yml` with `nano` and replace only the account's quoted `password` hash. Preserve the username and `admins` group. The file is JSON-compatible YAML; keep its syntax valid.
 
 ```sh
-sudo docker compose --env-file .env.production -f compose.production.yaml restart auth
-sudo docker compose --env-file .env.production -f compose.production.yaml ps
+sudo docker service update --force portfolio_auth
+sudo docker stack services portfolio
 ```
 
 Sign in with the new password and update your password manager and private bootstrap records. Restarting invalidates existing sessions. Use SSH for password recovery; this setup has no email password-reset flow.
@@ -97,7 +97,7 @@ Sign in with the new password and update your password manager and private boots
 
 Use the [private-state backup and restore guide](BACKUPS.md) for the complete current stack, including Portainer, writing, and ntfy state.
 
-Preserve `.env.production`, the complete `.auth/` and `.portainer/` directories, and both Caddy named volumes. Store backups privately outside Git. For a consistent filesystem copy, briefly stop `auth` and `portainer`, archive both directories with permissions, and start them again. The portfolio remains available while private tools are temporarily unavailable. Do not run `down --volumes` as a backup step. See the [Portainer backup procedure](PORTAINER.md#backup-and-restore).
+Preserve `.env.production`, the complete `.auth/` and `.portainer/` directories, and both Caddy named volumes. Store backups privately outside Git. Use the Swarm-aware private PC backup to pause all core writers before taking a consistent snapshot. Do not stop an individual Swarm task for backup: the scheduler replaces it. See the [backup procedure](BACKUPS.md).
 
 For an earlier dashboard recovery point, inspect these private items on Oracle:
 
@@ -112,8 +112,10 @@ Create fresh backups before making changes; these manual recovery points do not 
 
 ```sh
 cd /opt/portfolio
-sudo docker compose --env-file .env.production -f compose.production.yaml ps
-sudo docker compose --env-file .env.production -f compose.production.yaml logs --tail=100 auth caddy app
+sudo docker stack services portfolio
+sudo docker service logs --tail 100 portfolio_auth
+sudo docker service logs --tail 100 portfolio_caddy
+sudo docker service logs --tail 100 portfolio_app
 curl -I https://rithvik.ddns.net/admin/
 curl https://rithvik.ddns.net/auth/api/health
 ```

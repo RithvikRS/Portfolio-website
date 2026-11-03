@@ -47,6 +47,13 @@ class API:
         return value['body']
 
 
+def validate_nodes(expected, observed):
+    if not expected or {n['ID'] for n in observed} != {n['ID'] for n in expected}:
+        raise RuntimeError('Portainer node inventory differs from the manager inventory.')
+    if any(n['Spec'].get('Availability', 'active') == 'active' and n['Status']['State'] != 'ready' for n in observed):
+        raise RuntimeError('An active Swarm node is not ready in Portainer.')
+
+
 def main():
     os.umask(0o077)
     api = API()
@@ -60,9 +67,10 @@ def main():
         if endpoint is None:
             endpoint = api.call('POST', '/endpoints', {'Name': 'Oracle Swarm', 'EndpointCreationType': 2, 'URL': 'tcp://tasks.agent:9001', 'TLS': 'true', 'TLSSkipVerify': 'true', 'TLSSkipClientVerify': 'true'}, multipart=True)
         nodes = api.call('GET', '/endpoints/' + str(endpoint['Id']) + '/docker/nodes')
-        if len(nodes) != 2 or any(n['Status']['State'] != 'ready' for n in nodes):
-            raise RuntimeError('Portainer did not report both ready Swarm nodes.')
-        print('Portainer Oracle Swarm environment sees both ready nodes.')
+        identifiers = swarm.docker('node', 'ls', '-q').split()
+        expected = json.loads(swarm.docker('node', 'inspect', *identifiers))
+        validate_nodes(expected, nodes)
+        print('Portainer Oracle Swarm environment sees all ' + str(len(nodes)) + ' registered nodes; active nodes are ready.')
         # Remove the obsolete direct node-two agent connection only after Swarm works.
         for item in endpoints:
             if item['Id'] != endpoint['Id'] and ('10.0.0.13:9001' in item.get('URL', '') or '129.154.45.198:9001' in item.get('URL', '')):
