@@ -29,3 +29,17 @@ For restoring state onto the current cluster, acquire the deployment lock and sc
 ## Migration fallback
 
 Keep the private `pre-swarm-*` directory and its original Compose source, container inventory, image-tag inventory, database snapshot, and certificate archives. The original Compose containers have restart disabled. Follow the [Swarm runbook](SWARM.md#roll-back) before using them. The old `backup-private-state.sh` refuses to run on Swarm to prevent an inconsistent live database archive.
+
+## Extend backup coverage for new services
+
+The private PC backup currently pauses and archives the five original core services. Adding a service to `deploy/swarm-services.json` does not extend that private tool. Its successful completion does not prove a new service's database, external secret, or host bind files were included.
+
+Before storing important data in a new service:
+
+1. Add its Swarm service name and original replica count to the pause/restart/watchdog inventory, or use its documented consistent database-export procedure.
+2. Add every persistent bind path or named volume to mount validation, archive creation, checksum verification, and restore instructions. Include `.services/` and `.secrets/` source files if used. Do not archive a live database as ordinary files unless its documentation permits it.
+3. Export any external Docker config/secret from its private source or secret manager. `.swarm` contains snapshots of file-backed catalog resources, but cannot reconstruct an external secret's content from Docker inspection.
+4. Keep image coverage for current and rollback releases. The renderer tags each current catalog image as `portfolio-<service>:current` on the manager; older untagged catalog versions and non-amd64 platforms may need additional export coverage. The existing image exporter is amd64-specific.
+5. Test restart after partial stop, failed archive and worker termination, then rehearse restoration in a separate environment. Check application data as well as container health.
+
+The private backup implementation lives outside this repository. These Git changes do not modify or deploy it. Keep its updated recovery instructions with the private backup kit. A worker-only stateless service needs no database snapshot, but retain its image/configuration and any host prerequisites.

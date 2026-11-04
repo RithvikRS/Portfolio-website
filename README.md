@@ -127,6 +127,8 @@ A failed build leaves running services in place. Failed Swarm health checks atte
 
 ## Documentation
 
+Use the [Swarm operations guide](deploy/SWARM.md) to understand the architecture, [add services](deploy/SWARM.md#add-a-stateless-service), [join worker nodes](deploy/SWARM.md#add-a-worker-node), and [update configuration or secrets](deploy/SWARM.md#update-configuration). Public changes follow the V2-to-main PR workflow.
+
 Use the [ntfy guide](deploy/NTFY.md) for private notifications and iPhone setup. ARM provisioning is retired; no capacity retry job runs.
 
 | Guide | Start here for |
@@ -161,25 +163,25 @@ Use `/opt/portfolio` on the server's `main` branch for production at `rithvik.dd
 - `js/site.js`: mobile navigation, project filters/search, linked project expansion, accessible contact dialog, active navigation, and scroll entrance animations.
 - `server/`: public-file allowlist, protected dashboard, same-origin contact API, validation, rate limits, duplicate-submission protection, and SMTP delivery. Recipient and credentials remain in server configuration. Visitor addresses are used for Reply-To only.
 - `server/admin.mjs` and `css/admin.css`: dashboard markup, administrator identity checks, and responsive styling.
-- `Dockerfile`: builds and tests the Node application image; Compose decides how to run it.
-- `compose.yaml`, `compose.ip.yaml`, and `compose.production.yaml`: separate local, temporary public-IP, and production configurations. Use one at a time for a deployment.
+- `Dockerfile`: builds and tests the Node application image; Swarm runs production tasks.
+- `compose.yaml` and `compose.ip.yaml`: local/temporary previews. `compose.production.yaml` supplies core service settings to the Swarm renderer; `deploy/swarm-services.json` supplies additional services.
 - `.github/workflows/deploy.yml`: starts an SSH deployment when a PR is merged into `main`.
 - `portfolio_redeploy.sh`: pulls `main`, validates configuration, builds the app, starts services, checks the public endpoints, and then retains rollback images and cleans unused portfolio images/build cache.
-- `scripts/deploy-images.py` and `compose.rollback.yaml`: preserve the last successful app images and support [app-only rollback](deploy/DOCKER.md#image-cleanup-and-rollback).
+- `scripts/deploy-images.py` and `scripts/swarm-deploy.py`: retain app images and support [saved-release rollback](deploy/SWARM.md#roll-back). `compose.rollback.yaml` is a legacy recovery input.
 - `tests/`: Node application tests and Python image-retention tests, with fake mail delivery and Docker operations.
 - `scripts/setup-admin.py`: one-time Linux administrator setup. It generates private account files and refuses to replace an existing `.auth/` directory.
 - `scripts/setup-portainer.py`: prepares private Portainer/OIDC files without replacing existing credentials, then applies SSO settings and checks Docker access during redeployment.
-- `deploy/Caddyfile.docker` and `deploy/authelia/configuration.yml`: production routing and non-secret authentication settings.
+- `deploy/Caddyfile.swarm` and `deploy/authelia/configuration.yml`: production routing and non-secret authentication settings.
 - `deploy/Caddyfile` and `deploy/portfolio.service`: alternative host-based templates, not the active Docker deployment.
 - `images/favicon.svg`: local vector identity. The hero illustration and project diagrams use inline SVG/CSS.
 
 ## Hosting and private data
 
-The production Compose file runs the complete Oracle stack. SMTP credentials are supplied at runtime; private authentication, Portainer, writing, and notification data live in `.auth/`, `.portainer/`, `.notes/`, and `.ntfy/`. Keep these directories, `.env`, `.env.production`, passwords, and SSH keys out of Git and the image build context.
+The Swarm renderer combines core Compose settings and the service catalog into the production stack. SMTP credentials are supplied at runtime; private authentication, Portainer, writing, and notification data live in `.auth/`, `.portainer/`, `.notes/`, and `.ntfy/`. Keep these directories, `.swarm/`, `.secrets/`, `.services/`, `.env`, `.env.production`, passwords, and SSH keys out of Git and the image build context.
 
 Generated portfolio pages can also be served by a static host, but the contact backend, dashboard, authentication, and Fieldnotes require server processes. The [host-based guide](deploy/README.md) covers an alternative Node/systemd setup for the public portfolio and SMTP backend; it does not install shared login.
 
-For Docker production, change `DOMAIN` in the server's `.env.production` and redeploy when moving to a new domain. Compose derives the public origin, build URL, and authentication URLs from it. For static or direct Node hosting, update `siteUrl` in the content file and rebuild. See [domain changes](deploy/DOCKER.md#changing-the-domain) for details.
+For Docker production, change `DOMAIN` in the server's `.env.production` and redeploy when moving to a new domain. Compose derives the public origin, build URL, and authentication URLs from it. For static or direct Node hosting, update `siteUrl` in the content file and rebuild. See [domain changes](deploy/SWARM.md#changing-the-domain) for details.
 
 The contact form keeps the destination email address in server configuration. Downloadable documents and repository history may contain contact details independently of what appears on the public pages.
 

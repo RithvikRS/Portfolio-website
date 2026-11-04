@@ -38,7 +38,7 @@ Production binds `.notes/` to `/writing` and sets `NOTES_DATA_DIR=/writing`. The
 
 The store serializes writes in one process, checks revision numbers, writes a temporary file, syncs it, and atomically renames it. Linux also syncs the directory. On startup, malformed data stops the app rather than silently losing entries. Run one app instance per storage directory; shared writers/replicas are unsupported. The library is bounded to 250 entries including trash, 64 KiB of UTF-8 Markdown per entry, 140-character titles, 320-character summaries, and eight 32-character tags.
 
-Keep writing in `.notes/` as **runtime data**, separate from Git and the image. A Git push, image build, redeployment, restart, or ordinary Compose down/up preserves it. Keep the directory out of Git, Docker builds, and the public-file allowlist. Do not delete it or replace it with an empty backup. Use Markdown and manual publishing; the editor does not support image uploads, embeds, comments, scheduled publication, WYSIWYG formatting, or multi-user editing.
+Keep writing in `.notes/` as **runtime data**, separate from Git and the image. A Git push, image build, redeployment, restart, or Swarm task replacement preserves it. Keep the directory out of Git, Docker builds, and the public-file allowlist. Do not delete it or replace it with an empty backup. Use Markdown and manual publishing; the editor does not support image uploads, embeds, comments, scheduled publication, WYSIWYG formatting, or multi-user editing.
 
 Local `compose.yaml` explicitly disables writing storage and authenticated editing; it previews the public pages with empty collections. Direct Node development can set `NOTES_DATA_DIR` to a private directory, but the editor still requires the trusted authentication integration. Do not enable a public authentication bypass to preview it.
 
@@ -48,7 +48,7 @@ Local `compose.yaml` explicitly disables writing storage and authenticated editi
 
 `/blog/*` and `/learn/*` use the existing public fallback to `app:4173`. They read only the published snapshot, never the draft. All writing responses use `Cache-Control: no-store` so unpublishing applies to subsequent requests immediately. HTML is sanitized after Markdown parsing; scripts, styles, images, and embedded widgets are excluded. No external image fetch or server-side URL fetch is performed.
 
-Reuse the existing Caddy routes and shared login for Fieldnotes. Set the domain through production `DOMAIN` and redeploy after changing it. If adding a separate application, follow the [Caddy guide](DOCKER.md#caddy-changes-and-new-sites).
+Reuse the existing Caddy routes and shared login for Fieldnotes. Set the domain through production `DOMAIN` and redeploy after changing it. If adding a separate application, follow the [Caddy guide](SWARM.md#add-a-stateless-service).
 
 ## Redeploy
 
@@ -58,13 +58,13 @@ Commit and push changes to `V2`, then merge its PR into `main` to start the auto
 bash /opt/portfolio_redeploy.sh
 ```
 
-Use the script to prepare `.notes/`, build the app, run checks, and update services while preserving writing. It checks both public writing pages and the signed-out export gate. Sign in again after Authelia restarts. Reconcile any server files that differ from `origin/main` before retrying a deployment.
+Keep the existing `.notes/` directory and use the script to build the app, run checks, and update services while preserving writing. It checks both public writing pages and the signed-out export gate. Sign in again after Authelia restarts. Reconcile any server files that differ from `origin/main` before retrying a deployment.
 
 ## Export, backup, and restore
 
 **Download Markdown** saves the current editor text, including unsaved changes. **Export library** downloads JSON containing all saved drafts, published versions, and trash. Keep that export private. It is a data export, not a complete server backup. There is no browser import tool in this version; a full restore uses the original `.notes/` files.
 
-Back up `.env.production`, `.auth/`, `.portainer/`, `.notes/`, and `.ntfy/` together using the [private-state backup and restore guide](BACKUPS.md). Run `bash scripts/backup-private-state.sh` from `/opt/portfolio` in Oracle SSH. The helper locks deployments and ARM/notifier writers, stops the state-writing services, and restarts them even if archiving fails. Expect a brief public-site interruption. Keep the archive private and copy it off the VM.
+Back up the complete matching private state using the [Swarm backup guide](BACKUPS.md). Run its private PC helper; the old server-only `backup-private-state.sh` is disabled for Swarm. The helper pauses core service writers and restores their replica counts. Keep the archive private and copy it off the VM.
 
 Restore the matched private directories with the compatible source and image version. Replace `.notes/` as a complete unit while the app is stopped; overlaying files can leave entries published that are absent from the backup. Use the shared guide for locks, staging, ownership, ntfy credentials/databases, and checks.
 
@@ -77,6 +77,6 @@ For an earlier Fieldnotes recovery point, inspect `/home/opc/.config/portfolio-d
 - After saving, restart the app to verify the draft persists. Do not edit `.notes/` files while the app runs; the process holds its own in-memory snapshot.
 - For storage errors, inspect app logs and directory ownership. Preserve text in the editor and download it before troubleshooting.
 - For a 409 conflict, copy the local text and reload the newer server version. Repeating the same stale save will not resolve it.
-- Monitor memory with `free -m` and `sudo docker stats --no-stream`. Follow the [AMD memory guidance](DOCKER.md#manage-memory-on-the-amd-server) when configuring package maintenance.
+- Monitor memory with `free -m` and `sudo docker stats --no-stream`. Follow the [AMD memory guidance](DOCKER-COMPOSE-LEGACY.md#manage-memory-on-the-amd-server) when configuring package maintenance.
 
 Implementation references: [Marked](https://marked.js.org/) and [sanitize-html](https://github.com/apostrophecms/apostrophe/tree/main/packages/sanitize-html). The lockfile pins Marked 18.1.0 and sanitize-html 2.18.0; review updates before changing them.
