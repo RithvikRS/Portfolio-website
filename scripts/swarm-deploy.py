@@ -15,6 +15,7 @@ import subprocess
 import sys
 import time
 import tempfile
+import shlex
 import urllib.error
 import urllib.request
 
@@ -277,6 +278,28 @@ def render(compose, settings, app_image, pins, secret, release, root=ROOT, catal
     return result
 
 
+def ci_request(environment):
+    names = ('PORTFOLIO_DEPLOY_IMAGE', 'PORTFOLIO_DEPLOY_REVISION', 'PORTFOLIO_REGISTRY_USER')
+    if environment.get(names[0]):
+        return tuple(environment.get(name, '') for name in names)
+    original = environment.get('SSH_ORIGINAL_COMMAND', '')
+    if 'PORTFOLIO_DEPLOY_IMAGE' not in original:
+        return ('', '', '')
+    # authorized_keys deliberately forces the deploy script. Read only the three
+    # metadata assignments from the requested command; never execute that command.
+    try:
+        parts = shlex.split(original)
+    except ValueError as error:
+        raise RuntimeError('Malformed CI deployment request.') from error
+    if (len(parts) != 5 or parts[3:] != ['bash', '/opt/portfolio/portfolio_redeploy.sh'] or
+            any(not part.startswith(name + '=') for part, name in zip(parts[:3], names))):
+        raise RuntimeError('Unexpected CI deployment request; forced SSH command remains restricted.')
+    values = tuple(part.split('=', 1)[1] for part in parts[:3])
+    if not all(values):
+        raise RuntimeError('CI deployment metadata is incomplete.')
+    return values
+
+
 def pull_ci_image(reference, revision, username, token, domain):
     """Pull the merged commit by digest with job-scoped credentials, then forget them."""
     if not re.fullmatch(r'ghcr\.io/rithvikrs/portfolio-website@sha256:[a-f0-9]{64}', reference):
@@ -300,7 +323,7 @@ def pull_ci_image(reference, revision, username, token, domain):
 
 def prepare(reuse_image=None):
     PRIVATE.mkdir(mode=0o700, exist_ok=True)
-    ci_image = os.environ.get('PORTFOLIO_DEPLOY_IMAGE')
+    ci_image, ci_revision, ci_user = ci_request(os.environ)
     registry_token = sys.stdin.read(16384) if ci_image else ''
     if ci_image and reuse_image:
         raise RuntimeError('Choose CI image or --reuse-image, not both.')
@@ -320,8 +343,7 @@ def prepare(reuse_image=None):
     revision = run(['git', 'rev-parse', 'HEAD'])
     if ci_image:
         print('Pulling and verifying the CI-built app image; no server build is needed.', flush=True)
-        app_id = pull_ci_image(ci_image, os.environ.get('PORTFOLIO_DEPLOY_REVISION', ''),
-                              os.environ.get('PORTFOLIO_REGISTRY_USER', ''), registry_token, domain)
+        app_id = pull_ci_image(ci_image, ci_revision, ci_user, registry_token, domain)
         registry_token = ''
         docker('image', 'tag', app_id, app_image)
     elif reuse_image:

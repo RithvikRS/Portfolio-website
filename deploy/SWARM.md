@@ -345,3 +345,5 @@ The app's `current` and `previous` tags remain available after successful cleanu
 Use [BACKUPS.md](BACKUPS.md) and extend coverage whenever storage changes. Config snapshots are not database backups. The private PC helper currently covers the original node-1 services; new service data, worker-local files, new image architectures, and external secrets need explicit coverage.
 
 Docker references: [stack deployment format](https://docs.docker.com/engine/swarm/stack-deploy/), [joining worker nodes](https://docs.docker.com/engine/swarm/swarm-tutorial/add-nodes/), and [actual/desired replica counts](https://docs.docker.com/reference/cli/docker/service/ls/).
+
+The GitHub SSH key uses a forced deployment command. The deploy helper reads only the three CI metadata assignments from `SSH_ORIGINAL_COMMAND`; it never executes that string or relaxes the key restrictions. The registry token still travels over standard input. Malformed CI metadata fails before any rollout.
