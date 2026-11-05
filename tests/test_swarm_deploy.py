@@ -119,6 +119,25 @@ class CatalogTests(unittest.TestCase):
             result = self.add(catalog, root)
             self.assertEqual(result['services']['demo']['deploy']['update_config']['order'], 'stop-first')
 
+    def test_worker_storage_is_scoped_to_exact_node_and_service_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); catalog = self.catalog()
+            service = catalog['services']['demo']
+            service['deploy']['replicas'] = 1
+            service['deploy']['placement']['constraints'] = ['node.id == worker-id']
+            data = root / 'storage'
+            service['volumes'] = [{'type': 'bind', 'source': str(data / 'demo' / 'db'), 'target': '/data'}]
+            approved = {'worker': {'node_id': 'worker-id', 'root': str(data)}}
+            def render():
+                swarm.add_catalog(self.base(), catalog, {'demo': 'image'}, root, root, 'node.labels.portfolio.data == true', approved)
+            render()
+            for source in [str(data), str(data / 'another' / 'db'), str(data / 'demo' / '..' / 'another')]:
+                service['volumes'][0]['source'] = source
+                with self.assertRaisesRegex(RuntimeError, 'Writable storage'): render()
+            service['volumes'][0]['source'] = str(data / 'demo')
+            service['deploy']['placement']['constraints'] = ['node.role == worker']
+            with self.assertRaisesRegex(RuntimeError, 'Writable storage'): render()
+
     def test_external_secret_and_no_eligible_global_target(self):
         with tempfile.TemporaryDirectory() as directory:
             catalog = self.catalog(); deploy = catalog['services']['demo']['deploy']

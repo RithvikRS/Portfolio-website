@@ -101,7 +101,8 @@ def load_catalog(root=ROOT):
     return catalog
 
 
-def add_catalog(result, catalog, pins, release, root, data_constraint):
+def add_catalog(result, catalog, pins, release, root, data_constraint, storage_nodes=None):
+    storage_nodes = storage_nodes or {}
     services = copy.deepcopy(catalog.get('services', {}))
     networks = copy.deepcopy(catalog.get('networks', {}))
     # Core identity and trusted-proxy networks must remain isolated.
@@ -191,8 +192,10 @@ def add_catalog(result, catalog, pins, release, root, data_constraint):
             if mount['type'] == 'bind' and not Path(mount['source']).is_absolute():
                 raise RuntimeError('Bind mounts require absolute server paths.')
             if not mount.get('read_only', False):
-                if mode != 'replicated' or deploy['replicas'] != 1 or data_constraint not in constraints or deploy['update_config'].get('order') != 'stop-first' or deploy['rollback_config'].get('order') != 'stop-first':
-                    raise RuntimeError('Writable storage requires one stop-first replica pinned to the data node: ' + name)
+                approved = [node for node in storage_nodes.values() if 'node.id == ' + node['node_id'] in constraints]
+                worker_storage = len(approved) == 1 and mount['type'] == 'bind' and Path(mount['source']).is_relative_to(Path(approved[0]['root']) / name) and '..' not in Path(mount['source']).parts
+                if mode != 'replicated' or deploy['replicas'] != 1 or not (data_constraint in constraints or worker_storage) or deploy['update_config'].get('order') != 'stop-first' or deploy['rollback_config'].get('order') != 'stop-first':
+                    raise RuntimeError('Writable storage requires one stop-first replica pinned to the data node or an approved worker service directory: ' + name)
         for kind in ['configs', 'secrets']:
             resources = []
             for item in service.get(kind, []):
@@ -274,7 +277,7 @@ def render(compose, settings, app_image, pins, secret, release, root=ROOT, catal
         for name in service['networks']:
             result['networks'][name] = {'driver': 'overlay', 'attachable': False}
     result['networks']['swarm_backend']['ipam'] = {'config': [{'subnet': str(network)}]}
-    add_catalog(result, catalog, pins, release, root, settings['data_constraint'])
+    add_catalog(result, catalog, pins, release, root, settings['data_constraint'], settings.get('storage_nodes'))
     return result
 
 
@@ -335,6 +338,12 @@ def prepare(reuse_image=None):
     data_nodes = [n for n in nodes if n['Spec'].get('Labels', {}).get('portfolio.data') == 'true']
     if len(data_nodes) != 1 or data_nodes[0]['ID'] != json.loads(docker('info', '--format', '{{json .Swarm}}'))['NodeID']:
         raise RuntimeError('Run on the sole labeled data-node manager.')
+    for name, approved in settings.get('storage_nodes', {}).items():
+        matches = [n for n in nodes if n['ID'] == approved['node_id']]
+        if (len(matches) != 1 or matches[0]['Spec']['Role'] != 'worker' or
+                approved['root'] != '/srv/swarm' or
+                matches[0]['Spec'].get('Labels', {}).get('storage.approved') != 'true'):
+            raise RuntimeError('Approved worker storage identity/label mismatch: ' + name)
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + secrets.token_hex(3)
     release = PRIVATE / 'releases' / stamp
     release.mkdir(parents=True, mode=0o700)
