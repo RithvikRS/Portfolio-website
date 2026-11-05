@@ -1,6 +1,6 @@
 # Oracle deployment and alternative host setup
 
-> Production runs on two-node Swarm. Use [SWARM.md](SWARM.md) for deployment, status, rollback, and node placement. Compose/systemd commands below apply only to their named legacy or local setup; do not start them alongside production Swarm.
+> Production runs on a three-node Swarm with two AMD nodes and an Ampere A1 worker. Use [SWARM.md](SWARM.md) for deployment, status, rollback, and node placement. Compose/systemd commands below apply only to their named legacy or local setup; do not start them alongside production Swarm.
 
 Use the [Docker deployment guide](DOCKER.md) to run the Oracle stack from `/opt/portfolio`. Open the [public site](https://rithvik.ddns.net/) or [admin dashboard](https://rithvik.ddns.net/admin/). Follow the [admin guide](ADMIN.md) for account access, the [Portainer guide](PORTAINER.md) for container management, and the [Fieldnotes guide](FIELDNOTES.md) for writing and content backups.
 
