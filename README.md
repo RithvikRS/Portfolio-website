@@ -22,7 +22,7 @@ The interface uses semantic HTML, custom CSS, and vanilla JavaScript. Public por
 
 ## How it works
 
-Generated portfolio pages and a Node.js backend run together in one app container. Caddy handles HTTPS and routing, Authelia handles shared sign-in, Portainer manages Docker, and ntfy delivers private server notifications. Docker Swarm manages three Oracle nodes. AMD node 1 is the manager and hosts the five core services, persistent data, builds, and public ingress. AMD node 2 runs the authenticated demo. Ampere A1 provides 4 OCPUs and 24 GB RAM for ARM64 compute services selected with `workload.compute=true`. A Portainer agent runs on each node.
+Generated portfolio pages and a Node.js backend run together in one app container. Caddy handles HTTPS and routing, Authelia handles shared sign-in, Portainer manages Docker, and ntfy delivers private server notifications. Docker Swarm manages three Oracle nodes. AMD node 1 is the manager and hosts the five core services, persistent data, builds, and public ingress. AMD node 2 runs Uptime Kuma behind Authelia, with its database pinned to that worker. Ampere A1 provides 4 OCPUs and 24 GB RAM for ARM64 compute services selected with `workload.compute=true`. A Portainer agent runs on each node.
 
 ```mermaid
 flowchart LR
@@ -31,7 +31,7 @@ flowchart LR
     caddy --> auth[Authelia: shared sign-in]
     caddy --> portainer[Portainer: Docker management]
     caddy --> ntfy[ntfy: private notifications]
-    caddy --> worker[Node 2: authenticated demo]
+    caddy --> worker[Node 2: private Uptime Kuma]
     portainer --> agents[Swarm agents on all three nodes]
     portainer -. OpenID Connect .-> auth
     app --> notes[(Persistent writing storage)]

@@ -77,10 +77,6 @@ http://:8081 {
         rewrite * /api/status
         reverse_proxy portainer:9000
     }
-    handle /worker {
-        rewrite * /
-        reverse_proxy node2:80
-    }
     respond 404
 }
 
@@ -126,19 +122,9 @@ http://:8081 {
         }
     }
 
-    # Require administrator access before forwarding to node 2.
-    @node2 path /node2 /node2/*
-    handle @node2 {
-        route {
-            forward_auth auth:9091 {
-                uri /api/authz/forward-auth?authelia_url=https://{$DOMAIN}/auth/
-                # Supply identity only after authorization.
-                copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
-            }
-            uri strip_prefix /node2
-            reverse_proxy node2:80
-        }
-    }
+    # Retire the diagnostic endpoint without falling through to the portfolio.
+    @retiredDemo path /node2 /node2/*
+    respond @retiredDemo 404
 
     handle {
         reverse_proxy app:4173 {

@@ -1,32 +1,5 @@
 {
   "services": {
-    "node2": {
-      "image": "traefik/whoami@sha256:c4717a8d1f0134a7444e24f881160e033991f23027c6c5a9a3f8fd22e70d1d44",
-      "networks": [
-        "swarm_node2"
-      ],
-      "deploy": {
-        "replicas": 1,
-        "placement": {
-          "constraints": [
-            "node.labels.portfolio.worker == true"
-          ]
-        },
-        "resources": {
-          "limits": {
-            "memory": "64M"
-          }
-        },
-        "restart_policy": {
-          "condition": "any",
-          "delay": "5s"
-        }
-      },
-      "read_only": true,
-      "cap_drop": [
-        "ALL"
-      ]
-    },
     "uptime_kuma": {
       "image": "louislam/uptime-kuma:2.5.9@sha256:e88415a90dd2f7efecdbc18de0490aff292764a3ac471531bf1d0481725591bd",
       "user": "1000:1000",
@@ -104,31 +77,18 @@
     }
   },
   "networks": {
-    "swarm_node2": {
-      "driver": "overlay",
-      "attachable": false
-    },
     "swarm_monitoring": {
       "driver": "overlay",
       "attachable": false
     }
   },
   "caddy_networks": [
-    "swarm_node2",
     "swarm_monitoring"
   ],
   "configs": {},
   "secrets": {},
   "volumes": {},
   "http_checks": [
-    {
-      "url": "https://{DOMAIN}/node2/",
-      "statuses": [
-        302,
-        303,
-        401
-      ]
-    },
     {
       "url": "https://uptime.144.24.135.201.sslip.io/",
       "statuses": [
@@ -168,10 +128,15 @@
         303,
         401
       ]
+    },
+    {
+      "url": "https://{DOMAIN}/node2/",
+      "statuses": [
+        404
+      ]
     }
   ],
   "internal_checks": [
-    "http://node2:80",
     "http://uptime_kuma:3001/"
   ]
 }
