@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import time
+import tempfile
 import urllib.error
 import urllib.request
 
@@ -276,8 +277,33 @@ def render(compose, settings, app_image, pins, secret, release, root=ROOT, catal
     return result
 
 
+def pull_ci_image(reference, revision, username, token, domain):
+    """Pull the merged commit by digest with job-scoped credentials, then forget them."""
+    if not re.fullmatch(r'ghcr\.io/rithvikrs/portfolio-website@sha256:[a-f0-9]{64}', reference):
+        raise RuntimeError('CI image must be a digest from the portfolio GHCR repository.')
+    if not re.fullmatch(r'[a-f0-9]{40}', revision) or run(['git', 'rev-parse', 'HEAD']) != revision:
+        raise RuntimeError('Server revision differs from the CI image revision; deploy the latest merged commit.')
+    if not username or not token.strip():
+        raise RuntimeError('CI registry credentials are missing.')
+    # The parent directory is private and removed after pull, including on failure.
+    with tempfile.TemporaryDirectory(prefix='registry-', dir=PRIVATE) as folder:
+        command = DOCKER + ['--config', folder]
+        run(command + ['login', 'ghcr.io', '-u', username, '--password-stdin'], data=token.strip() + '\n')
+        run(command + ['pull', '--platform', 'linux/amd64', reference], timeout=600)
+    info = json.loads(docker('image', 'inspect', reference))[0]
+    labels = info.get('Config', {}).get('Labels', {}) or {}
+    if (labels.get('org.opencontainers.image.revision') != revision or
+            labels.get('io.github.rithvikrs.portfolio.site-url') != 'https://' + domain + '/'):
+        raise RuntimeError('CI image revision or site URL does not match this deployment.')
+    return info['Id']
+
+
 def prepare(reuse_image=None):
     PRIVATE.mkdir(mode=0o700, exist_ok=True)
+    ci_image = os.environ.get('PORTFOLIO_DEPLOY_IMAGE')
+    registry_token = sys.stdin.read(16384) if ci_image else ''
+    if ci_image and reuse_image:
+        raise RuntimeError('Choose CI image or --reuse-image, not both.')
     run(['python3', '-B', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_*.py'])
     print('Deployment tests passed.', flush=True)
     settings = json.loads((ROOT / 'deploy/swarm.json').read_text())
@@ -292,7 +318,13 @@ def prepare(reuse_image=None):
     app_image = 'rithvik-portfolio:swarm-' + stamp.lower()
     domain = compose['services']['auth']['environment']['DOMAIN']
     revision = run(['git', 'rev-parse', 'HEAD'])
-    if reuse_image:
+    if ci_image:
+        print('Pulling and verifying the CI-built app image; no server build is needed.', flush=True)
+        app_id = pull_ci_image(ci_image, os.environ.get('PORTFOLIO_DEPLOY_REVISION', ''),
+                              os.environ.get('PORTFOLIO_REGISTRY_USER', ''), registry_token, domain)
+        registry_token = ''
+        docker('image', 'tag', app_id, app_image)
+    elif reuse_image:
         docker('image', 'inspect', reuse_image)
         app_image = reuse_image
     else:
@@ -322,7 +354,7 @@ def prepare(reuse_image=None):
            '-e', 'NTFY_DOMAIN=' + compose['services']['caddy']['environment']['NTFY_DOMAIN'],
            '-v', str(ROOT / 'deploy') + ':/etc/caddy/site:ro', pins['caddy'], 'caddy', 'validate',
            '--config', '/etc/caddy/site/Caddyfile.swarm', '--adapter', 'caddyfile')
-    write(PRIVATE / 'candidate.json', {'file': str(release / 'stack.json'), 'image': app_image, 'revision': revision, 'release': stamp})
+    write(PRIVATE / 'candidate.json', {'file': str(release / 'stack.json'), 'image': app_image, 'revision': revision, 'release': stamp, 'source_image': ci_image})
     print('Prepared and validated release ' + stamp, flush=True)
 
 

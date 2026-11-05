@@ -4,6 +4,10 @@ on:
   # Use main's workflow and ref; avoid the public pull_request_target policy.
   push:
     branches: [main]
+    paths-ignore:
+      - README.md
+      - deploy/**/*.md
+      - LICENSE
 
 permissions: {}
 
@@ -63,13 +67,68 @@ jobs:
           print('Merged PR confirmed.' if matched else 'No matching merged PR; skip production deployment.')
           PY
 
-  deploy:
+  build:
     needs: merged-pr
     if: needs.merged-pr.outputs.eligible == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.name.outputs.image }}@${{ steps.publish.outputs.digest }}
+    steps:
+      - name: Check out the merged main commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Test deployment helpers
+        run: python3 -B -m unittest discover -s tests -p 'test_*.py'
+      - name: Set image repository
+        id: name
+        shell: bash
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Authenticate to GHCR
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Set up ARM emulation
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+        with:
+          platforms: arm64
+      - name: Set up image builder
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Build tested AMD64 and ARM64 images
+        id: publish
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.name.outputs.image }}:sha-${{ github.sha }}
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            SITE_URL=https://rithvik.ddns.net/
+          cache-from: type=gha,scope=portfolio
+          cache-to: type=gha,mode=max,scope=portfolio
+      - name: Smoke-test both runtime architectures
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}@${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          for platform in linux/amd64 linux/arm64; do
+            docker run --rm --platform "$platform" --network none --entrypoint node "$IMAGE" \
+              --input-type=module -e "await import('nodemailer'); await import('marked'); await import('sanitize-html'); console.log(process.arch)"
+          done
 
+  deploy:
+    needs: [merged-pr, build]
+    if: needs.merged-pr.outputs.eligible == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      packages: read
     steps:
       - name: Deploy to Oracle Swarm manager
         shell: bash
@@ -78,31 +137,27 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DEPLOY_IMAGE: ${{ needs.build.outputs.image }}
+          REGISTRY_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
           : "${SSH_HOST:?Missing SSH_HOST}"
           : "${SSH_USER:?Missing SSH_USER}"
           : "${SSH_PRIVATE_KEY:?Missing SSH_PRIVATE_KEY}"
           : "${SSH_KNOWN_HOSTS:?Missing SSH_KNOWN_HOSTS}"
-
+          [[ "$DEPLOY_IMAGE" =~ ^ghcr.io/rithvikrs/portfolio-website@sha256:[a-f0-9]{64}$ ]]
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$GITHUB_ACTOR" =~ ^[a-zA-Z0-9_-]+(\[bot\])?$ ]]
           ssh_dir="$(mktemp -d)"
           trap 'rm -rf -- "$ssh_dir"' EXIT
-
-          printf '%s\n' "$SSH_PRIVATE_KEY" |
-            tr -d '\r' > "$ssh_dir/key"
-          printf '%s\n' "$SSH_KNOWN_HOSTS" |
-            tr -d '\r' > "$ssh_dir/known_hosts"
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$ssh_dir/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > "$ssh_dir/known_hosts"
           chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
-
-          ssh -T \
+          printf '%s' "$REGISTRY_TOKEN" | ssh -T \
             -i "$ssh_dir/key" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
+            -o BatchMode=yes -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$ssh_dir/known_hosts" \
-            -o ConnectTimeout=15 \
-            -o ServerAliveInterval=30 \
-            -o ServerAliveCountMax=6 \
+            -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 \
             "$SSH_USER@$SSH_HOST" \
-            'bash /opt/portfolio/portfolio_redeploy.sh'
+            "PORTFOLIO_DEPLOY_IMAGE='$DEPLOY_IMAGE' PORTFOLIO_DEPLOY_REVISION='$GITHUB_SHA' PORTFOLIO_REGISTRY_USER='$GITHUB_ACTOR' bash /opt/portfolio/portfolio_redeploy.sh"

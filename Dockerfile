@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24-bookworm-slim AS build
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS build
 
 ARG PNPM_VERSION=11.19.0
 RUN npm install --global --ignore-scripts pnpm@${PNPM_VERSION}
@@ -23,8 +23,11 @@ FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=4173
 ARG VCS_REF=unknown
+ARG SITE_URL
 LABEL io.github.rithvikrs.portfolio.app="true" \
-      org.opencontainers.image.revision="${VCS_REF}"
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.source="https://github.com/RithvikRS/Portfolio-website" \
+      io.github.rithvikrs.portfolio.site-url="${SITE_URL}"
 
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules/

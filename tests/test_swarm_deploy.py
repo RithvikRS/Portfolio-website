@@ -175,6 +175,59 @@ class ImageResolutionTests(unittest.TestCase):
         self.assertEqual(swarm.registry_repository('registry.example:5000/team/app:v1'), 'registry.example:5000/team/app')
 
 
+class CIImageTests(unittest.TestCase):
+    reference = 'ghcr.io/rithvikrs/portfolio-website@sha256:' + 'a' * 64
+    revision = 'b' * 40
+
+    def test_pull_verifies_labels_and_deletes_credentials(self):
+        commands = []
+        def run(args, **kwargs):
+            commands.append((args, kwargs))
+            if args[0] == 'git': return self.revision
+            if 'login' in args:
+                folder = Path(args[args.index('--config') + 1])
+                (folder / 'config.json').write_text('private-token')
+            return ''
+        info = [{'Id': 'sha256:local', 'Config': {'Labels': {'org.opencontainers.image.revision': self.revision,
+                  'io.github.rithvikrs.portfolio.site-url': 'https://example.com/'}}}]
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(swarm, 'PRIVATE', Path(directory)), patch.object(swarm, 'run', side_effect=run), patch.object(swarm, 'docker', return_value=json.dumps(info)):
+                self.assertEqual(swarm.pull_ci_image(self.reference, self.revision, 'user', 'private-token', 'example.com'), 'sha256:local')
+            self.assertEqual(list(Path(directory).iterdir()), [])
+        self.assertFalse(any('private-token' in arg for args, _ in commands for arg in args))
+        self.assertIn('--password-stdin', commands[1][0])
+        self.assertEqual(commands[1][1]['data'], 'private-token\n')
+        self.assertIn('--platform', commands[2][0])
+
+    def test_reject_wrong_registry_tag_or_revision_before_login(self):
+        for ref, revision in [(self.reference.replace('rithvikrs', 'other'), self.revision),
+                              ('ghcr.io/rithvikrs/portfolio-website:latest', self.revision),
+                              (self.reference, 'c' * 40)]:
+            with self.subTest(ref=ref, revision=revision), patch.object(swarm, 'run', return_value=self.revision) as run:
+                with self.assertRaises(RuntimeError): swarm.pull_ci_image(ref, revision, 'user', 'token', 'example.com')
+                self.assertFalse(any('login' in call.args[0] for call in run.call_args_list))
+
+    def test_failed_pull_cleans_credentials(self):
+        def run(args, **kwargs):
+            if args[0] == 'git': return self.revision
+            folder = Path(args[args.index('--config') + 1])
+            (folder / 'config.json').write_text('private-token')
+            if 'pull' in args: raise RuntimeError('pull failed')
+            return ''
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(swarm, 'PRIVATE', Path(directory)), patch.object(swarm, 'run', side_effect=run):
+                with self.assertRaisesRegex(RuntimeError, 'pull failed'):
+                    swarm.pull_ci_image(self.reference, self.revision, 'user', 'private-token', 'example.com')
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_wrong_image_labels_fail_after_pull(self):
+        for labels in ({}, {'org.opencontainers.image.revision': self.revision, 'io.github.rithvikrs.portfolio.site-url': 'https://wrong/'}):
+            with tempfile.TemporaryDirectory() as directory:
+                with patch.object(swarm, 'PRIVATE', Path(directory)), patch.object(swarm, 'run', return_value=self.revision), patch.object(swarm, 'docker', return_value=json.dumps([{'Id': 'sha256:local', 'Config': {'Labels': labels}}])):
+                    with self.assertRaisesRegex(RuntimeError, 'revision or site URL'):
+                        swarm.pull_ci_image(self.reference, self.revision, 'user', 'token', 'example.com')
+
+
 class CancellationRecoveryTests(unittest.TestCase):
     def fixture(self):
         image = 'sha256:' + 'a' * 64

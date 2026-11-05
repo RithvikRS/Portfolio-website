@@ -95,11 +95,11 @@ Open [Fieldnotes](https://rithvik.ddns.net/admin/notes/) using your existing log
 2. Open a pull request into `main` and merge it when ready.
 3. Follow the [Deploy portfolio workflow](https://github.com/RithvikRS/Portfolio-website/actions/workflows/deploy.yml) until the deployment succeeds.
 
-The [workflow file](.github/workflows/deploy.yml) starts on pushes to `main`, then checks GitHub for a merged PR whose merge commit matches the pushed commit. Only a matching merged PR proceeds to production. A direct push starts the check but skips deployment; pushes to `V2` and closing an unmerged PR do not start this workflow. The check uses read-only PR access and receives no production secrets. The deployment uses the trusted `main` context and connects over SSH to run `/opt/portfolio/portfolio_redeploy.sh`. GitHub supplies `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`, and `SSH_KNOWN_HOSTS` from the `production` environment, which is restricted to `main`. It does not check out or execute unmerged PR code.
+The [workflow file](.github/workflows/deploy.yml) starts on pushes to `main` that change more than `README.md`, Markdown under `deploy/`, or `LICENSE`, then checks GitHub for a merged PR whose merge commit matches the pushed commit. Only a matching merged PR proceeds to production. A direct push starts the check but skips deployment; pushes to `V2` and closing an unmerged PR do not start this workflow. The check uses read-only PR access and receives no production secrets. The deployment uses the trusted `main` context and connects over SSH to run `/opt/portfolio/portfolio_redeploy.sh`. GitHub supplies `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`, and `SSH_KNOWN_HOSTS` from the `production` environment, which is restricted to `main`. It does not check out or execute unmerged PR code.
 
-The server fetches `main`, reconciles matching server edits, and builds and tests the app. Swarm updates services, then checks HTTPS, authentication gates, node 2, Portainer, and ntfy privacy. Failed service checks trigger an attempt to restore the last successful Swarm specification. A conflicting server edit stops deployment for reconciliation. Follow the [Swarm runbook](deploy/SWARM.md) for placement, maintenance, and recovery.
+GitHub Actions builds and tests AMD64/ARM64 images once, caches build layers, and publishes a commit tag to GHCR. The deployment passes the resulting immutable digest to the manager. The server fetches `main`, reconciles matching server edits, pulls the AMD64 image, and verifies its commit and site URL before updating services. A newer server revision stops an older image deployment. Registry authentication uses a job-scoped read token over SSH stdin and a temporary Docker config; no persistent registry credential is needed. Manual deployments still build locally. Swarm updates services, then checks HTTPS, authentication gates, node 2, Portainer, and ntfy privacy. Failed service checks trigger an attempt to restore the last successful Swarm specification. A conflicting server edit stops deployment for reconciliation. Follow the [Swarm runbook](deploy/SWARM.md) for placement, maintenance, and recovery.
 
-Git updates tracked source files, including removing files deleted in `main`; it does not wipe the server directory. Docker replaces containers as needed. `.env.production`, `.auth/`, `.portainer/`, `.notes/`, `.ntfy/`, `.swarm/`, and Caddy certificate volumes persist. The existing app serves during the build, but container replacement may briefly interrupt requests. Authelia restarts, so sign in again afterward.
+Git updates tracked source files, including removing files deleted in `main`; it does not wipe the server directory. Docker replaces containers as needed. `.env.production`, `.auth/`, `.portainer/`, `.notes/`, `.ntfy/`, `.swarm/`, and Caddy certificate volumes persist. The existing app serves during the CI build and image pull, but container replacement may briefly interrupt requests. Authelia restarts, so sign in again afterward.
 
 For a manual deployment, run **inside Oracle SSH**:
 
@@ -115,7 +115,7 @@ After **all deployment checks pass**, the script retains successful app images a
 
 | Image tag | What it represents |
 | --- | --- |
-| `rithvik-portfolio:production` | Most recently built candidate; it may not have passed deployment checks. |
+| `rithvik-portfolio:production` | Successful production image in Swarm; legacy Compose may tag a candidate before validation. |
 | `rithvik-portfolio:current` | Last app image to pass the complete deployment checks. |
 | `rithvik-portfolio:previous` | Previous successful app image, retained for manual rollback. |
 

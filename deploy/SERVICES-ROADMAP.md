@@ -1,0 +1,147 @@
+# Services roadmap
+
+Decision date: 5 November 2026.
+
+Use this plan to extend the existing Oracle Cloud Swarm. Implement one phase at a time through local changes, review, and the V2-to-main deployment workflow. This document records direction; it does not deploy services or authorize every future production operation.
+
+## Agreed direction
+
+- Keep AMD node 1 as manager, ingress, and host for the existing portfolio data.
+- Use Ampere A1 as the compute worker with `workload.compute=true`.
+- Use Authelia for individual accounts, MFA, and native OpenID Connect login where applications support it. Keep application permissions inside each application.
+- Add monitoring and recovery coverage before expanding persistent services.
+- Plan Rakazo for family and friends, with separate accounts/workspaces and isolated agent execution.
+- Plan Outline for personal notes and selectively shared documents. Keep Fieldnotes for portfolio publishing.
+- Remove IT-Tools and general formatting/conversion utilities from the roadmap.
+- Leave the personal investment/trading app until last. Its new direction is Oracle Database plus Authelia, implemented in its own repository.
+
+Vaultwarden is the preferred password-manager candidate, pending a decision to operate family password storage. A developer secrets platform remains optional. Do not interpret those candidates as already selected or deployed.
+
+## Current topology and boundaries
+
+| Node | Role | Current responsibility | Planned additions |
+| --- | --- | --- | --- |
+| AMD node 1 | Swarm manager; `portfolio.data=true` | Caddy, portfolio/Fieldnotes, Authelia, ntfy, Portainer, existing data | Keep core services here; move builds off the host |
+| AMD node 2 | Worker; `portfolio.worker=true` | Authenticated demo, Portainer agent | Uptime Kuma if measured memory/disk headroom permits |
+| Ampere A1 | Worker; `workload.compute=true` | Portainer agent; 4 OCPUs / 24 GB RAM compute capacity | New application services, approved persistent workloads, later trading app |
+
+### Capacity budget
+
+Use these owner-reported provisioned capacities for planning:
+
+| Node | Physical RAM | Provisioned storage | Swap |
+| --- | --- | --- | --- |
+| AMD node 1 | 1 GB | Approximately 47 GB | Configured |
+| AMD node 2 | 1 GB | Approximately 47 GB | Configured |
+| Ampere A1 | 24 GB | Approximately 95 GB | Not included in the application memory budget |
+
+Swap helps the AMD nodes survive memory pressure, but it uses disk and is much slower than RAM. Budget services against physical RAM and leave headroom for Linux, Docker, and the Swarm agent. Do not count swap as additional capacity for databases, agents, or concurrent application workloads. Swapping can delay health checks and cluster communication.
+
+Provisioned disk size is not the same as filesystem size or free space. Earlier inspections showed an approximately 30 GB root filesystem on these hosts. Recheck `lsblk`, `df -h`, and `swapon --show` before allocating storage; determine whether remaining capacity is already mounted or needs partition/filesystem expansion. Do not assume the full provisioned disk is available to Docker, or resize anything without checking the actual layout and backup coverage.
+
+The cluster has approximately 26 GB of physical RAM and 189 GB of provisioned storage, but neither is a pooled resource for an individual container. Keep the small AMD nodes focused on existing core services and lightweight monitoring. Put heavier applications on Ampere, with explicit limits and per-node disk monitoring. Retained images, databases, attachments, agent workspaces, swap, and local backup staging all consume storage.
+
+Swarm membership and labels live on the manager. Git controls service specifications. All three nodes run the global Portainer agent. Existing storage guards restrict writable catalog services to node 1; extend those guards deliberately before placing databases or note storage elsewhere. See [the Swarm runbook](SWARM.md).
+
+One manager and node-local disks do not provide automatic control-plane, ingress, or data failover. Keep availability work separate from adding worker capacity. Do not promote Ampere or move existing portfolio data as part of this plan.
+
+## Phase 1: deployment foundations
+
+1. Make documentation-only changes skip application builds and rollouts. Test path classification so executable/configuration changes still deploy.
+2. Build application images in GitHub Actions and publish versioned AMD64/ARM64 images to GHCR. Verify every target platform and deploy immutable registry digests.
+3. Retain previous-release images, checks, and configuration for rollback. Preserve the bounded Docker-cancellation workaround until an upstream fix is tested.
+4. Give each independently developed application a clear deployment owner and release boundary. Keep the trading app's code and release lifecycle in its own repository; do not place unrelated services in a stack managed by another repository's `--prune` deployment.
+
+Done when a docs-only PR causes no rollout, an application release deploys by digest, and a controlled rollback succeeds. The phase-1 change adds the CI build/digest-pull path and keeps manual local builds as a fallback. Confirm the first merged workflow and recovery behavior before marking this phase complete.
+
+## Phase 2: persistent storage and recovery
+
+- Inventory each new service's database, files, encryption keys, image platforms, and recovery credentials.
+- Extend placement validation to explicitly approved data nodes and service-specific storage. Keep one writer for local writable data, with stop-first updates.
+- Extend the private PC backup kit for ARM images, worker configuration, and additional service state. The backup implementation lives outside Git; changes here alone cannot extend it.
+- Consider encrypted Oracle Object Storage archives within the tenancy's verified free allowance. Retain an independent PC copy.
+- Test recovery into a disposable environment, including credentials and encryption keys. Keep recovery material accessible if Authelia or the secrets service is unavailable.
+
+Done when a new stateful service can be restored from the documented backup without relying on its original container. See [backup coverage](BACKUPS.md).
+
+## Phase 3: monitoring
+
+Deploy Uptime Kuma on AMD node 2 only after confirming capacity and completing its storage/backup support. If headroom is insufficient, reconsider placement before deployment.
+
+Keep Portainer for infrastructure operations and Kuma for availability history and alerts. Monitor public HTTPS, API readiness, certificate expiry, and eventually application-provided worker heartbeats and data-freshness checks. A successful HTTP response does not establish that imports are current.
+
+Use consecutive failures, an outage notification, and a recovery notification to keep ntfy quiet. Add a check outside this cluster with an independent delivery path: node 1 hosts both ingress and ntfy. Keep Kuma administration restricted; do not assume Authelia creates per-user monitoring permissions inside Kuma.
+
+Done when a controlled outage and recovery produce the expected notifications without repeated alert noise.
+
+## Phase 4: identity and access
+
+- Create individual Authelia users and explicit application groups, with MFA and tested account recovery.
+- Register a separate OIDC client and exact callback URLs for each compatible application. Use authorization code flow with PKCE and stable issuer/subject bindings.
+- Use app-native authorization for workspace, document, and financial-data permissions. A reverse-proxy login gate alone does not create those permissions.
+- Keep Portainer administration limited. Give collaborators only explicitly required resource access, accounting for Community Edition limitations.
+- Test onboarding, cross-user isolation, logout, and offboarding. Revoke downstream sessions and scheduled jobs where needed; removing an identity-provider group may not invalidate existing application sessions.
+
+Done when two test users can reach only their intended resources and offboarding removes continuing access.
+
+## Phase 5: password and application secrets
+
+Use different mechanisms for different consumers:
+
+| Need | Direction |
+| --- | --- |
+| Service runtime credentials | Expand Docker Swarm secrets usage; version and rotate secrets deliberately |
+| Family passwords and secure notes | Evaluate Vaultwarden with native Authelia OIDC, invitations, and encrypted recovery exports |
+| Developer/CI environment secrets | Consider Infisical only if project/environment workflows justify another service |
+
+Vaultwarden SSO authenticates the user; a master password still unlocks the vault. Verify clients, recovery, and two-user isolation before storing important credentials. Do not store passwords in Outline or Fieldnotes.
+
+Infisical's generic OIDC on self-hosted instances currently requires an enterprise license. Do not assume a free Authelia integration or enable paid services without a separate decision.
+
+## Phase 6: Rakazo pilot and shared use
+
+Run Rakazo application services on Ampere after validating its selected release, ARM images, Swarm adaptation, PostgreSQL persistence, and backup coverage. Its supported PostgreSQL dependency remains separate from the trading app's Oracle decision.
+
+Use native Authelia OIDC and an explicit admitted-user group/registration policy. Test SSO-only login and email/identity claims with the actual versions. Give each family member or friend an individual account and workspace. Start with two users before expanding.
+
+Separate agent execution from production administration. Do not give general-purpose agents the production Docker socket, manager SSH keys, or financial database credentials. Choose a dedicated sandbox host or remote provider after assessing isolation, resource limits, and costs; sharing an overlay network is not a security boundary against host Docker access.
+
+Start with read-only research or repository summaries. Decide who supplies model keys, who pays, and how usage, concurrent agents, disk, and runtime are limited. Verify which limits the selected release actually enforces. Test that users cannot access each other's private agents/files/credentials and that account deactivation stops existing sessions and scheduled work.
+
+Done when one useful scheduled workflow works for each of two isolated users with bounded resource use and successful recovery.
+
+## Phase 7: Outline personal and shared notes
+
+Select a self-hosted release containing Outline's Personal documents feature, announced 16 October 2026, and verify feature availability in that edition before deployment.
+
+- Authenticate each user through Authelia OIDC.
+- Give users their own Personal space; use document invitations and restricted collections for selective sharing.
+- Offer view/edit access explicitly. Disable public publishing by default if it is unnecessary.
+- Test two-user isolation, sharing/revocation, search, exports, attachments, and restore behavior.
+- Explain that application-private notes are not end-to-end encrypted against the server/database operator.
+
+Keep Fieldnotes as the existing single-administrator blog and learning-note publisher. It has private drafts and public snapshots, not independent user libraries or shared-workspace permissions. See [Fieldnotes](FIELDNOTES.md).
+
+Done when each user has private notes, can share a chosen document without exposing unrelated notes, and can recover their content.
+
+## Phase 8: personal investment/trading app
+
+Implement this last, in the separate `trading-app` repository. Its handoff document is `docs/oracle-authelia-decisions.md`.
+
+Target Oracle Autonomous Database and native Authelia OIDC. Rework PostgreSQL-specific migrations and ownership isolation while preserving exact financial values, transaction semantics, sessions, MFA, and recovery. Keep React/FastAPI unless implementation evidence warrants a separate decision. Build a small owner-isolated vertical slice against Oracle before porting the full application.
+
+The application runs on Ampere behind existing Caddy ingress. Confirm ARM compatibility, Oracle connectivity, hosted limits, and independent release/rollback boundaries. Start with synthetic data in staging. Do not enable live provider integrations merely because hosting is ready.
+
+Done when hosted identity, cross-owner isolation, migration, backup/restore, and application monitoring tests pass. Database and auth migrations are not complete today.
+
+## References and decisions to revisit
+
+Verify current versions, licensing, free quotas, and tenancy availability before implementation. Free tiers are operating constraints, not guaranteed service availability.
+
+- [Oracle Always Free Autonomous Database](https://docs.oracle.com/en-us/iaas/autonomous-database-serverless/doc/autonomous-always-free.html): a different engine from PostgreSQL, with resource and inactivity limits.
+- [OCI managed PostgreSQL pricing](https://www.oracle.com/cloud/postgresql/pricing/): separate from the free Autonomous Database offer.
+- [Oracle Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm): check storage quotas against the account's status.
+- [Authelia OIDC](https://www.authelia.com/integration/openid-connect/introduction/).
+- [Rakazo accounts and OIDC](https://github.com/elie222/rakazo/blob/main/docs/self-host-accounts.md) and [production architecture](https://github.com/elie222/rakazo/blob/main/docs/self-host-production.md).
+- [Outline Personal documents](https://www.getoutline.com/changelog/personal-documents) and [OIDC](https://www.getoutline.com/integrations/oidc).
+- [Vaultwarden OIDC](https://github.com/dani-garcia/vaultwarden/wiki/Enabling-SSO-support-using-OpenId-Connect), [Swarm secrets](https://docs.docker.com/engine/swarm/secrets/), and [Infisical SSO licensing](https://infisical.com/docs/documentation/platform/sso/overview).
