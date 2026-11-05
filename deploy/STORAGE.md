@@ -62,7 +62,7 @@ The manager backup and worker snapshots run sequentially. A worker backup pauses
 1. Verify the saved checksums and image inventory. Keep the original archives unchanged.
 2. Rebuild a compatible worker, prepare `/srv/swarm`, and restore selected host settings deliberately. Do not overwrite an entire replacement `/etc` or copy live Swarm daemon state.
 3. Keep its application services scaled to zero. Extract `worker-data.tar.gz` into `/srv/swarm` with numeric ownership, ACLs, and extended attributes, then run `restorecon -R /srv/swarm`. Do not overlay a live database.
-4. Load that worker's `docker-images.tar.gz` on the matching architecture. Restore file-backed secrets and configuration from the manager's matched recovery kit. Encrypted application data requires its matching keys.
+4. Load that worker's `docker-images.tar.gz` on the matching architecture and run the private `restore_images.py` helper with its `snapshot-inventory.json` as described in [image recovery](BACKUPS.md#restore-image-references-after-loading-archives). Restore file-backed secrets and configuration from the manager's matched recovery kit. Encrypted application data requires its matching keys.
 5. Join the cluster using a fresh token, restore approved labels, and update exact node IDs and the storage marker. Restore the saved service specifications with the correct replica counts.
 6. Check application data, login, attachments, HTTP health, and Portainer. Retain the old data until recovery checks pass.
 

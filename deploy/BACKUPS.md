@@ -23,7 +23,7 @@ The backup archives contain credentials. Windows ACLs restrict the local folder 
 2. Install compatible Linux/Docker on the replacement AMD manager and worker. Restore source from `source.bundle`, then overlay `source-worktree.tar.gz` to include changes that had not reached Git. Restore the checkout at `/opt/portfolio`, keeping original ownership and permissions.
 3. Restore all private entries listed in the snapshot manifest together, including optional `.services/` and `.secrets/` directories. Create the external Docker volumes `portfolio_caddy_data` and `portfolio_caddy_config`, then extract their matching volume archives into the inspected mountpoints while no service is running. Do not mix database files and encryption keys from different snapshots. Inspect host configuration and restore the required settings deliberately; do not overwrite a replacement host's entire `/etc` blindly.
 4. Load `docker-images.tar.gz` on node 1. Load it on node 2 too if registry downloads are unavailable. Initialize a new Swarm using the manager's private IP and join the worker using a fresh token. Restore peer-only firewall rules and labels: `portfolio.data=true` only on node 1 and `portfolio.worker=true` only on node 2. Keep external DNS pointed at the recovered ingress node. Do not copy a live `/var/lib/docker/swarm` directory into a different cluster.
-5. The private `.swarm/current.json` points to the saved rendered stack under `.swarm/releases`. Deploy that exact stack with `sudo docker stack deploy --resolve-image never -c /opt/portfolio/.swarm/releases/<saved-release>/stack.json portfolio`. Keep private files and command output out of Git and shared logs. Paths in the saved stack assume `/opt/portfolio`.
+5. Prepare image recovery aliases on every node and rewrite both saved releases using the private `restore_images.py` helper below. Platform-specific image exports can change local IDs, so do not deploy the original image references blindly. Deploy the rewritten current stack with `sudo docker stack deploy --resolve-image never -c /opt/portfolio/.swarm/recovery-current.json portfolio`. Keep private files and command output out of Git and shared logs. Paths in the saved stack assume `/opt/portfolio`.
 6. Run `python3 scripts/swarm-deploy.py check`, `python3 scripts/swarm-portainer.py`, and `python3 scripts/setup-portainer.py --configure`. Check all three nodes, HTTPS, login, writing, and the iPhone subscription. Do not re-enable the retired ARM cron. Take a fresh backup after recovery.
 
 For restoring state onto the current cluster, acquire the deployment lock and scale all five core services to zero first. Wait until their tasks stop before replacing any data. Preserve a recovery copy of the current state. Restore complete directories and certificate volumes from one matched snapshot, then deploy its saved stack and check health. Never start legacy Compose containers alongside Swarm.
@@ -51,3 +51,24 @@ The private backup implementation lives outside this repository. These Git chang
 A completed cluster folder has `SUCCESS.json` and `LOCAL-SHA256SUMS.txt`. Read `manager-backup.json` for the separately saved manager recovery kit; retain both directories together. Each worker folder has its own manifest, image/data validation report, and transport checksum. `INCOMPLETE.txt` means the cluster backup did not finish. Use `Backup-Cluster.ps1 -Resume "<cluster-folder>"` to reuse completed worker snapshots and continue a partial download; include `-WorkersOnly` for a worker-only run. A failed server snapshot requires investigation and a fresh run, not promotion of its partial archive. Worker snapshots are sequential and do not provide cross-node transactional consistency.
 
 The manager export now includes current/previous release images and their required service images instead of every historical failed-release tag. Optional `.services/` and `.secrets/` source directories are included when present. External secret contents cannot be recovered from Docker inspection. The manager preflight rejects external catalog secrets until their recovery coverage is explicit; prefer file-backed secrets whose source and release snapshots are included.
+
+## Restore image references after loading archives
+
+Run the private kit's `tools/restore_images.py` as the deployment user on each replacement node after `sudo docker load -i docker-images.tar.gz`. Use `--sudo` for Docker access; do not run the whole Python helper as root. Supply the manager's `metadata/images.json` or the worker's `snapshot-inventory.json` from that node's matched backup.
+
+The helper compares architecture, image configuration, and filesystem layer hashes before tagging loaded images. It creates consistent `127.0.0.1:1/portfolio-recovery/...:snapshot` aliases locally on each eligible node. Swarm can use these cached images without a working registry. Do not configure or publish a registry on port 1. Prepare every node before deploying; a missing alias makes recovery fail instead of substituting another image.
+
+On the manager, also rewrite the saved release and generate new metadata:
+
+```bash
+python3 /path/to/backup-tools/tools/restore_images.py --sudo \
+  --inventory /path/to/manager-backup/server/metadata/images.json \
+  --release /opt/portfolio/.swarm/current.json \
+  --output /opt/portfolio/.swarm/recovery-current.json
+```
+
+Repeat for `previous.json`, using `recovery-previous.json`, to retain rollback. On workers, omit `--release` and `--output` and supply their own inventory. Use new output filenames; the helper refuses to overwrite an existing recovery stack.
+
+After the rewritten current stack passes application health checks, preserve the original metadata and install `recovery-current.metadata.json` as `.swarm/current.json`. Install the corresponding previous metadata too. Retag the images named in those metadata records as `rithvik-portfolio:current`, `rithvik-portfolio:production`, and `rithvik-portfolio:previous`. This keeps later deployment rollback and cleanup aligned with the restored local images. Keep the original archives and metadata until the complete recovery passes.
+
+The recovery kit includes the private scripts and settings under `backup-tools`. Update PC-specific paths before running it on a replacement PC. The manager kit contains client access keys; worker-only backups do not replace that kit.
