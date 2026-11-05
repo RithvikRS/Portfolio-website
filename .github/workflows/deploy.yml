@@ -116,8 +116,14 @@ jobs:
           IMAGE: ${{ steps.name.outputs.image }}@${{ steps.publish.outputs.digest }}
         run: |
           set -euo pipefail
+          docker buildx imagetools inspect --raw "$IMAGE" > "$RUNNER_TEMP/portfolio-index.json"
           for platform in linux/amd64 linux/arm64; do
-            docker run --rm --platform "$platform" --network none --entrypoint node "$IMAGE" \
+            # Classic Docker stores cannot load two platforms under one index digest.
+            digest="$(jq -er --arg arch "${platform#linux/}" \
+              '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch)] | if length == 1 then .[0].digest else error("Expected one platform manifest") end' \
+              "$RUNNER_TEMP/portfolio-index.json")"
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            docker run --rm --platform "$platform" --network none --entrypoint node "${IMAGE%@*}@$digest" \
               --input-type=module -e "await import('nodemailer'); await import('marked'); await import('sanitize-html'); console.log(process.arch)"
           done
 
