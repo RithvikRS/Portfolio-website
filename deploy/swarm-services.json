@@ -26,16 +26,92 @@
       "cap_drop": [
         "ALL"
       ]
+    },
+    "uptime_kuma": {
+      "image": "louislam/uptime-kuma:2.5.9@sha256:e88415a90dd2f7efecdbc18de0490aff292764a3ac471531bf1d0481725591bd",
+      "user": "1000:1000",
+      "networks": [
+        "swarm_monitoring"
+      ],
+      "environment": {
+        "UPTIME_KUMA_DB_TYPE": "sqlite",
+        "NODE_OPTIONS": "--max-old-space-size=192"
+      },
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/swarm/uptime_kuma",
+          "target": "/app/data"
+        }
+      ],
+      "read_only": true,
+      "tmpfs": [
+        "/tmp:size=32m,mode=1777"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.id == kxm75m17suc2o1hp0s4ikyhri"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "320M",
+            "cpus": "0.50"
+          },
+          "reservations": {
+            "memory": "128M"
+          }
+        },
+        "update_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "failure_action": "pause",
+          "monitor": "60s"
+        },
+        "rollback_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "monitor": "60s"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "extra/healthcheck"
+        ],
+        "interval": "30s",
+        "timeout": "10s",
+        "start_period": "90s",
+        "retries": 3
+      }
     }
   },
   "networks": {
     "swarm_node2": {
       "driver": "overlay",
       "attachable": false
+    },
+    "swarm_monitoring": {
+      "driver": "overlay",
+      "attachable": false
     }
   },
   "caddy_networks": [
-    "swarm_node2"
+    "swarm_node2",
+    "swarm_monitoring"
   ],
   "configs": {},
   "secrets": {},
@@ -48,9 +124,50 @@
         303,
         401
       ]
+    },
+    {
+      "url": "https://uptime.144.24.135.201.sslip.io/",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
+    },
+    {
+      "url": "https://uptime.144.24.135.201.sslip.io/api/status-page/config/test",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
+    },
+    {
+      "url": "https://uptime.144.24.135.201.sslip.io/socket.io/?EIO=4&transport=polling",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
+    },
+    {
+      "url": "https://{NTFY_DOMAIN}/",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
+    },
+    {
+      "url": "https://{NTFY_DOMAIN}/arm-provisioning",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
     }
   ],
   "internal_checks": [
-    "http://node2:80"
+    "http://node2:80",
+    "http://uptime_kuma:3001/"
   ]
 }

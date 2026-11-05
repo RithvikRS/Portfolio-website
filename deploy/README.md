@@ -56,3 +56,5 @@ The Caddy template replaces `X-Real-IP` with the connected client's IP. Enable `
 - The static-file allowlist serves public pages, assets, and the current CV. The separately handled admin route requires a verified identity when enabled. `.env`, `.auth/`, server source, content data, and the old CV are excluded from static serving. A public Git repository and downloadable CV can still expose contact details independently of the website; review those separately before publishing.
 
 Use the [private-state backup and restore guide](BACKUPS.md) to preserve all service credentials, databases, writing, and ntfy delivery state together.
+
+Use [monitoring](MONITORING.md) for the private Uptime Kuma dashboard, alert policy, and recovery steps.

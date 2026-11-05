@@ -29,6 +29,9 @@ access_control:
       resources: ['^/admin(/.*)?$', '^/portainer(/.*)?$', '^/node2(/.*)?$']
       subject: ['group:admins']
       policy: 'one_factor'
+    - domain: ['uptime.144.24.135.201.sslip.io', 'ntfy.144.24.135.201.sslip.io']
+      subject: ['group:admins']
+      policy: 'one_factor'
 session:
   name: 'workspace_session'
   same_site: 'lax'
@@ -39,6 +42,12 @@ session:
     - domain: '{{ env "DOMAIN" }}'
       authelia_url: 'https://{{ env "DOMAIN" }}/auth/'
       default_redirection_url: 'https://{{ env "DOMAIN" }}/admin/'
+    - domain: 'uptime.144.24.135.201.sslip.io'
+      authelia_url: 'https://uptime.144.24.135.201.sslip.io/auth/'
+      default_redirection_url: 'https://uptime.144.24.135.201.sslip.io/'
+    - domain: 'ntfy.144.24.135.201.sslip.io'
+      authelia_url: 'https://ntfy.144.24.135.201.sslip.io/auth/'
+      default_redirection_url: 'https://ntfy.144.24.135.201.sslip.io/'
 regulation:
   max_retries: 5
   find_time: '2m'
