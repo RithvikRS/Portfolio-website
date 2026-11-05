@@ -41,7 +41,7 @@ Provisioned disk size is not the same as filesystem size or free space. Earlier 
 
 The cluster has approximately 26 GB of physical RAM and 189 GB of provisioned storage, but neither is a pooled resource for an individual container. Keep the small AMD nodes focused on existing core services and lightweight monitoring. Put heavier applications on Ampere, with explicit limits and per-node disk monitoring. Retained images, databases, attachments, agent workspaces, swap, and local backup staging all consume storage.
 
-Swarm membership and labels live on the manager. Git controls service specifications. All three nodes run the global Portainer agent. Existing storage guards restrict writable catalog services to node 1; extend those guards deliberately before placing databases or note storage elsewhere. See [the Swarm runbook](SWARM.md).
+Swarm membership and labels live on the manager. Git controls service specifications. All three nodes run the global Portainer agent. Storage guards permit core data on node 1 and explicitly approved, exactly pinned worker bind directories. See [worker storage](STORAGE.md) and run the private cluster backup before adding application data. See [the Swarm runbook](SWARM.md).
 
 One manager and node-local disks do not provide automatic control-plane, ingress, or data failover. Keep availability work separate from adding worker capacity. Do not promote Ampere or move existing portfolio data as part of this plan.
 

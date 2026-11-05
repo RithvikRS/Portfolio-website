@@ -1,5 +1,15 @@
 {
   "backend_subnet": "10.42.0.0/24",
   "agent_image": "portainer/agent:2.45.2",
-  "data_constraint": "node.labels.portfolio.data == true"
+  "data_constraint": "node.labels.portfolio.data == true",
+  "storage_nodes": {
+    "amd2": {
+      "node_id": "kxm75m17suc2o1hp0s4ikyhri",
+      "root": "/srv/swarm"
+    },
+    "ampere": {
+      "node_id": "tzqsl1t88r3l1i8zcqvcmredo",
+      "root": "/srv/swarm"
+    }
+  }
 }

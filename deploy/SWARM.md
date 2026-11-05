@@ -6,11 +6,11 @@ Run manager commands as `opc` on node 1 in `/opt/portfolio`. Make public configu
 
 ## Architecture
 
-AMD node 1 is the manager, data host, build host, and public ingress. AMD node 2 and Ampere A1 are workers. Additional Linux workers can join without changing a node count in Python.
+AMD node 1 is the manager, data host, and public ingress. AMD node 2 and Ampere A1 are workers. Additional Linux workers can join without changing a node count in Python.
 
 | Node | Hostname | Swarm role | Placement label | Workload |
 | --- | --- | --- | --- | --- |
-| AMD node 1 | `vantize-micro-amd` | Manager | `portfolio.data=true` | Core services, data, builds and ingress |
+| AMD node 1 | `vantize-micro-amd` | Manager | `portfolio.data=true` | Core services, data and ingress |
 | AMD node 2 | `vantize-micro-amd-2` | Worker | `portfolio.worker=true` | Authenticated demo |
 | Ampere A1 | `vantize-ampere-a1` | Worker | `workload.compute=true` | ARM64 compute capacity, 4 OCPUs / 24 GB RAM |
 
@@ -44,7 +44,7 @@ flowchart LR
 
 Only Caddy publishes application ports: 80/TCP and 443/TCP+UDP on node 1. DNS stays pointed at node 1. Private overlay networks connect services across nodes. The `swarm_backend` network, `10.42.0.0/24`, is exclusive to Caddy and the portfolio app because the app trusts identity headers from that subnet. Each additional service uses catalog networks; attach Caddy only when it needs to proxy that service.
 
-Keep `portfolio.data=true` on node 1 only. Core services each use one replica and stop-first updates. Additional services with writable bind mounts or volumes must also use one stop-first replica on the data node. This prevents simultaneous writers; it does not replicate storage.
+Keep `portfolio.data=true` on node 1 only. Core services each use one replica and stop-first updates. Additional services with writable storage must use one stop-first replica on the data node, or an exact approved worker with a service-specific bind directory; see [worker storage](STORAGE.md). This prevents simultaneous writers; it does not replicate storage.
 
 There is no automatic data failover. Losing node 1 stops ingress and the stateful services, and the single manager cannot schedule replacements while offline. Adding workers does not solve this. Plan manager quorum, storage replication, application consistency, and ingress together before enabling failover.
 
@@ -124,9 +124,9 @@ Follow the service catalog, network, route and check steps above. For an ARM64-c
 }
 ```
 
-Swarm reports this host architecture as `aarch64`; the corresponding container image platform is `linux/arm64`. Select a multi-platform registry digest that includes ARM64. The renderer also pulls images on the AMD manager, so use a manifest supporting both `linux/amd64` and `linux/arm64` with the current pipeline. Keep the locally built portfolio app pinned to node 1.
+Swarm reports this host architecture as `aarch64`; the corresponding container image platform is `linux/arm64`. Select a multi-platform registry digest that includes ARM64. The renderer also pulls images on the AMD manager, so use a manifest supporting both `linux/amd64` and `linux/arm64` with the current pipeline. Keep the portfolio app pinned to node 1.
 
-Set memory limits and reservations for each compute service and leave capacity for Docker and the agent. Ampere is currently the only compute-labeled node. Its services remain pending if it is drained or unavailable. Keep writable persistent services on node 1 under the current storage guard. Extend backup image/platform coverage before relying on ARM image restores; the private PC exporter currently saves AMD64 images.
+Set memory limits and reservations for each compute service and leave capacity for Docker and the agent. Ampere is currently the only compute-labeled node. Its services remain pending if it is drained or unavailable. Use an exact approved worker ID and `/srv/swarm/<service>` for writable worker storage. The private cluster backup exports AMD64 and ARM64 worker images separately; test restoration before relying on application data.
 
 To restore the compute label after rebuilding and rejoining Ampere, run on node 1:
 
@@ -347,3 +347,7 @@ Use [BACKUPS.md](BACKUPS.md) and extend coverage whenever storage changes. Confi
 Docker references: [stack deployment format](https://docs.docker.com/engine/swarm/stack-deploy/), [joining worker nodes](https://docs.docker.com/engine/swarm/swarm-tutorial/add-nodes/), and [actual/desired replica counts](https://docs.docker.com/reference/cli/docker/service/ls/).
 
 The GitHub SSH key uses a forced deployment command. The deploy helper reads only the three CI metadata assignments from `SSH_ORIGINAL_COMMAND`; it never executes that string or relaxes the key restrictions. The registry token still travels over standard input. Malformed CI metadata fails before any rollout.
+
+## Approved worker storage
+
+Use [the worker storage runbook](STORAGE.md) for persistent services on AMD node 2 and Ampere. `storage_nodes` in `deploy/swarm.json` permits one stop-first replica pinned to an exact approved worker, with writable bind mounts limited to `/srv/swarm/<service>`. Core services stay on node 1. Run the private cluster backup preflight before storing application data.
