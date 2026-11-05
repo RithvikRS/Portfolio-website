@@ -173,6 +173,68 @@ class ImageResolutionTests(unittest.TestCase):
         self.assertEqual(swarm.registry_repository('registry.example:5000/team/app:v1'), 'registry.example:5000/team/app')
 
 
+class FailureDiagnosticsTests(unittest.TestCase):
+    def test_snapshot_captures_paused_update_and_health_without_secrets(self):
+        responses = [
+            json.dumps({'ID': 'svc', 'Name': 'portfolio_app', 'Mode': 'replicated', 'Replicas': '1/1'}),
+            json.dumps([{'ID': 'svc', 'UpdateStatus': {'State': 'paused', 'StartedAt': 'start', 'Message': 'secret-value'},
+                         'Spec': {'Env': ['TOKEN=secret-value']}}]),
+            'container',
+            json.dumps([{'Id': 'container', 'Config': {'Env': ['TOKEN=secret-value'],
+                         'Labels': {'com.docker.swarm.service.name': 'portfolio_app'}},
+                         'State': {'Status': 'running', 'Running': True, 'OOMKilled': True, 'ExitCode': 0,
+                                   'Health': {'Status': 'unhealthy', 'FailingStreak': 3,
+                                              'Log': [{'Start': 'a', 'End': 'b', 'ExitCode': 1,
+                                                       'Output': 'secret-value'}]}}}])]
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(swarm, 'PRIVATE', Path(directory)), patch.object(swarm, 'docker', side_effect=responses) as docker, patch('builtins.print') as output:
+                swarm.report_failure_state()
+                raw = (Path(directory) / 'last-failed-state.json').read_text(encoding='utf-8')
+                data = json.loads(raw)
+                self.assertEqual(data['services'][0]['update']['State'], 'paused')
+                self.assertEqual(data['services'][0]['Replicas'], '1/1')
+                self.assertEqual(data['local_containers'][0]['health']['status'], 'unhealthy')
+                self.assertTrue(data['local_containers'][0]['state']['OOMKilled'])
+                self.assertEqual(data['local_containers'][0]['health']['recent_checks'][0]['ExitCode'], 1)
+                self.assertNotIn('secret-value', raw + str(output.call_args_list))
+                self.assertTrue(all(0 < call.kwargs['timeout'] <= 10 for call in docker.call_args_list))
+
+    def test_service_failure_still_collects_local_health(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(swarm, 'PRIVATE', Path(directory)), patch.object(swarm, 'docker', side_effect=[RuntimeError('secret'), '']), patch('builtins.print'):
+                swarm.report_failure_state()
+                data = json.loads((Path(directory) / 'last-failed-state.json').read_text())
+                self.assertEqual(data['unavailable'], ['service update states'])
+                self.assertEqual(data['local_containers'], [])
+
+    def test_budget_expiry_and_disk_failure_do_not_raise(self):
+        with patch.object(swarm.time, 'monotonic', side_effect=[0, 31, 32]), patch.object(swarm, 'docker') as docker, patch.object(swarm, 'write', side_effect=OSError('disk')), patch('builtins.print') as output:
+            swarm.report_failure_state()
+            docker.assert_not_called()
+            self.assertIn('manager-local container health', str(output.call_args_list))
+
+    def test_diagnostic_failure_does_not_block_rollback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            private = Path(directory)
+            for name in ('current', 'candidate'):
+                (private / (name + '.json')).write_text(json.dumps({'file': name + '.json'}))
+            events = []
+            def docker(*args, **kwargs):
+                events.append(args)
+                if args[:2] == ('stack', 'ps'):
+                    raise RuntimeError('history unavailable')
+                return ''
+            def fail_snapshot():
+                events.append(('snapshot',))
+                raise RuntimeError('snapshot unavailable')
+            with patch.object(swarm, 'PRIVATE', private), patch.object(swarm, 'docker', side_effect=docker), patch.object(swarm, 'check', side_effect=[RuntimeError('unhealthy'), None]), patch.object(swarm, 'report_failure_state', side_effect=fail_snapshot), patch('builtins.print'):
+                with self.assertRaisesRegex(RuntimeError, 'unhealthy'):
+                    swarm.apply()
+            self.assertEqual(events[1], ('snapshot',))
+            self.assertEqual(events[-1][-2], 'current.json')
+            self.assertFalse((private / 'previous.json').exists())
+
+
 class SwarmReleaseTests(unittest.TestCase):
     def test_failed_health_restores_previous_spec_without_rotating_pointers(self):
         with tempfile.TemporaryDirectory() as directory:
