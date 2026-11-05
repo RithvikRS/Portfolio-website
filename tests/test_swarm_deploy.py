@@ -15,6 +15,20 @@ spec = importlib.util.spec_from_file_location('swarm_deploy', Path(__file__).res
 swarm = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(swarm)
 
+class CIRequestTests(unittest.TestCase):
+    def test_forced_command_recovers_only_metadata(self):
+        command = "PORTFOLIO_DEPLOY_IMAGE='image' PORTFOLIO_DEPLOY_REVISION='revision' PORTFOLIO_REGISTRY_USER='actor' bash /opt/portfolio/portfolio_redeploy.sh"
+        self.assertEqual(swarm.ci_request({'SSH_ORIGINAL_COMMAND': command}), ('image', 'revision', 'actor'))
+        for bad in (command + '; id', command.replace('bash /opt', 'sh /opt'),
+                    command.replace("='image'", "=''"), command.replace('PORTFOLIO_REGISTRY_USER=', 'OTHER=')):
+            with self.assertRaises(RuntimeError):
+                swarm.ci_request({'SSH_ORIGINAL_COMMAND': bad})
+
+    def test_direct_environment_and_manual_fallback(self):
+        self.assertEqual(swarm.ci_request({'PORTFOLIO_DEPLOY_IMAGE': 'image', 'PORTFOLIO_DEPLOY_REVISION': 'rev', 'PORTFOLIO_REGISTRY_USER': 'user'}), ('image', 'rev', 'user'))
+        self.assertEqual(swarm.ci_request({'SSH_ORIGINAL_COMMAND': 'bash /opt/portfolio/portfolio_redeploy.sh'}), ('', '', ''))
+
+
 class SwarmConfigurationTests(unittest.TestCase):
     def test_data_stays_pinned_and_proxy_network_is_exclusive(self):
         with tempfile.TemporaryDirectory() as directory:
