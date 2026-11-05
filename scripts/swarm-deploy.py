@@ -93,6 +93,23 @@ def image(reference):
     raise RuntimeError('No immutable digest matches the configured registry repository: ' + reference)
 
 
+def worker_only(service, settings):
+    constraints = service.get('deploy', {}).get('placement', {}).get('constraints', [])
+    worker_ids = {node['node_id'] for node in settings.get('storage_nodes', {}).values()}
+    return ('node.role == worker' in constraints or
+            any('node.id == ' + node_id in constraints for node_id in worker_ids))
+
+
+def catalog_image(service, settings):
+    if worker_only(service, settings):
+        reference = service['image']
+        if not re.fullmatch(r'[^\s@]+@sha256:[0-9a-f]{64}', reference):
+            raise RuntimeError('Worker-only services require an immutable image digest.')
+        # Workers pull and verify this digest. Do not unpack their images on the manager.
+        return reference
+    return image(service['image'])
+
+
 def load_catalog(root=ROOT):
     catalog = json.loads((root / 'deploy/swarm-services.json').read_text(encoding='utf-8'))
     allowed = {'services', 'networks', 'volumes', 'configs', 'secrets', 'caddy_networks', 'http_checks', 'internal_checks'}
@@ -185,8 +202,17 @@ def add_catalog(result, catalog, pins, release, root, data_constraint, storage_n
         deploy.setdefault('update_config', {'parallelism': 1, 'order': 'stop-first', 'failure_action': 'pause', 'monitor': '45s'})
         deploy.setdefault('rollback_config', {'parallelism': 1, 'order': 'stop-first', 'monitor': '45s'})
         for mount in service.get('volumes', []):
-            if not isinstance(mount, dict) or mount.get('type') not in ('bind', 'volume'):
-                raise RuntimeError('Use long-syntax bind or volume mounts.')
+            if not isinstance(mount, dict) or mount.get('type') not in ('bind', 'volume', 'tmpfs'):
+                raise RuntimeError('Use long-syntax bind, volume, or tmpfs mounts.')
+            if mount['type'] == 'tmpfs':
+                options = mount.get('tmpfs', {})
+                if (set(mount) - {'type', 'target', 'tmpfs'} or
+                        not isinstance(mount.get('target'), str) or
+                        not mount['target'].startswith('/') or mount['target'] == '/' or
+                        set(options) - {'size'} or
+                        type(options.get('size')) is not int or options['size'] <= 0):
+                    raise RuntimeError('Tmpfs mounts require an absolute target, positive byte size.')
+                continue  # Volatile scratch space is not persistent worker data.
             if mount['type'] == 'volume' and mount['source'] not in catalog.get('volumes', {}):
                 raise RuntimeError('Declare catalog volumes explicitly.')
             if mount['type'] == 'bind' and not Path(mount['source']).is_absolute():
@@ -365,9 +391,10 @@ def prepare(reuse_image=None):
     pins = {name: image(compose['services'][name]['image']) for name in CORE if name != 'app'}
     catalog = load_catalog()
     pins['agent'] = image(settings['agent_image'])
-    pins.update({name: image(service['image']) for name, service in catalog.get('services', {}).items()})
-    for name in catalog.get('services', {}):
-        docker('image', 'tag', pins[name], 'portfolio-' + name + ':current')
+    pins.update({name: catalog_image(service, settings) for name, service in catalog.get('services', {}).items()})
+    for name, service in catalog.get('services', {}).items():
+        if not worker_only(service, settings):
+            docker('image', 'tag', pins[name], 'portfolio-' + name + ':current')
     secret_path = ROOT / '.portainer/agent-secret'
     if not secret_path.exists():
         secret_path.write_text(secrets.token_urlsafe(40) + '\n')

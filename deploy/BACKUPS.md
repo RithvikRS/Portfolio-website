@@ -11,7 +11,7 @@ Use `Backup-Cluster.ps1 -WorkersOnly` for worker-only snapshots. Keep `Backup-Po
 
 The preflight leaves services running. A full backup briefly scales the five node-1 services to zero, waits for their writers to stop, archives private state and Caddy certificates, then restores one replica per service. A detached watchdog retries service recovery if the backup worker exits. Image export and download continue after service restart. Use the printed `-Resume` command after an interrupted transfer.
 
-The recovery kit includes `.env.production`, `.auth`, `.portainer`, `.notes`, `.ntfy`, `.swarm`, Caddy data/config volumes, node-1 host configuration, source history plus the current source worktree, Docker image exports, and checksums. Swarm service/node inventory records placement. The app's current and previous images and the worker service images are included from the manager's image cache. Keep explicit tags for every worker image when adding services, and extend coverage before adding worker-local data.
+The recovery kit includes `.env.production`, `.auth`, `.portainer`, `.notes`, `.ntfy`, `.swarm`, Caddy data/config volumes, node-1 host configuration, source history plus the current source worktree, Docker image exports, and checksums. Swarm service/node inventory records placement. The manager kit includes its current and previous app images plus images required on that node. Worker kits include their own native-platform service images. Keep all node kits together; do not assume worker images exist on the manager.
 
 Worker recovery kits include host configuration, partition/LVM inventory, packages, firewall settings, native-platform Docker images, and `/srv/swarm` data. They are recovery archives, not full VM disk images. Read [worker storage and recovery](STORAGE.md) before adding or replacing a stateful worker.
 
@@ -22,7 +22,7 @@ The backup archives contain credentials. Windows ACLs restrict the local folder 
 1. Verify `LOCAL-SHA256SUMS.txt` and read the backup's `RESTORE.txt`. Keep the original archive unchanged. Restore into a separate staging directory first.
 2. Install compatible Linux/Docker on the replacement AMD manager and worker. Restore source from `source.bundle`, then overlay `source-worktree.tar.gz` to include changes that had not reached Git. Restore the checkout at `/opt/portfolio`, keeping original ownership and permissions.
 3. Restore all private entries listed in the snapshot manifest together, including optional `.services/` and `.secrets/` directories. Create the external Docker volumes `portfolio_caddy_data` and `portfolio_caddy_config`, then extract their matching volume archives into the inspected mountpoints while no service is running. Do not mix database files and encryption keys from different snapshots. Inspect host configuration and restore the required settings deliberately; do not overwrite a replacement host's entire `/etc` blindly.
-4. Load `docker-images.tar.gz` on node 1. Load it on node 2 too if registry downloads are unavailable. Initialize a new Swarm using the manager's private IP and join the worker using a fresh token. Restore peer-only firewall rules and labels: `portfolio.data=true` only on node 1 and `portfolio.worker=true` only on node 2. Keep external DNS pointed at the recovered ingress node. Do not copy a live `/var/lib/docker/swarm` directory into a different cluster.
+4. Load `docker-images.tar.gz` on node 1. Load each worker kit's image archive on its matching worker; do not substitute the manager archive for worker coverage. Initialize a new Swarm using the manager's private IP and join the worker using a fresh token. Restore peer-only firewall rules and labels: `portfolio.data=true` only on node 1 and `portfolio.worker=true` only on node 2. Keep external DNS pointed at the recovered ingress node. Do not copy a live `/var/lib/docker/swarm` directory into a different cluster.
 5. Prepare image recovery aliases on every node and rewrite both saved releases using the private `restore_images.py` helper below. Platform-specific image exports can change local IDs, so do not deploy the original image references blindly. Deploy the rewritten current stack with `sudo docker stack deploy --resolve-image never -c /opt/portfolio/.swarm/recovery-current.json portfolio`. Keep private files and command output out of Git and shared logs. Paths in the saved stack assume `/opt/portfolio`.
 6. Run `python3 scripts/swarm-deploy.py check`, `python3 scripts/swarm-portainer.py`, and `python3 scripts/setup-portainer.py --configure`. Check all three nodes, HTTPS, login, writing, and the iPhone subscription. Do not re-enable the retired ARM cron. Take a fresh backup after recovery.
 
@@ -63,6 +63,8 @@ On the manager, also rewrite the saved release and generate new metadata:
 ```bash
 python3 /path/to/backup-tools/tools/restore_images.py --sudo \
   --inventory /path/to/manager-backup/server/metadata/images.json \
+  --peer-inventory /path/to/cluster-backup/amd2/server/snapshot-inventory.json \
+  --peer-inventory /path/to/cluster-backup/ampere/server/snapshot-inventory.json \
   --release /opt/portfolio/.swarm/current.json \
   --output /opt/portfolio/.swarm/recovery-current.json
 ```
@@ -72,3 +74,9 @@ Repeat for `previous.json`, using `recovery-previous.json`, to retain rollback. 
 After the rewritten current stack passes application health checks, preserve the original metadata and install `recovery-current.metadata.json` as `.swarm/current.json`. Install the corresponding previous metadata too. Retag the images named in those metadata records as `rithvik-portfolio:current`, `rithvik-portfolio:production`, and `rithvik-portfolio:previous`. This keeps later deployment rollback and cleanup aligned with the restored local images. Keep the original archives and metadata until the complete recovery passes.
 
 The recovery kit includes the private scripts and settings under `backup-tools`. Update PC-specific paths before running it on a replacement PC. The manager kit contains client access keys; worker-only backups do not replace that kit.
+
+### Worker-only image exports
+
+Keep large worker images off the small manager. The manager backup excludes services explicitly pinned to a different node ID or to `node.role == worker`; worker snapshots include their required current/previous release images. Keep all matching node kits together.
+
+When rewriting a saved stack on the restored manager, pass each worker's `snapshot-inventory.json` through a separate `--peer-inventory <path>` argument to the private `restore_images.py` helper. It accepts missing manager images only when the service is pinned to that inventory's exact node ID and its saved image reference matches. Run the image helper on each worker after loading its own archive before deploying the rewritten stack. Update placement IDs deliberately when replacing nodes. Never copy an ARM-only image to an AMD node to satisfy a missing reference.

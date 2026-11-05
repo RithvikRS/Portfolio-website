@@ -149,6 +149,30 @@ class CatalogTests(unittest.TestCase):
             self.assertFalse(swarm.service_counts_match({'demo': result['services']['demo']}, [{'Name': 'portfolio_demo', 'Mode': 'global', 'Replicas': '0/0'}]))
 
 
+class WorkerImageTests(unittest.TestCase):
+    def test_exact_worker_digest_does_not_use_manager_image_store(self):
+        settings = {'storage_nodes': {'worker': {'node_id': 'worker-id'}}}
+        service = {'image': 'example/kuma@sha256:' + 'a' * 64, 'deploy': {'placement': {'constraints': ['node.id == worker-id']}}}
+        with patch.object(swarm, 'image', side_effect=AssertionError('Manager pull attempted')):
+            self.assertEqual(swarm.catalog_image(service, settings), service['image'])
+            service['image'] = 'example/kuma:latest'
+            with self.assertRaisesRegex(RuntimeError, 'immutable'): swarm.catalog_image(service, settings)
+        service['deploy']['placement']['constraints'] = ['node.role == manager']
+        with patch.object(swarm, 'image', return_value='resolved') as pull:
+            self.assertEqual(swarm.catalog_image(service, settings), 'resolved')
+            pull.assert_called_once_with(service['image'])
+
+    def test_scratch_mount_survives_render_and_invalid_scratch_is_rejected(self):
+        case = CatalogTests(); catalog = case.catalog()
+        catalog['services']['demo']['volumes'] = [{'type': 'tmpfs', 'target': '/tmp', 'tmpfs': {'size': 33554432}}]
+        with tempfile.TemporaryDirectory() as directory:
+            result = case.add(catalog, Path(directory))
+            self.assertEqual(result['services']['demo']['volumes'], catalog['services']['demo']['volumes'])
+            for invalid in [{'size': -1}, {'size': '32m'}, {'size': 32, 'mode': 99999}]:
+                catalog['services']['demo']['volumes'][0]['tmpfs'] = invalid
+                with self.assertRaisesRegex(RuntimeError, 'Tmpfs'): case.add(catalog, Path(directory))
+
+
 class DynamicCountTests(unittest.TestCase):
     def test_three_nodes_multiple_replicas_and_intentional_scale_zero(self):
         services = {'agent': {'deploy': {'mode': 'global'}}, 'web': {'deploy': {'replicas': 4}}, 'disabled': {'deploy': {'replicas': 0}}}
