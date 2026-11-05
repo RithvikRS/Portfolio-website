@@ -1,15 +1,87 @@
 :80 {
+    @monitoring host uptime.144.24.135.201.sslip.io
+    redir @monitoring https://uptime.144.24.135.201.sslip.io{uri} permanent
     @notifications host {$NTFY_DOMAIN}
     redir @notifications https://{$NTFY_DOMAIN}{uri} permanent
     redir https://{$DOMAIN}{uri} permanent
 }
 
+# Separate host-only sessions avoid sharing cookies across sslip.io tenants.
+(private_identity) {
+    request_header -Remote-User
+    request_header -Remote-Groups
+    request_header -Remote-Email
+    request_header -Remote-Name
+}
+
 {$NTFY_DOMAIN} {
-    # Native ntfy authentication supports the iOS app and publishing API.
-    # Authelia's browser redirects would prevent those clients authenticating.
-    reverse_proxy ntfy:8080 {
-        flush_interval -1
+    import private_identity
+    handle /auth/* {
+        reverse_proxy auth:9091
     }
+    # Only protocol endpoints bypass browser SSO. ntfy still enforces its ACLs.
+    @api {
+        path /v1/* /*/json /*/sse /*/raw /*/ws /*/auth
+    }
+    handle @api {
+        reverse_proxy ntfy:8080 {
+            flush_interval -1
+        }
+    }
+    @publish {
+        method POST PUT
+        path_regexp publish ^/([^/]+)?$
+    }
+    handle @publish {
+        reverse_proxy ntfy:8080
+    }
+    handle {
+        forward_auth auth:9091 {
+            uri /api/authz/forward-auth?authelia_url=https://{$NTFY_DOMAIN}/auth/
+        }
+        reverse_proxy ntfy:8080 {
+            flush_interval -1
+        }
+    }
+}
+
+uptime.144.24.135.201.sslip.io {
+    import private_identity
+    handle /auth/* {
+        reverse_proxy auth:9091
+    }
+    handle {
+        forward_auth auth:9091 {
+            uri /api/authz/forward-auth?authelia_url=https://uptime.144.24.135.201.sslip.io/auth/
+        }
+        reverse_proxy uptime_kuma:3001
+    }
+}
+
+# Internal health listener: port 8081 is NEVER published on a host.
+# Return only explicit health endpoints, not a second application frontend.
+http://:8081 {
+    handle /app {
+        rewrite * /api/contact
+        reverse_proxy app:4173
+    }
+    handle /identity {
+        rewrite * /auth/api/health
+        reverse_proxy auth:9091
+    }
+    handle /notifications {
+        rewrite * /v1/health
+        reverse_proxy ntfy:8080
+    }
+    handle /containers {
+        rewrite * /api/status
+        reverse_proxy portainer:9000
+    }
+    handle /worker {
+        rewrite * /
+        reverse_proxy node2:80
+    }
+    respond 404
 }
 
 {$DOMAIN} {

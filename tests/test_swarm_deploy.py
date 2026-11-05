@@ -42,8 +42,8 @@ class SwarmConfigurationTests(unittest.TestCase):
             compose['services']['app']['volumes'] = [{'type': 'bind', 'source': str(root / '.notes'), 'target': '/writing'}]
             compose['services']['caddy']['volumes'] = [{'type': 'volume', 'source': 'caddy_data', 'target': '/data'}, {'type': 'bind', 'source': str(root / 'deploy'), 'target': '/etc/caddy/site'}]
             catalog = swarm.load_catalog(Path(__file__).resolve().parents[1])
-            settings = {'backend_subnet': '10.42.0.0/24', 'data_constraint': 'node.labels.portfolio.data == true'}
-            result = swarm.render(compose, settings, 'app:release', {name: name + '@sha256:pinned' for name in swarm.CORE + ['agent', 'node2']}, 'private$secret', root, root, catalog=catalog)
+            settings = json.loads((Path(__file__).resolve().parents[1] / 'deploy/swarm.json').read_text())
+            result = swarm.render(compose, settings, 'app:release', {name: name + '@sha256:pinned' for name in swarm.CORE + ['agent'] + list(catalog['services'])}, 'private$secret', root, root, catalog=catalog)
             for name in swarm.CORE:
                 service = result['services'][name]
                 self.assertEqual(service['deploy']['replicas'], 1)

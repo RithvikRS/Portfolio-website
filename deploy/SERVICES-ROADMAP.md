@@ -70,7 +70,7 @@ Deploy Uptime Kuma on AMD node 2 only after confirming capacity and completing i
 
 Keep Portainer for infrastructure operations and Kuma for availability history and alerts. Monitor public HTTPS, API readiness, certificate expiry, and eventually application-provided worker heartbeats and data-freshness checks. A successful HTTP response does not establish that imports are current.
 
-Use consecutive failures, an outage notification, and a recovery notification to keep ntfy quiet. Add a check outside this cluster with an independent delivery path: node 1 hosts both ingress and ntfy. Keep Kuma administration restricted; do not assume Authelia creates per-user monitoring permissions inside Kuma.
+Use consecutive failures, an outage notification, and a recovery notification to keep ntfy quiet. Add a check outside this cluster with an independent delivery path: node 1 hosts both ingress and ntfy. Require Authelia for the whole Kuma hostname, including status pages and WebSockets; retain its native administrator login. Keep ntfy protocol endpoints on native authentication for iPhone delivery, while gating its browser interface with Authelia. Do not assume Authelia creates per-user monitoring permissions inside Kuma. See [monitoring operations](MONITORING.md).
 
 Done when a controlled outage and recovery produce the expected notifications without repeated alert noise.
 

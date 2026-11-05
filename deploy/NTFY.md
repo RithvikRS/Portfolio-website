@@ -1,6 +1,6 @@
 # Private notifications
 
-Run ntfy on the AMD server at **https://ntfy.144.24.135.201.sslip.io**. Caddy handles HTTPS; ntfy handles API and app authentication. The existing `arm-provisioning` topic and iPhone credentials remain available. ARM provisioning and its cron trigger are retired; the topic name is retained for compatibility.
+Run ntfy on the AMD server at **https://ntfy.144.24.135.201.sslip.io**. Caddy handles HTTPS and requires Authelia for the browser interface. ntfy handles API and iPhone authentication. The existing `arm-provisioning` topic and iPhone credentials remain available. ARM provisioning and its cron trigger are retired; the topic name is retained for compatibility.
 
 | Account | Access |
 | --- | --- |
@@ -8,7 +8,9 @@ Run ntfy on the AMD server at **https://ntfy.144.24.135.201.sslip.io**. Caddy ha
 | `arm-publisher` | Publish to `arm-provisioning` |
 | Anonymous clients | No topic access |
 
-Both accounts have the regular user role. Neither can access another topic or manage other accounts. Keep Authelia off this hostname: the native app needs ntfy authentication rather than browser sign-in redirects.
+Both accounts have the regular user role. Neither can access another topic or manage other accounts. Require Authelia for browser pages on this hostname. Keep the native protocol endpoints (`/v1/*`, topic JSON/SSE/raw/WebSocket/auth endpoints, and root/topic publishing) on ntfy authentication so the iPhone can receive alerts. The login portal remains reachable. Anonymous topic access stays denied.
+
+Uptime Kuma also publishes outage and recovery alerts to the existing `arm-provisioning` topic through a separate write-only `kuma-publisher` account. Keep the current iPhone subscription; do not re-enable ARM provisioning. See [monitoring](MONITORING.md).
 
 ## Set up an iPhone
 
@@ -21,9 +23,9 @@ Both accounts have the regular user role. Neither can access another topic or ma
 
    This displays the server, topic, username, and generated password. Save the password in your password manager; keep the output out of screenshots, Git, and workflow logs.
 
-3. In ntfy, open **Settings → Users → Add user**. Enter the service URL `https://ntfy.144.24.135.201.sslip.io`, username `iphone`, and the password from SSH. Save.
+3. In ntfy, open **Settings â†’ Users â†’ Add user**. Enter the service URL `https://ntfy.144.24.135.201.sslip.io`, username `iphone`, and the password from SSH. Save.
 4. Return to the subscription list and tap **+**. Enter topic `arm-provisioning`, enable **Use another server**, and enter the same service URL. Tap **Subscribe**. Do not leave the server set to `https://ntfy.sh`.
-5. In iPhone **Settings → Notifications → ntfy**, enable **Allow Notifications**, **Lock Screen**, **Banners**, and **Sounds**. If using Focus or Scheduled Summary, allow ntfy through Focus and keep it out of the summary for prompt alerts.
+5. In iPhone **Settings â†’ Notifications â†’ ntfy**, enable **Allow Notifications**, **Lock Screen**, **Banners**, and **Sounds**. If using Focus or Scheduled Summary, allow ntfy through Focus and keep it out of the summary for prompt alerts.
 6. Lock the phone, then run this command in your AMD SSH session:
 
    ```sh
