@@ -72,3 +72,9 @@ Repeat for `previous.json`, using `recovery-previous.json`, to retain rollback. 
 After the rewritten current stack passes application health checks, preserve the original metadata and install `recovery-current.metadata.json` as `.swarm/current.json`. Install the corresponding previous metadata too. Retag the images named in those metadata records as `rithvik-portfolio:current`, `rithvik-portfolio:production`, and `rithvik-portfolio:previous`. This keeps later deployment rollback and cleanup aligned with the restored local images. Keep the original archives and metadata until the complete recovery passes.
 
 The recovery kit includes the private scripts and settings under `backup-tools`. Update PC-specific paths before running it on a replacement PC. The manager kit contains client access keys; worker-only backups do not replace that kit.
+
+### Worker-only image exports
+
+Keep large worker images off the small manager. The manager backup excludes services explicitly pinned to a different node ID or to `node.role == worker`; worker snapshots include their required current/previous release images. Keep all matching node kits together.
+
+When rewriting a saved stack on the restored manager, pass each worker's `snapshot-inventory.json` through a separate `--peer-inventory <path>` argument to the private `restore_images.py` helper. It accepts missing manager images only when the service is pinned to that inventory's exact node ID and its saved image reference matches. Run the image helper on each worker after loading its own archive before deploying the rewritten stack. Update placement IDs deliberately when replacing nodes. Never copy an ARM-only image to an AMD node to satisfy a missing reference.

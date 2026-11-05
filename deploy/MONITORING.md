@@ -4,7 +4,9 @@ Open **https://uptime.144.24.135.201.sslip.io/**. Sign in through Authelia with 
 
 ## Placement and access
 
-Run Uptime Kuma 2.5.9 by immutable image digest on AMD node 2. Keep its SQLite database and uploads in `/srv/swarm/uptime_kuma`, owned by `1000:1000`. Use one replica and stop-first updates/rollback. The service has a 320 MiB memory limit, 128 MiB reservation, 0.5 CPU limit, 192 MiB Node heap limit, a read-only root filesystem, and bounded logs. Monitor actual usage; swap does not increase physical RAM.
+Run Uptime Kuma 2.5.9 by immutable image digest on AMD node 2. Keep its SQLite database and uploads in `/srv/swarm/uptime_kuma`, owned by `1000:1000`. Use one replica and stop-first updates/rollback. The service has a 320 MiB memory limit, 128 MiB reservation, 0.5 CPU limit, 192 MiB Node heap limit, a read-only root filesystem, and bounded logs. Use a long-syntax `type: tmpfs` mount for `/tmp`; Swarm ignores the Compose short-form `tmpfs` field. SQLite migrations need this writable scratch space. Monitor actual usage; swap does not increase physical RAM.
+
+The manager passes the pinned worker image digest to Swarm without pulling or unpacking it locally. Workers verify and download the image themselves; keep image backup coverage on the worker.
 
 Only Caddy and Kuma join the private, non-attachable monitoring overlay. Do not publish Kuma's port 3001 or Caddy's internal health port 8081. Never mount the Docker socket in Kuma. Caddy exposes only explicit backend health paths on 8081; it does not offer an alternate application frontend there.
 
