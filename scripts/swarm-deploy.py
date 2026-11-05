@@ -426,11 +426,69 @@ def check(stack_path=None):
     print('All release services converged; configured HTTP checks, protected routes, Portainer and ntfy access checks passed.', flush=True)
 
 
+def report_failure_state():
+    """Best-effort, bounded snapshot; never emit environments or health output."""
+    deadline = time.monotonic() + 30
+    snapshot = {'captured_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                'services': [], 'local_containers': [], 'unavailable': [],
+                'health_scope': 'Manager-local containers only; worker health is not inspected.'}
+
+    def inspect(*args):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('Diagnostic time budget exhausted')
+        return docker(*args, timeout=min(10, remaining))
+
+    try:
+        rows = [json.loads(line) for line in inspect('service', 'ls', '--filter',
+                'label=com.docker.stack.namespace=portfolio', '--format', '{{json .}}').splitlines()]
+        snapshot['services'] = [{key: row.get(key) for key in ('ID', 'Name', 'Mode', 'Replicas')} for row in rows]
+        if rows:
+            details = json.loads(inspect('service', 'inspect', *[row['ID'] for row in rows]))
+            by_id = {item['ID']: item for item in details}
+            for row in snapshot['services']:
+                update = by_id[row['ID']].get('UpdateStatus', {})
+                row['update'] = {key: update.get(key) for key in ('State', 'StartedAt', 'CompletedAt')}
+                row['update']['State'] = update.get('State', 'not-started')
+    except Exception:
+        snapshot['unavailable'].append('service update states')
+
+    try:
+        ids = inspect('ps', '-aq', '--filter', 'label=com.docker.stack.namespace=portfolio').split()
+        if ids:
+            for item in json.loads(inspect('inspect', *ids)):
+                state = item.get('State', {})
+                health = state.get('Health', {})
+                snapshot['local_containers'].append({
+                    'id': item['Id'],
+                    'service': item.get('Config', {}).get('Labels', {}).get('com.docker.swarm.service.name'),
+                    'state': {key: state.get(key) for key in
+                              ('Status', 'Running', 'OOMKilled', 'ExitCode', 'StartedAt', 'FinishedAt')},
+                    'health': {'status': health.get('Status', 'not-configured'),
+                               'failing_streak': health.get('FailingStreak', 0),
+                               'recent_checks': [{key: entry.get(key) for key in ('Start', 'End', 'ExitCode')}
+                                                 for entry in health.get('Log', [])[-5:]]}})
+    except Exception:
+        snapshot['unavailable'].append('manager-local container health')
+
+    # Raw inspect results and free-form error/health text can contain credentials.
+    try:
+        write(PRIVATE / 'last-failed-state.json', snapshot)
+    except Exception:
+        print('Could not save failure-state snapshot; see the summary below.', flush=True)
+    print('Swarm update and container health before rollback:\n' + json.dumps(snapshot, indent=2), flush=True)
+
+
 def report_failed_tasks():
+    # Diagnostics must never prevent restoration of the saved release.
+    try:
+        report_failure_state()
+    except Exception:
+        print('Could not capture failure state; continuing recovery.', flush=True)
     # Save the task error history before rollback replaces failed task entries.
     try:
         summaries = docker('stack', 'ps', 'portfolio', '--no-trunc', '--format',
-                           '{{.Name}} | {{.Node}} | {{.CurrentState}} | {{.Error}}')
+                           '{{.Name}} | {{.Node}} | {{.CurrentState}} | {{.Error}}', timeout=10)
         path = PRIVATE / 'last-failed-tasks.txt'
         path.write_text(summaries + '\n', encoding='utf-8')
         path.chmod(0o600)
