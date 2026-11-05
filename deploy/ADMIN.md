@@ -1,6 +1,6 @@
 # Admin dashboard and shared login
 
-> Production runs on two-node Swarm. Use [SWARM.md](SWARM.md) for deployment, status, rollback, and node placement. Compose/systemd commands below apply only to their named legacy or local setup; do not start them alongside production Swarm.
+> Production runs on a three-node Swarm with two AMD nodes and an Ampere A1 worker. Use [SWARM.md](SWARM.md) for deployment, status, rollback, and node placement. Compose/systemd commands below apply only to their named legacy or local setup; do not start them alongside production Swarm.
 
 Use the admin dashboard to open private tools with one sign-in. The portfolio app serves the dashboard, Authelia handles login, and Caddy checks the session before forwarding administrator requests. Keep the Authelia image pinned by digest in `compose.production.yaml` when changing versions.
 

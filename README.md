@@ -22,7 +22,7 @@ The interface uses semantic HTML, custom CSS, and vanilla JavaScript. Public por
 
 ## How it works
 
-Generated portfolio pages and a Node.js backend run together in one app container. Caddy handles HTTPS and routing, Authelia handles shared sign-in, Portainer manages Docker, and ntfy delivers private server notifications. Docker Swarm manages two Oracle AMD nodes: node 1 hosts the five core services and their data; node 2 runs the authenticated demo service. A Portainer agent runs on each node.
+Generated portfolio pages and a Node.js backend run together in one app container. Caddy handles HTTPS and routing, Authelia handles shared sign-in, Portainer manages Docker, and ntfy delivers private server notifications. Docker Swarm manages three Oracle nodes. AMD node 1 is the manager and hosts the five core services, persistent data, builds, and public ingress. AMD node 2 runs the authenticated demo. Ampere A1 provides 4 OCPUs and 24 GB RAM for ARM64 compute services selected with `workload.compute=true`. A Portainer agent runs on each node.
 
 ```mermaid
 flowchart LR
@@ -32,7 +32,7 @@ flowchart LR
     caddy --> portainer[Portainer: Docker management]
     caddy --> ntfy[ntfy: private notifications]
     caddy --> worker[Node 2: authenticated demo]
-    portainer --> agents[Swarm agents on both nodes]
+    portainer --> agents[Swarm agents on all three nodes]
     portainer -. OpenID Connect .-> auth
     app --> notes[(Persistent writing storage)]
 ```
@@ -44,7 +44,7 @@ Only Caddy publishes public web ports. Private overlay networks connect the serv
 | Public interface | Generated HTML, custom CSS, vanilla JavaScript, local SVG illustrations |
 | Application | Node.js 24 in Docker, Nodemailer, Markdown rendering and HTML sanitization |
 | Access and routing | Caddy HTTPS, Authelia, Portainer OpenID Connect |
-| Hosting and delivery | Oracle Cloud AMD, Docker Swarm, GitHub Actions, SSH |
+| Hosting and delivery | Oracle Cloud AMD + Ampere A1, Docker Swarm, GitHub Actions, SSH |
 
 ## Run locally
 

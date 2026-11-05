@@ -6,6 +6,7 @@ Production uses Docker Swarm. Start with [the architecture and operations guide]
 | --- | --- |
 | Add a service/container | [Service catalog walkthrough](SWARM.md#add-a-stateless-service) |
 | Add persistent storage | [Storage and backup requirements](SWARM.md#add-a-service-with-persistent-storage) |
+| Target Ampere A1 | [Compute placement and ARM images](SWARM.md#target-ampere-compute-services) |
 | Add a worker | [Joining and validating nodes](SWARM.md#add-a-worker-node) |
 | Update images, replicas, configs or secrets | [Configuration changes](SWARM.md#update-configuration) |
 | Remove a service or maintain a node | [Service removal](SWARM.md#remove-a-service), [node maintenance](SWARM.md#maintain-or-remove-a-node) |

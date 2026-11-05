@@ -6,7 +6,15 @@ Run manager commands as `opc` on node 1 in `/opt/portfolio`. Make public configu
 
 ## Architecture
 
-Node 1 is the manager, data host, build host, and public ingress. Node 2 is a worker. Additional Linux workers can join without changing a node count in Python.
+AMD node 1 is the manager, data host, build host, and public ingress. AMD node 2 and Ampere A1 are workers. Additional Linux workers can join without changing a node count in Python.
+
+| Node | Hostname | Swarm role | Placement label | Workload |
+| --- | --- | --- | --- | --- |
+| AMD node 1 | `vantize-micro-amd` | Manager | `portfolio.data=true` | Core services, data, builds and ingress |
+| AMD node 2 | `vantize-micro-amd-2` | Worker | `portfolio.worker=true` | Authenticated demo |
+| Ampere A1 | `vantize-ampere-a1` | Worker | `workload.compute=true` | ARM64 compute capacity, 4 OCPUs / 24 GB RAM |
+
+Node membership and labels live in Swarm manager state. Git stores service placement constraints and this runbook; merging does not join nodes or recreate labels. The global Portainer agent runs on all three nodes. Ampere starts with only that agent until you add a compute service to the catalog. Keep its compute label separate from `portfolio.worker=true` so the existing demo stays on AMD node 2.
 
 | Service | Placement | Persistent state |
 | --- | --- | --- |
@@ -102,6 +110,30 @@ Append `{"url": "https://{DOMAIN}/tools/echo/", "statuses": [302, 303, 401]}` to
 For other images, select an upstream version/digest, use its real internal port, and add its documented container health check. A path prefix works only if the application supports that deployment; otherwise use a hostname. Keep host ports unpublished. New catalog services cannot join core networks or replace core service names.
 
 Build custom images separately and publish them to a registry reachable by each eligible node. This deployment only builds the portfolio app locally, pinned to node 1. Catalog services do not support `build`. The renderer pins the configured registry repository by digest and never substitutes a local backup alias. For a private registry, arrange Docker registry authentication on every eligible node; the workflow does not forward registry credentials automatically. Check image support for every target architecture before adding ARM workers; keep `node.platform.arch` constraints until the image and agent support those nodes.
+
+## Target Ampere compute services
+
+Follow the service catalog, network, route and check steps above. For an ARM64-compatible service, use this placement block in `deploy/swarm-services.json`:
+
+```json
+"placement": {
+  "constraints": [
+    "node.labels.workload.compute == true",
+    "node.platform.arch == aarch64"
+  ]
+}
+```
+
+Swarm reports this host architecture as `aarch64`; the corresponding container image platform is `linux/arm64`. Select a multi-platform registry digest that includes ARM64. The renderer also pulls images on the AMD manager, so use a manifest supporting both `linux/amd64` and `linux/arm64` with the current pipeline. Keep the locally built portfolio app pinned to node 1.
+
+Set memory limits and reservations for each compute service and leave capacity for Docker and the agent. Ampere is currently the only compute-labeled node. Its services remain pending if it is drained or unavailable. Keep writable persistent services on node 1 under the current storage guard. Extend backup image/platform coverage before relying on ARM image restores; the private PC exporter currently saves AMD64 images.
+
+To restore the compute label after rebuilding and rejoining Ampere, run on node 1:
+
+```sh
+sudo docker node update --label-add workload.compute=true vantize-ampere-a1
+sudo docker node inspect vantize-ampere-a1 --format '{{json .Spec.Labels}}'
+```
 
 ## Catalog format and limits
 
@@ -213,14 +245,14 @@ Remove its catalog service, route, access rule, dedicated network/Caddy attachme
    ```
 
    On the new node, run the returned command using node 1's private address (`10.0.0.249:2377` in the current setup). Add `--advertise-addr <new-private-ip>` and `--data-path-addr <new-private-ip>` if needed to select the private interface. Keep join tokens out of Git, screenshots, and workflow logs.
-4. On node 1, inspect the hostname and apply the worker label:
+4. On node 1, inspect the hostname and choose the workload pool. For another compute worker:
 
    ```sh
    sudo docker node ls
-   sudo docker node update --label-add portfolio.worker=true <new-node-name>
+   sudo docker node update --label-add workload.compute=true <new-node-name>
    ```
 
-   Never add `portfolio.data=true` to a worker. An optional label such as `workload.tools=true` lets a service target a narrower pool. A service constraint `node.hostname == <name>` pins it to one machine; a shared label allows scheduling across that pool.
+   Never add `portfolio.data=true` to a worker. Use `portfolio.worker=true` only when you intend the node to run the existing demo pool. Labels select workloads independently of the Swarm worker role. An additional label such as `workload.tools=true` can select a narrower pool. A service constraint `node.hostname == <name>` pins it to one machine; a shared label allows scheduling across that pool.
 5. The global Portainer agent should start automatically on the new eligible Linux node. It uses the private overlay and shared agent secret; do not install a separate agent or publish 9001. If adding a different architecture, verify the pinned agent image has that platform before expecting the task to start.
 6. Run the checks below from node 1, then open Portainer's **Oracle Swarm** environment. The helpers compare discovered node IDs and desired task counts; there is no fixed two-node limit.
 
@@ -263,7 +295,7 @@ python3 scripts/setup-ntfy.py check
 
 Run `python3 -B -m unittest discover -s tests -p 'test_*.py'` locally before pushing. JSON syntax can be checked with `python3 -m json.tool deploy/swarm-services.json`; do not print private rendered stacks into logs. The full prepare/deploy validation needs Linux, Docker and server-private files. On Windows, Linux-only tests are skipped.
 
-At the initial two-node size, expect seven services/eight tasks. After adding services or nodes, totals depend on replica counts and eligible nodes. Inspect the **current** tasks rather than treating old rejected/shutdown history as a new failure. Failed rollouts save task history to `.swarm/last-failed-tasks.txt` before attempting to restore the last successful release. Keep ARM provisioning retired; no capacity retry cron runs. Quiet ntfy access checks do not send successful notifications.
+With the current three nodes, expect seven services/nine tasks, including three global Portainer agents. After adding services or nodes, totals depend on replica counts and eligible nodes. Inspect the **current** tasks rather than treating old rejected/shutdown history as a new failure. Failed rollouts save task history to `.swarm/last-failed-tasks.txt` before attempting to restore the last successful release. Keep ARM provisioning retired; no capacity retry cron runs. Quiet ntfy access checks do not send successful notifications.
 
 ## Roll back
 
