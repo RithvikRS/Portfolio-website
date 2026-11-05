@@ -35,6 +35,18 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
         console.log(JSON.stringify({ monitors: rows, notificationCount: notifications.length }));
         return;
     }
+    // Retire only the baseline demo check; preserve unrelated custom monitors.
+    if (['configure', 'retire-demo'].includes(input.action)) {
+        for (const monitor of Object.values(monitors)) {
+            if (monitor.name === 'AMD worker demo' && monitor.url === 'http://caddy:8081/worker') {
+                await call('deleteMonitor', monitor.id);
+            }
+        }
+        if (input.action === 'retire-demo') {
+            console.log('Retired the baseline demo monitor.');
+            return;
+        }
+    }
     if (!input.notification) throw new Error('Missing private notification settings');
     const existing = notifications.find(n => n.name === 'Private infrastructure alerts');
     const notification = { name: 'Private infrastructure alerts', type: 'ntfy', isDefault: false,
@@ -82,7 +94,6 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
         ['Authelia backend', 'http://caddy:8081/identity', ['200']],
         ['Portainer backend', 'http://caddy:8081/containers', ['200']],
         ['ntfy backend', 'http://caddy:8081/notifications', ['200']],
-        ['AMD worker demo', 'http://caddy:8081/worker', ['200']],
         ['Kuma login gate', 'https://uptime.144.24.135.201.sslip.io/', ['302','303','401']],
         ['Portfolio admin gate', 'https://rithvik.ddns.net/admin/', ['302','303','401']],
         ['ntfy browser gate', 'https://ntfy.144.24.135.201.sslip.io/', ['302','303','401']]
@@ -94,5 +105,5 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
         if (prior) await call('editMonitor', { ...(await call('getMonitor', prior.id)).monitor, ...monitor, id: prior.id });
         else await call('add', monitor);
     }
-    console.log('Configured nine monitors, 30-day retention, two retries, and no repeated outage reminders.');
+    console.log('Configured eight monitors, 30-day retention, two retries, and no repeated outage reminders.');
 })().catch(error => { console.error(error.message); process.exitCode = 1; }).finally(() => socket.disconnect());

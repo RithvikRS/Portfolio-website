@@ -14,12 +14,12 @@ Protect all Kuma paths with Authelia, including `/socket.io`, API routes, assets
 
 The three browser hostnames use separate, narrowly scoped session cookies. Expect to sign in on each hostname. Never widen a cookie to `sslip.io`. Login pages and required authentication endpoints must remain reachable before login.
 
-Keep the public portfolio, published blog/learning pages, and their required public APIs accessible. Gate administration, Portainer, node 2, Kuma, and the ntfy browser interface. Preserve ntfy's native authenticated API exception for iPhone subscriptions and publishing. ntfy still applies per-account topic permissions; a browser Authelia session does not replace those permissions.
+Keep the public portfolio, published blog/learning pages, and their required public APIs accessible. Gate administration, Portainer, Kuma, and the ntfy browser interface. Preserve ntfy's native authenticated API exception for iPhone subscriptions and publishing. ntfy still applies per-account topic permissions; a browser Authelia session does not replace those permissions.
 
 ## Checks and alert policy
 
 - Check public portfolio HTTPS and its TLS certificate.
-- Check portfolio, Authelia, Portainer, ntfy, and node 2 through the unpublished health listener.
+- Check portfolio, Authelia, Portainer, and ntfy through the unpublished health listener.
 - Check that Kuma, portfolio administration, and the ntfy browser interface reject unauthenticated requests. Do not follow redirects: a login page returning 200 must not count as a working backend.
 - Check every 60 seconds. Retry failures twice at 30-second intervals before declaring an outage. Send an outage alert and a recovery alert; set `resendInterval` to zero to disable repeated outage reminders.
 - Keep 30 days of heartbeat history. Disable response-body storage and domain-expiry lookup; retain TLS-expiry warnings for the public portfolio.
@@ -30,7 +30,7 @@ A cluster-wide outage can disable both Kuma and ntfy. External monitoring with a
 
 ## Configure or change monitors
 
-Use the dashboard for deliberate changes. `scripts/configure-monitoring.cjs` reconciles the nine named baseline monitors, alert destination, and retention; rerunning it overwrites those baseline settings but preserves unrelated monitors. Review the script when upgrading Kuma: its Socket.IO interface is version-specific.
+Use the dashboard for deliberate changes. `scripts/configure-monitoring.cjs` reconciles the eight named baseline monitors, alert destination, and retention; rerunning it overwrites those baseline settings but preserves unrelated monitors. The retired node 2 demo check is removed only when its name and URL match the old baseline. Use `retire-demo` before removing that service to avoid a false outage alert. Review the script when upgrading Kuma: its Socket.IO interface is version-specific.
 
 Run the helper inside the Kuma container as `node -e <script contents>`, with a private JSON object over stdin containing `username`, `password`, `action`, and `notification` (`url`, `topic`, `username`, `password`). Use `configure` to reconcile, `check` to read sanitized status, or `rehearse` to create a temporary local endpoint and exercise a failure/recovery. Set `bootstrap: true` only for initial account creation; it never resets an existing account. Keep input in the private PC folder and transfer it over SSH; do not paste credentials into shell arguments.
 

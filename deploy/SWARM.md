@@ -11,10 +11,10 @@ AMD node 1 is the manager, data host, and public ingress. AMD node 2 and Ampere 
 | Node | Hostname | Swarm role | Placement label | Workload |
 | --- | --- | --- | --- | --- |
 | AMD node 1 | `vantize-micro-amd` | Manager | `portfolio.data=true` | Core services, data and ingress |
-| AMD node 2 | `vantize-micro-amd-2` | Worker | `portfolio.worker=true` | Authenticated demo |
+| AMD node 2 | `vantize-micro-amd-2` | Worker | `portfolio.worker=true` | Uptime Kuma, pinned by node ID |
 | Ampere A1 | `vantize-ampere-a1` | Worker | `workload.compute=true` | ARM64 compute capacity, 4 OCPUs / 24 GB RAM |
 
-Node membership and labels live in Swarm manager state. Git stores service placement constraints and this runbook; merging does not join nodes or recreate labels. The global Portainer agent runs on all three nodes. Ampere starts with only that agent until you add a compute service to the catalog. Keep its compute label separate from `portfolio.worker=true` so the existing demo stays on AMD node 2.
+Node membership and labels live in Swarm manager state. Git stores service placement constraints and this runbook; merging does not join nodes or recreate labels. The global Portainer agent runs on all three nodes. Ampere starts with only that agent until you add a compute service to the catalog. Keep its compute label separate from `portfolio.worker=true` to select workloads deliberately. Kuma uses an exact AMD node 2 constraint for its local database.
 
 | Service | Placement | Persistent state |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ Node membership and labels live in Swarm manager state. Git stores service place
 | ntfy | Node 1 | `.ntfy/` |
 | portainer | Node 1 | `.portainer/` |
 | caddy | Node 1 | `portfolio_caddy_data`, `portfolio_caddy_config` |
-| node2 demo | A node with `portfolio.worker=true` | None |
+| uptime_kuma | AMD node 2, exact node ID | `/srv/swarm/uptime_kuma` |
 | agent | Every eligible Linux node | Docker socket/volume access for Portainer |
 | Additional services | Their catalog placement constraints | Explicit mounts, if configured |
 
@@ -54,7 +54,7 @@ There is no automatic data failover. Losing node 1 stops ingress and the statefu
 | --- | --- |
 | `compose.production.yaml` | Settings for the five core services; input to the Swarm renderer |
 | `deploy/swarm.json` | Dedicated proxy subnet, data-node constraint, Portainer agent image |
-| `deploy/swarm-services.json` | Additional services, including `node2`; their networks, resources, storage and route checks |
+| `deploy/swarm-services.json` | Additional services, including `uptime_kuma`; their networks, resources, storage and route checks |
 | `deploy/Caddyfile.swarm` | Live HTTPS routing and forward authentication |
 | `deploy/authelia/configuration.yml` | Access rules and shared sign-in configuration |
 | `deploy/ntfy/server.yml` | ntfy server configuration |
@@ -66,9 +66,11 @@ There is no automatic data failover. Losing node 1 stops ingress and the statefu
 
 Use `compose.production.yaml` only as renderer input on production. Do not run `docker compose up` there. New services belong in the catalog; the renderer rejects extra core-Compose services rather than silently dropping them. The legacy `Caddyfile.docker` does not control Swarm routing.
 
+The old `/node2` diagnostic endpoint returns 404. Its service, overlay network, and monitoring check are retired; AMD node 2 remains in the cluster and runs Kuma.
+
 ## Add a stateless service
 
-Example: add a second authenticated diagnostic endpoint at `/tools/echo/`. This uses the existing demo image and needs no database. Merge the following entries into `deploy/swarm-services.json`; keep existing entries and valid JSON commas.
+Example: add an authenticated diagnostic endpoint at `/tools/echo/`. This example uses a small diagnostic image and needs no database. Merge the following entries into `deploy/swarm-services.json`; keep existing entries and valid JSON commas.
 
 Add inside `services`:
 
@@ -252,7 +254,7 @@ Remove its catalog service, route, access rule, dedicated network/Caddy attachme
    sudo docker node update --label-add workload.compute=true <new-node-name>
    ```
 
-   Never add `portfolio.data=true` to a worker. Use `portfolio.worker=true` only when you intend the node to run the existing demo pool. Labels select workloads independently of the Swarm worker role. An additional label such as `workload.tools=true` can select a narrower pool. A service constraint `node.hostname == <name>` pins it to one machine; a shared label allows scheduling across that pool.
+   Never add `portfolio.data=true` to a worker. Use `portfolio.worker=true` only when you intend the node to join that workload pool. Labels select workloads independently of the Swarm worker role. An additional label such as `workload.tools=true` can select a narrower pool. A service constraint `node.hostname == <name>` pins it to one machine; a shared label allows scheduling across that pool.
 5. The global Portainer agent should start automatically on the new eligible Linux node. It uses the private overlay and shared agent secret; do not install a separate agent or publish 9001. If adding a different architecture, verify the pinned agent image has that platform before expecting the task to start.
 6. Run the checks below from node 1, then open Portainer's **Oracle Swarm** environment. The helpers compare discovered node IDs and desired task counts; there is no fixed two-node limit.
 

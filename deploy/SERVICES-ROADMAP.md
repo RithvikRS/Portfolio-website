@@ -22,7 +22,7 @@ Vaultwarden is the preferred password-manager candidate, pending a decision to o
 | Node | Role | Current responsibility | Planned additions |
 | --- | --- | --- | --- |
 | AMD node 1 | Swarm manager; `portfolio.data=true` | Caddy, portfolio/Fieldnotes, Authelia, ntfy, Portainer, existing data | Keep core services here; move builds off the host |
-| AMD node 2 | Worker; `portfolio.worker=true` | Authenticated demo, Portainer agent | Uptime Kuma if measured memory/disk headroom permits |
+| AMD node 2 | Worker; `portfolio.worker=true` | Uptime Kuma, Portainer agent | Keep monitoring data pinned to this worker |
 | Ampere A1 | Worker; `workload.compute=true` | Portainer agent; 4 OCPUs / 24 GB RAM compute capacity | New application services, approved persistent workloads, later trading app |
 
 ### Capacity budget
