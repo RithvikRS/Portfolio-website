@@ -445,9 +445,10 @@ def report_failure_state():
         snapshot['services'] = [{key: row.get(key) for key in ('ID', 'Name', 'Mode', 'Replicas')} for row in rows]
         if rows:
             details = json.loads(inspect('service', 'inspect', *[row['ID'] for row in rows]))
-            by_id = {item['ID']: item for item in details}
+            # service ls abbreviates IDs; service inspect returns full IDs.
+            by_name = {item['Spec']['Name']: item for item in details}
             for row in snapshot['services']:
-                update = by_id[row['ID']].get('UpdateStatus', {})
+                update = by_name[row['Name']].get('UpdateStatus') or {}
                 row['update'] = {key: update.get(key) for key in ('State', 'StartedAt', 'CompletedAt')}
                 row['update']['State'] = update.get('State', 'not-started')
     except Exception:

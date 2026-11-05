@@ -177,8 +177,8 @@ class FailureDiagnosticsTests(unittest.TestCase):
     def test_snapshot_captures_paused_update_and_health_without_secrets(self):
         responses = [
             json.dumps({'ID': 'svc', 'Name': 'portfolio_app', 'Mode': 'replicated', 'Replicas': '1/1'}),
-            json.dumps([{'ID': 'svc', 'UpdateStatus': {'State': 'paused', 'StartedAt': 'start', 'Message': 'secret-value'},
-                         'Spec': {'Env': ['TOKEN=secret-value']}}]),
+            json.dumps([{'ID': 'svc-full-id-from-inspect', 'UpdateStatus': {'State': 'paused', 'StartedAt': 'start', 'Message': 'secret-value'},
+                         'Spec': {'Name': 'portfolio_app', 'Env': ['TOKEN=secret-value']}}]),
             'container',
             json.dumps([{'Id': 'container', 'Config': {'Env': ['TOKEN=secret-value'],
                          'Labels': {'com.docker.swarm.service.name': 'portfolio_app'}},
@@ -198,6 +198,16 @@ class FailureDiagnosticsTests(unittest.TestCase):
                 self.assertEqual(data['local_containers'][0]['health']['recent_checks'][0]['ExitCode'], 1)
                 self.assertNotIn('secret-value', raw + str(output.call_args_list))
                 self.assertTrue(all(0 < call.kwargs['timeout'] <= 10 for call in docker.call_args_list))
+
+    def test_service_without_update_status_is_reported(self):
+        responses = [json.dumps({'ID': 'short', 'Name': 'portfolio_agent', 'Mode': 'global', 'Replicas': '3/3'}),
+                     json.dumps([{'ID': 'short-full-id', 'Spec': {'Name': 'portfolio_agent'}, 'UpdateStatus': None}]), '']
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(swarm, 'PRIVATE', Path(directory)), patch.object(swarm, 'docker', side_effect=responses), patch('builtins.print'):
+                swarm.report_failure_state()
+                data = json.loads((Path(directory) / 'last-failed-state.json').read_text())
+                self.assertEqual(data['services'][0]['update']['State'], 'not-started')
+                self.assertEqual(data['unavailable'], [])
 
     def test_service_failure_still_collects_local_health(self):
         with tempfile.TemporaryDirectory() as directory:
