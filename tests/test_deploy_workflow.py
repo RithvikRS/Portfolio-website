@@ -76,7 +76,33 @@ class MergedPRGate(unittest.TestCase):
         self.assertIn("if: needs.merged-pr.outputs.eligible == 'true'", WORKFLOW)
         self.assertIn('environment: production', WORKFLOW)
         self.assertIn('permissions: {}', WORKFLOW)
-        self.assertNotIn('uses: actions/checkout', WORKFLOW)
+        self.assertIn('persist-credentials: false', WORKFLOW)
+        self.assertIn('needs: [merged-pr, build]', WORKFLOW)
+
+
+    def test_docs_filter_cannot_skip_runtime_configuration(self):
+        import re
+        block = WORKFLOW.split('    paths-ignore:\n', 1)[1].split('\n\n', 1)[0]
+        rules = [line.strip()[2:] for line in block.splitlines()]
+        self.assertEqual(set(rules), {'README.md', 'deploy/**/*.md', 'LICENSE'})
+        def ignored(path):
+            return path in ('README.md', 'LICENSE') or bool(re.fullmatch(r'deploy/(?:.*/)?[^/]+\.md', path))
+        for path in ('README.md', 'deploy/SWARM.md', 'deploy/nested/guide.md'):
+            self.assertTrue(ignored(path))
+        for path in ('Dockerfile', '.dockerignore', '.github/workflows/deploy.yml', 'deploy/swarm.json',
+                     'deploy/swarm-services.json', 'deploy/Caddyfile.swarm', 'deploy/authelia/configuration.yml',
+                     'scripts/swarm-deploy.py', 'server/notes.mjs', 'data/portfolio.json', 'documents/Rithvik_CV.pdf'):
+            self.assertFalse(ignored(path))
+
+    def test_registry_credentials_are_read_only_for_deploy_and_passed_on_stdin(self):
+        build = WORKFLOW.split('  build:\n', 1)[1].split('  deploy:\n', 1)[0]
+        deploy = WORKFLOW.split('  deploy:\n', 1)[1]
+        self.assertIn('packages: write', build)
+        self.assertIn('packages: read', deploy)
+        self.assertNotIn('packages: write', deploy)
+        self.assertIn("printf '%s' \"$REGISTRY_TOKEN\" | ssh -T", deploy)
+        self.assertIn('cancel-in-progress: false', WORKFLOW)
+        self.assertIn('platforms: linux/amd64,linux/arm64', build)
 
 
 if __name__ == '__main__':
