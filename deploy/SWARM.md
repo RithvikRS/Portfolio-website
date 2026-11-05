@@ -297,6 +297,23 @@ Run `python3 -B -m unittest discover -s tests -p 'test_*.py'` locally before pus
 
 With the current three nodes, expect seven services/nine tasks, including three global Portainer agents. After adding services or nodes, totals depend on replica counts and eligible nodes. Inspect the **current** tasks rather than treating old rejected/shutdown history as a new failure. Failed rollouts capture service update states, replica counts, and manager-local container health in `.swarm/last-failed-state.json`, and task history in `.swarm/last-failed-tasks.txt`, before restoring the last successful release. The workflow prints the same state summary. Check paused/updating services, unhealthy containers, failing streaks, health-check exit codes, and OOM flags. Health entries include the last five check timestamps and exit codes; commands, output, environment values, and raw inspect data are omitted. Worker container health is not inspected remotely. Missing diagnostics appear under `unavailable`; capture failures do not block recovery. State collection has a 30-second command budget, followed by up to 10 seconds for task history. The snapshot also runs before restoring the current release after a failed manual rollback. Both files describe the latest failed attempt and remain private on the manager. Keep ARM provisioning retired; no capacity retry cron runs. Quiet ntfy access checks do not send successful notifications.
 
+### Recover a paused app update after Docker cancellation
+
+The manager currently uses Docker 29.8.2. Its rejected-task errors match the cancellation race described in [Moby issue 53916](https://github.com/moby/moby/issues/53916). This is an upstream bug report, not proof that every `context canceled` error has the same cause. UDP gossip warnings and slow firewall operations can accompany host pressure; verify packet flow before changing firewall rules.
+
+The deployment renders the manager-only app using its immutable local image ID, while retaining the release tag in candidate/current/previous metadata for cleanup and backup. This avoids registry lookups for an image built only on node 1. Registry-backed core and catalog images continue using repository digests.
+
+During a new deployment, the readiness check can resume `portfolio_app` once when all of these conditions hold:
+
+- The update is paused and the service targets the candidate's immutable image ID with one replica.
+- At least one task created during this update was rejected with an explicitly recognized Docker cancellation error. No failed task or other rejection error appears in that update's retained task history.
+- Exactly one desired-running task exists, and its container matches the target image and is running without an OOM flag.
+- The app has run for at least 45 seconds, is healthy with no failing streak, and its last three probes succeeded.
+
+The helper captures diagnostics, then uses Docker's [paused-update resume command](https://docs.docker.com/engine/swarm/swarm-tutorial/rolling-update/) with no forced restart or task-specification changes. It does not raise the allowed failure ratio or bypass the completed-update, health, HTTPS, authentication, Portainer or ntfy checks. A failed resume request consumes the single attempt. Continued failure follows the existing rollback path and the original readiness deadline.
+
+This is a bounded mitigation, not a patch to Docker itself. Read-only `check` and manual rollback do not automatically resume paused updates. Older releases using an app tag instead of an immutable image ID are not eligible. All persistent services retain stop-first updates.
+
 ## Roll back
 
 After at least two successful releases:

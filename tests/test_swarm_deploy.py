@@ -1,3 +1,5 @@
+import copy
+import datetime
 import importlib.util
 import json
 from pathlib import Path
@@ -171,6 +173,72 @@ class ImageResolutionTests(unittest.TestCase):
 
     def test_registry_port_is_not_removed_as_an_image_tag(self):
         self.assertEqual(swarm.registry_repository('registry.example:5000/team/app:v1'), 'registry.example:5000/team/app')
+
+
+class CancellationRecoveryTests(unittest.TestCase):
+    def fixture(self):
+        image = 'sha256:' + 'a' * 64
+        service = {'Spec': {'Name': 'portfolio_app', 'Mode': {'Replicated': {'Replicas': 1}},
+                           'TaskTemplate': {'ContainerSpec': {'Image': image}}},
+                   'UpdateStatus': {'State': 'paused', 'StartedAt': '2026-11-05T13:00:00Z'}}
+        task = {'CreatedAt': '2026-11-05T13:00:01Z', 'Spec': {'ContainerSpec': {'Image': image}},
+                'DesiredState': 'shutdown', 'Status': {'State': 'rejected', 'Err': 'Canceled: context canceled'}}
+        running = copy.deepcopy(task)
+        running.update(DesiredState='running', Status={'State': 'running', 'ContainerStatus': {'ContainerID': 'cid'}})
+        info = {'Id': 'cid', 'Config': {'Image': image}, 'State': {'Running': True, 'OOMKilled': False,
+                'StartedAt': '2026-11-05T13:00:10Z', 'Health': {'Status': 'healthy', 'FailingStreak': 0,
+                'Log': [{'ExitCode': 0}] * 3}}}
+        return service, [task, running], info, image, datetime.datetime.fromisoformat('2026-11-05T13:02:00+00:00')
+
+    def test_only_known_cancellation_with_healthy_exact_target_can_resume(self):
+        for error in swarm.CANCEL_ERRORS:
+            args = self.fixture(); args[1][0]['Status']['Err'] = error
+            self.assertTrue(swarm.can_resume_app(*args))
+
+    def test_unhealthy_wrong_image_old_failure_and_real_failures_are_rejected(self):
+        def mutate(case, args):
+            service, tasks, info, image, now = args
+            if case == 'unhealthy': info['State']['Health']['Status'] = 'unhealthy'
+            if case == 'oom': info['State']['OOMKilled'] = True
+            if case == 'probe': info['State']['Health']['Log'] = [{'ExitCode': 0}, {'ExitCode': 1}, {'ExitCode': 0}]
+            if case == 'old': tasks[0]['CreatedAt'] = '2026-11-04T13:00:01Z'
+            if case == 'error': tasks[0]['Status']['Err'] = 'permission denied'
+            if case == 'failed': tasks[0]['Status']['State'] = 'failed'
+            if case == 'wrong-image': info['Config']['Image'] = 'app:old'
+            if case == 'wrong-task': tasks[1]['Status']['ContainerStatus']['ContainerID'] = 'other'
+            if case == 'too-young': info['State']['StartedAt'] = '2026-11-05T13:01:59Z'
+            if case == 'replicas': service['Spec']['Mode']['Replicated']['Replicas'] = 2
+            if case == 'missing': info.clear()
+        for case in ('unhealthy', 'oom', 'probe', 'old', 'error', 'failed', 'wrong-image', 'wrong-task', 'too-young', 'replicas', 'missing'):
+            with self.subTest(case=case):
+                args = self.fixture(); mutate(case, args)
+                self.assertFalse(swarm.can_resume_app(*args))
+
+    def test_resume_is_no_force_and_diagnostics_precede_update(self):
+        service, tasks, info, image, now = self.fixture()
+        calls = []
+        def docker(*args):
+            calls.append(args)
+            if args[:2] == ('service', 'ps'): return 't1 t2'
+            if args == ('inspect', 't1', 't2'): return json.dumps(tasks)
+            if args == ('inspect', 'cid'): return json.dumps([info])
+            if args[:2] == ('service', 'update'): raise RuntimeError('daemon unavailable')
+            raise AssertionError(args)
+        with patch.object(swarm, 'docker', side_effect=docker), patch.object(swarm, 'container', return_value='cid'), patch.object(swarm, 'can_resume_app', return_value=True), patch.object(swarm, 'report_failed_tasks', side_effect=lambda: calls.append(('snapshot',))), patch('builtins.print'):
+            self.assertTrue(swarm.resume_canceled_app({'app': {'image': image}}, [service]))
+        self.assertEqual(calls[-2], ('snapshot',))
+        self.assertEqual(calls[-1], ('service', 'update', '--detach', '--no-resolve-image', 'portfolio_app'))
+
+    def test_wait_attempts_resume_only_once_and_still_requires_completion(self):
+        rows = [json.dumps({'Name': 'portfolio_app', 'Mode': 'replicated', 'Replicas': '1/1'})]
+        def docker(*args):
+            if args[:2] == ('service', 'ls'): return '\n'.join(rows)
+            if args[:2] == ('service', 'inspect'): return json.dumps([{'UpdateStatus': {'State': 'paused'}}])
+            if args[:2] == ('service', 'ps'): return 't'
+            return json.dumps([{'Status': {'State': 'running'}}])
+        with patch.object(swarm, 'release_stack', return_value={'services': {'app': {}}}), patch.object(swarm, 'CORE', []), patch.object(swarm, 'docker', side_effect=docker), patch.object(swarm, 'resume_canceled_app', return_value=True) as resume, patch.object(swarm.time, 'monotonic', side_effect=[0, 0, 1, 301]), patch.object(swarm.time, 'sleep'):
+            with self.assertRaisesRegex(RuntimeError, 'did not converge'): swarm.wait_ready('candidate', recover_app=True)
+            resume.assert_called_once()
 
 
 class FailureDiagnosticsTests(unittest.TestCase):
