@@ -309,7 +309,9 @@ def prepare(reuse_image=None):
     if not secret_path.exists():
         secret_path.write_text(secrets.token_urlsafe(40) + '\n')
         secret_path.chmod(0o600)
-    stack = render(compose, settings, app_image, pins, secret_path.read_text().strip(), release, catalog=catalog)
+    # Pin the manager-only app to its local immutable ID, avoiding Docker Hub lookups.
+    app_id = json.loads(docker('image', 'inspect', app_image))[0]['Id']
+    stack = render(compose, settings, app_id, pins, secret_path.read_text().strip(), release, catalog=catalog)
     write(release / 'stack.json', escape(stack))
     docker('stack', 'config', '-c', str(release / 'stack.json'))
     # Keep validation output private; rendered configuration contains credentials.
@@ -358,9 +360,79 @@ def service_counts_match(expected, rows):
     return True
 
 
-def wait_ready(stack_path=None, timeout=300):
+CANCEL_ERRORS = {
+    'Canceled: context canceled',
+    'rpc error: code = Canceled desc = context canceled',
+    'failed to read config content: Canceled: context canceled',
+    'failed to read config content: rpc error: code = Canceled desc = context canceled',
+}
+
+
+def timestamp(value):
+    return datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+
+
+def can_resume_app(service, tasks, info, target, now):
+    """Only recover a known Prepare cancellation after the exact app is healthy."""
+    try:
+        update = service.get('UpdateStatus') or {}
+        spec = service['Spec']
+        if update.get('State') != 'paused' or not re.fullmatch(r'sha256:[a-f0-9]{64}', target):
+            return False
+        if spec['Name'] != 'portfolio_app' or spec['TaskTemplate']['ContainerSpec']['Image'] != target:
+            return False
+        if spec['Mode']['Replicated']['Replicas'] != 1:
+            return False
+        start = timestamp(update['StartedAt'])
+        recent = [t for t in tasks if timestamp(t['CreatedAt']) >= start]
+        rejected = [t for t in recent if t['Status']['State'] in ('rejected', 'failed')]
+        if not rejected or any(t['Status']['State'] != 'rejected' or
+                t['Status'].get('Err') not in CANCEL_ERRORS or
+                t['Spec']['ContainerSpec']['Image'] != target for t in rejected):
+            return False
+        running = [t for t in tasks if t['DesiredState'] == 'running']
+        if len(running) != 1 or running[0]['Status']['State'] != 'running':
+            return False
+        task = running[0]
+        if task['Spec']['ContainerSpec']['Image'] != target or timestamp(task['CreatedAt']) < start:
+            return False
+        state = info['State']
+        health = state.get('Health', {})
+        if (not state['Running'] or state.get('OOMKilled') or health.get('Status') != 'healthy'
+                or health.get('FailingStreak') != 0 or info['Config']['Image'] != target
+                or task['Status']['ContainerStatus']['ContainerID'] != info['Id']):
+            return False
+        # Require a full monitor window plus three consecutive successful probes.
+        probes = health.get('Log', [])[-3:]
+        return ((now - timestamp(state['StartedAt'])).total_seconds() >= 45
+                and len(probes) == 3 and all(p['ExitCode'] == 0 for p in probes))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def resume_canceled_app(expected, descriptions):
+    service = next((s for s in descriptions if s['Spec']['Name'] == 'portfolio_app'), None)
+    if service is None or (service.get('UpdateStatus') or {}).get('State') != 'paused':
+        return False
+    ids = docker('service', 'ps', '-q', 'portfolio_app').split()
+    tasks = json.loads(docker('inspect', *ids)) if ids else []
+    info = json.loads(docker('inspect', container('app')))[0]
+    if not can_resume_app(service, tasks, info, expected['app']['image'], datetime.datetime.now(datetime.timezone.utc)):
+        return False
+    report_failed_tasks()
+    print('Resuming app update once after a known Docker cancellation; the target app is healthy.', flush=True)
+    # Docker resumes a paused update without --force or changing its task specification.
+    try:
+        docker('service', 'update', '--detach', '--no-resolve-image', 'portfolio_app')
+    except Exception:
+        print('App resume request failed; no further resume attempts will be made.', flush=True)
+    return True
+
+
+def wait_ready(stack_path=None, timeout=300, recover_app=False):
     expected = release_stack(stack_path)['services']
     deadline = time.monotonic() + timeout
+    resumed = False
     while time.monotonic() < deadline:
         try:
             rows = [json.loads(line) for line in docker('service', 'ls', '--filter',
@@ -368,7 +440,9 @@ def wait_ready(stack_path=None, timeout=300):
             ready = service_counts_match(expected, rows)
             if ready:
                 descriptions = json.loads(docker('service', 'inspect', *['portfolio_' + name for name in expected]))
-                if any(item.get('UpdateStatus', {}).get('State', 'completed') != 'completed' for item in descriptions):
+                if recover_app and not resumed:
+                    resumed = resume_canceled_app(expected, descriptions)
+                if any((item.get('UpdateStatus') or {}).get('State', 'completed') != 'completed' for item in descriptions):
                     ready = False
                 for name in expected:
                     tasks = docker('service', 'ps', '--filter', 'desired-state=running', '-q', 'portfolio_' + name).split()
@@ -389,8 +463,8 @@ def wait_ready(stack_path=None, timeout=300):
     raise RuntimeError('Swarm tasks did not converge; inspect docker service ps before retrying.')
 
 
-def check(stack_path=None):
-    wait_ready(stack_path)
+def check(stack_path=None, recover_app=False):
+    wait_ready(stack_path, recover_app=recover_app)
     info = json.loads(docker('inspect', container('caddy')))[0]
     env = dict(v.split('=', 1) for v in info['Config']['Env'] if '=' in v)
     class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -504,7 +578,7 @@ def apply():
     try:
         print('Applying Swarm release; persistent services update one at a time per service.', flush=True)
         docker('stack', 'deploy', '--prune', '--resolve-image', 'never', '-c', candidate['file'], 'portfolio')
-        check(candidate['file'])
+        check(candidate['file'], recover_app=True)
         print(run(['python3', 'scripts/setup-portainer.py', '--configure', '--swarm']), flush=True)
         print(run(['python3', 'scripts/swarm-portainer.py']), flush=True)
     except Exception:
