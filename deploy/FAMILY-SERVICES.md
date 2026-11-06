@@ -2,6 +2,8 @@
 
 Open **Service access** in the portfolio admin dashboard. Sign in as the infrastructure owner with MFA. Create a separate account for each person, save its generated password at creation, and give it privately to the account owner. A new account receives only the services you select. The console preserves administrator accounts and restricts grant changes to **Outline notes** and **Password vault**.
 
+Share the [user guide](https://rithvik.ddns.net/dashboard/guide/) with members for first sign-in, notes, vault use and account recovery. The guide shows service instructions according to each member’s grants.
+
 ## Onboard a family member or friend
 
 1. Open [Service access](https://rithvik.ddns.net/admin/access/) and create the account with the person's own email address. Select the services they need.

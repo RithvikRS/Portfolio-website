@@ -36,12 +36,23 @@ function serviceSection({ title, apps }) {
   return `<section class="applications"><h2>${title}</h2><div class="app-grid">${cards.join('')}</div></section>`;
 }
 
+function workspaceNavigation() {
+  const links = [
+    ['Workspace', [['Overview', '/admin/'], ['Service access', '/admin/access/'], ['User guide', '/dashboard/guide/']]],
+    ['Personal tools', [['Outline', '/notes'], ['Vaultwarden', '/vault']]],
+    ['Administration', [['Uptime Kuma', '/uptime'], ['Portainer', '/portainer/'], ['Fieldnotes', '/admin/notes/']]],
+  ];
+  const nav = links.map(([label, items]) => `<p class="nav-label">${label}</p>${items.map(([name, path]) =>
+    `<a class="nav-item${path === '/admin/' ? ' active' : ''}" href="${path}"${path === '/admin/' ? ' aria-current="page"' : ''}>${name}</a>`).join('')}`).join('');
+  return `<nav class="desktop-nav" aria-label="Workspace">${nav}</nav><details class="mobile-nav"><summary>Menu</summary><nav aria-label="Workspace">${nav}</nav></details>`;
+}
+
 export function renderAdmin(identity) {
   const name = escapeHTML(identity.name);
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#193d30"><title>Workspace · Rithvik</title><link rel="icon" href="/images/favicon.svg"><link rel="stylesheet" href="/css/admin.css"></head>
 <body><a class="skip" href="#main">Skip to content</a><div class="workspace">
-<aside class="sidebar"><a class="workspace-brand" href="/admin/"><span class="brand-symbol">r.</span><span>rithvik<span class="brand-caption">workspace</span></span></a><p class="nav-label">YOUR SPACE</p><nav aria-label="Workspace navigation"><a class="nav-item active" href="/admin/" aria-current="page">${square}<span>Overview</span></a><a class="nav-item" href="/admin/access/">${square}<span>Service access</span></a><a class="nav-item" href="/portainer/">${stack}<span>Portainer</span></a><a class="nav-item" href="/admin/notes/">${book}<span>Fieldnotes</span></a></nav><div class="sidebar-bottom"><a class="visit-site" href="/">Public portfolio ${arrow}</a><div class="identity"><span class="avatar">${escapeHTML(identity.name.slice(0, 1).toUpperCase())}</span><div><strong>${name}</strong><span>Administrator</span></div><span class="online-dot" title="Signed in"></span></div></div></aside>
+<aside class="sidebar"><a class="workspace-brand" href="/admin/"><span class="brand-symbol">r.</span><span>rithvik<span class="brand-caption">workspace</span></span></a>${workspaceNavigation()}<div class="sidebar-bottom"><a class="visit-site" href="/">Public portfolio ${arrow}</a><div class="identity"><span class="avatar">${escapeHTML(identity.name.slice(0, 1).toUpperCase())}</span><div><strong>${name}</strong><span>Administrator</span></div><span class="online-dot" title="Signed in"></span></div></div></aside>
 <div class="workspace-body"><header class="topbar"><span>Workspace <span class="breadcrumb">/</span> Overview</span><div><span class="secure-label"><i></i> Signed in securely</span><a href="/auth/logout">Sign out ${arrow}</a></div></header>
 <main id="main"><section class="welcome"><h1>Your <em>dashboard.</em></h1><p>Welcome back, ${name}.</p><a class="primary-link" href="/">View portfolio ${arrow}</a></section>
 ${sections.map(serviceSection).join('')}
