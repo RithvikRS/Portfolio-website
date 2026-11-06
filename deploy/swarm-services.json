@@ -418,6 +418,7 @@
         "REDIS_URL": "redis://notes_cache:6379",
         "OIDC_ISSUER_URL": "https://rithvik.ddns.net/auth",
         "OIDC_DISPLAY_NAME": "Authelia",
+        "OIDC_DISABLE_REDIRECT": "true",
         "OIDC_CLIENT_ID": "portfolio-notes",
         "OIDC_CLIENT_SECRET_FILE": "/run/secrets/outline_client",
         "FILE_STORAGE": "local",

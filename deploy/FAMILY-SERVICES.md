@@ -13,6 +13,8 @@ Open **Service access** in the portfolio admin dashboard. Sign in as the infrast
 
 Open the notes workspace as the owner before granting notes access to anyone else. Outline assigns the first sign-in to the initial workspace administrator. In workspace settings disable public sharing, leave default member permissions restricted, and choose who can invite others. Use Personal documents for individual work and restricted collections or explicit document invitations for collaboration. Test view, edit, and revocation with separate accounts. Server operators can access stored note contents.
 
+Signing out of Outline returns you to its sign-in page. Select Authelia to sign in again with your portfolio session. On the web vault's first screen, enter the email listed on your Authelia account in Service access.
+
 Open the vault and choose enterprise SSO using the same Authelia account, then set a unique master password to unlock the personal vault. The web vault uses SSO-only signup behind an MFA-protected browser proxy. This setup supports browser access. Keep personal recovery material offline and test an encrypted export using a disposable item before storing important secrets. Each user controls their own vault. Access grants authorize login; the owner console cannot unlock another person's vault.
 
 Open [Outline](https://notes.144.24.135.201.sslip.io/) or the [web vault](https://vault.144.24.135.201.sslip.io/). Each browser first visits the portfolio Authelia issuer. A valid MFA session can satisfy both the edge proxy and the application's own OIDC client. Each service uses dedicated client credentials and an exact callback. Native iPhone ntfy keeps its own read-only account.
