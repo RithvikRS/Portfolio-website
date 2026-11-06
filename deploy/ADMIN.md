@@ -18,12 +18,12 @@ The dashboard links to the portfolio, Portainer, and Fieldnotes. Portainer uses 
 
 1. Open [the admin dashboard](https://rithvik.ddns.net/admin/).
 2. Caddy redirects signed-out visitors to [Authelia](https://rithvik.ddns.net/auth/).
-3. Sign in as `rithvik` with the generated password. Authelia returns you to `/admin/`.
+3. Sign in as `rithvik` with your current password, then enter the six-digit code from your authenticator to open `/admin/`.
 4. Use **Sign out** in the dashboard to end the current shared-login session.
 
 The initial password is in `Portfolio admin login.txt`, saved privately beside the Oracle SSH key on the development computer. The server copy is `/opt/portfolio/.auth/bootstrap-login.txt`, readable only by its owner. Save the password in your password manager. Neither the password nor session cookie belongs in repository documentation, shell history, or screenshots.
 
-Sessions expire after 30 minutes of inactivity or 8 hours total. Remember-me is disabled. Restarting Authelia invalidates its in-memory sessions; the redeployment script intentionally recreates it. Authentication uses a password; TOTP, WebAuthn, and email password reset are not configured. Portainer has its own eight-hour session behind the shared-login gate. Signing out of Authelia blocks new Portainer requests; Portainer's own token is separately cleared by its logout action. See [session behavior](PORTAINER.md#sign-in-and-sign-out).
+Sessions expire after 30 minutes of inactivity or 8 hours total. Remember-me is disabled. Restarting Authelia invalidates its in-memory sessions; the redeployment script intentionally recreates it. Administrator routes and the Portainer OIDC client require a password and TOTP. Each private hostname has its own session cookie. Portainer has its own eight-hour session behind the shared-login gate. Signing out of Authelia blocks new Portainer requests; Portainer's own token is separately cleared by its logout action. See [session behavior](PORTAINER.md#sign-in-and-sign-out).
 
 ## How requests are protected
 
@@ -73,6 +73,19 @@ bash portfolio_redeploy.sh --no-pull
 ```
 
 The helper reads `ADMIN_USERNAME`, `DOMAIN`, and the auth user ID from Compose. It generates a random 32-character password and an Argon2id hash without printing either. Python 3 and Docker are required; no Python packages are installed. The display name and email are currently set by this personal setup helper; adapt them if reusing the repository for another owner.
+
+## Authenticator enrollment and recovery
+
+Enroll the administrator before rolling out a two-factor policy. On the manager, identify the running Authelia task and generate a registration QR for the intended account. Use a private directory on the PC for the QR transfer. Treat the QR as a recovery credential.
+
+```sh
+auth_task=$(sudo docker ps -q --filter label=com.docker.swarm.service.name=portfolio_auth)
+sudo docker exec "$auth_task" authelia storage user totp generate rithvik --issuer 'Portfolio Authelia' --path /data/enrollment.png --config /etc/authelia/configuration.yml --config.experimental.filters template >/dev/null
+```
+
+Transfer the PNG over SSH from `/opt/portfolio/.auth/data/enrollment.png` and remove the server copy after the transfer succeeds. Scan it in your authenticator, verify a fresh code against the registered factor, then apply the policy through the deployment PR. Use a private browser window to test the password and code on the admin dashboard. Open Portainer to exercise its OIDC login. The iPhone ntfy subscription uses its separate read-only credentials.
+
+If you lose your phone, scan the recovery QR from your private PC backup into your replacement authenticator and test a fresh sign-in. Keep using the registered factor until you can verify its replacement. If someone else may have the seed, replace it through your trusted manager SSH access and refresh the private recovery copy. Back up the Authelia database together with its storage encryption key after enrollment.
 
 ## Password change or recovery
 
