@@ -1,7 +1,7 @@
 {
   "services": {
     "uptime_kuma": {
-      "image": "louislam/uptime-kuma:2.5.9@sha256:e88415a90dd2f7efecdbc18de0490aff292764a3ac471531bf1d0481725591bd",
+      "image": "ghcr.io/rithvikrs/portfolio-website:kuma-212e817e8c2688e9681d02a66f18c04783dd524c@sha256:659c6d56e8b8dbee6f7bc67bec7eba438061ecee8eb12b7b3d5222e994fcac29",
       "user": "1000:1000",
       "networks": [
         "swarm_monitoring"
@@ -442,7 +442,7 @@
       ]
     },
     "vaultwarden": {
-      "image": "vaultwarden/server:1.37.5@sha256:4fe17f415f90087377d37c755e0ea3cf189dcc6794e49cdd2a9adbb4937d9e1f",
+      "image": "ghcr.io/rithvikrs/portfolio-website:vault-212e817e8c2688e9681d02a66f18c04783dd524c@sha256:1a0b8ce856596f1a49d292ae0d3dc64951a9da0686f9ec874832c27b07275e96",
       "networks": [
         "swarm_vault_app"
       ],
