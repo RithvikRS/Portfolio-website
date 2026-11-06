@@ -28,6 +28,9 @@ access_control:
   default_policy: 'deny'
   rules:
     - domain: '{{ env "DOMAIN" }}'
+      resources: ['^/dashboard/$']
+      policy: 'two_factor'
+    - domain: '{{ env "DOMAIN" }}'
       resources: ['^/admin(/.*)?$', '^/portainer(/.*)?$']
       subject: ['group:admins']
       policy: 'two_factor'

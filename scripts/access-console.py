@@ -104,6 +104,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             self.send_page(200, "ok")
+        elif self.path == "/dashboard/" and self.headers.get("Remote-User"):
+            groups = set(self.headers.get("Remote-Groups", "").split(","))
+            if self.authorized():
+                self.send_response(303)
+                self.send_header("Location", "/admin/")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
+            links = [f'<p><a href="/{key}" target="_blank" rel="noopener">{title}</a></p>' for key, title in SERVICES.items() if key in groups]
+            self.send_page(200, "<h1>Your dashboard</h1>" + ("".join(links) or "<p>No services assigned.</p>") + '<a href="/auth/logout">Sign out of dashboard</a>')
         elif urlsplit(self.path).path != BASE or not self.authorized():
             self.send_page(403, "Access denied")
         else:

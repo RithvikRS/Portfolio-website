@@ -148,7 +148,7 @@ def configure(config, docker, compose, swarm=False):
             'ResourceURI': origin + '/auth/api/oidc/userinfo',
             'RedirectURI': origin + '/portainer/', 'UserIdentifier': 'preferred_username',
             'Scopes': 'openid profile groups email', 'OAuthAutoCreateUsers': False,
-            'DefaultTeamID': 0, 'SSO': True, 'LogoutURI': origin + '/auth/logout', 'AuthStyle': 1,
+            'DefaultTeamID': 0, 'SSO': True, 'LogoutURI': origin + ('/dashboard/' if swarm or (ROOT / '.swarm/enabled').exists() else '/auth/logout'), 'AuthStyle': 1,
         }
         settings = api.call('GET', '/settings')
         wanted = {'AuthenticationMethod': 3, 'OAuthSettings': oauth,

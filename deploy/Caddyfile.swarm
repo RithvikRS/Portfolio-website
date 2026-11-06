@@ -88,6 +88,22 @@ http://:8081 {
         reverse_proxy auth:9091
     }
 
+    @notesEntry path /notes /notes/
+    redir @notesEntry https://notes.144.24.135.201.sslip.io/ 302
+    @uptimeEntry path /uptime /uptime/
+    redir @uptimeEntry https://uptime.144.24.135.201.sslip.io/ 302
+    @vaultEntry path /vault /vault/
+    redir @vaultEntry https://vault.144.24.135.201.sslip.io/ 302
+
+    redir /dashboard /dashboard/ 308
+    handle /dashboard/ {
+        forward_auth auth:9091 {
+            uri /api/authz/forward-auth?authelia_url=https://{$DOMAIN}/auth/
+            copy_headers Remote-User Remote-Groups
+        }
+        reverse_proxy access_console:8080
+    }
+
     redir /admin/access /admin/access/ 308
     handle /admin/access/* {
         forward_auth auth:9091 {
@@ -140,6 +156,9 @@ http://:8081 {
 
 notes.144.24.135.201.sslip.io {
     import private_identity
+    # Outline revokes its session before navigating to its OIDC logout route.
+    redir /auth/oidc.logout /oauth2/sign_out?rd=%2Freturn-to-dashboard 303
+    redir /return-to-dashboard https://{$DOMAIN}/dashboard/ 303
     @privateEndpoints path /ready /ping /share /share/* /s /s/*
     respond @privateEndpoints 404
     reverse_proxy notes_sso:4180
