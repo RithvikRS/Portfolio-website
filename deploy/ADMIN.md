@@ -10,9 +10,10 @@ Use the admin dashboard to open private tools with one sign-in. The portfolio ap
 | --- | --- | --- |
 | Dashboard | Open private tools and manage your session | This guide |
 | Portainer | Manage containers with shared login | [Portainer guide](PORTAINER.md) |
+| Uptime Kuma | View service availability and outage history | [Monitoring guide](MONITORING.md) |
 | Fieldnotes | Write and publish blog posts and learning notes | [Fieldnotes guide](FIELDNOTES.md) |
 
-The dashboard links to the portfolio, Portainer, and Fieldnotes. Portainer uses a registered OpenID Connect client and the same `rithvik` account. Fieldnotes reuses the protected `/admin/*` identity and needs no second application login.
+The dashboard links to the portfolio, Portainer, Uptime Kuma, and Fieldnotes. Open Uptime Kuma through Authelia and sign in with your Kuma administrator account. Portainer uses a registered OpenID Connect client and the same `rithvik` account. Fieldnotes reuses the protected `/admin/*` identity and needs no second application login.
 
 ## Sign in
 
