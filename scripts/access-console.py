@@ -90,7 +90,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def send_page(self, status, body):
-        content = ('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Service access</title><style>body{font:1rem/1.5 system-ui;color:#193d30;max-width:55rem;padding:2rem;margin:auto}section{border-top:1px solid #ccd6ce;padding:1rem 0}label,button{display:inline-block;margin:.3rem}button,input{font:inherit}code{overflow-wrap:anywhere}</style><main>' + body + '</main></html>').encode()
+        content = ('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Workspace · Rithvik</title><style>body{font:1rem/1.5 system-ui;color:#193d30;max-width:55rem;padding:2rem;margin:auto}section{border-top:1px solid #ccd6ce;padding:1rem 0}label,button{display:inline-block;margin:.3rem}button,input{font:inherit}code{overflow-wrap:anywhere}</style><main>' + body + '</main></html>').encode()
         self.send_response(status)
         for k,v in {"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer","Content-Length":str(len(content))}.items():
             self.send_header(k,v)
@@ -112,8 +112,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 return
-            links = [f'<p><a href="/{key}" target="_blank" rel="noopener">{title}</a></p>' for key, title in SERVICES.items() if key in groups]
-            self.send_page(200, "<h1>Your dashboard</h1>" + ("".join(links) or "<p>No services assigned.</p>") + '<a href="/auth/logout">Sign out of dashboard</a>')
+            links = [f'<p><a href="/{key}">{title}</a></p>' for key, title in SERVICES.items() if key in groups]
+            self.send_page(200, "<h1>Your dashboard</h1><h2>Personal tools</h2>" + ("".join(links) or "<p>No services assigned.</p>") + '<a href="/auth/logout">Sign out of dashboard</a>')
         elif urlsplit(self.path).path != BASE or not self.authorized():
             self.send_page(403, "Access denied")
         else:

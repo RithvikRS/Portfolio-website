@@ -35,7 +35,10 @@ test('dashboard requires authentication, escapes names, and is never cached', as
   assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
   assert.ok(!html.includes('<script>alert(1)</script>'));
   assert.ok(html.includes('href="/portainer/"'));
-  assert.ok(html.includes('href="/uptime"'));
+  for (const path of ['/notes', '/uptime', '/vault', '/admin/access/']) {
+    assert.ok(html.includes(`href="${path}"`));
+  }
+  assert.ok(!html.includes('target="_blank"'));
   assert.ok(html.includes('href="/admin/notes/"'));
   const head = await request('/admin', { method: 'HEAD', headers });
   assert.equal(head.status, 200);

@@ -47,6 +47,7 @@
 
 uptime.144.24.135.201.sslip.io {
     import private_identity
+    redir /return-to-dashboard https://{$DOMAIN}/dashboard/ 303
     # Keep the proxy's diagnostic endpoints private.
     @diagnostics path /ping /ready
     respond @diagnostics 404
@@ -166,6 +167,7 @@ notes.144.24.135.201.sslip.io {
 
 vault.144.24.135.201.sslip.io {
     import private_identity
+    redir /return-to-dashboard https://{$DOMAIN}/dashboard/ 303
     @privateEndpoints path /ready /ping /admin /admin/*
     respond @privateEndpoints 404
     reverse_proxy vault_sso:4180
