@@ -40,7 +40,7 @@ Only Caddy publishes web ports. App, Authelia, and Portainer listen privately on
 
 Caddy removes visitor-supplied `Remote-User`, `Remote-Groups`, `Remote-Email`, and `Remote-Name` headers. For `/admin/` and its writing subpaths, it asks Authelia to verify the session and copies the verified identity. The app also requires `ADMIN_ENABLED=true`, proxy trust, the exact configured proxy peer IP, the configured username, and membership in `admins`. The page is marked `no-store` and `noindex`.
 
-Authelia's default access policy is deny; its rule permits the `admins` group on `/admin` and `/portainer` and their subpaths after password authentication. The Portainer OIDC client separately requires the same group. Portainer automatic account creation is disabled, and the existing `rithvik` account is explicitly provisioned as an administrator. Login regulation allows five retries within two minutes with a ten-minute ban. A dashboard card alone grants no access to an application.
+Authelia's default access policy is deny; its rule permits the `admins` group on `/admin` and `/portainer` and their subpaths after password and authenticator verification. The Portainer OIDC client separately requires the same group. Portainer automatic account creation is disabled, and the existing `rithvik` account is explicitly provisioned as an administrator. Login regulation allows five retries within two minutes with a ten-minute ban. A dashboard card alone grants no access to an application.
 
 ## Files and ownership
 
