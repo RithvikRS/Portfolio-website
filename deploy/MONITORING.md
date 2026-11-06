@@ -8,11 +8,13 @@ Run Uptime Kuma 2.5.9 by immutable image digest on AMD node 2. Keep its SQLite d
 
 The manager passes the pinned worker image digest to Swarm without pulling or unpacking it locally. Workers verify and download the image themselves; keep image backup coverage on the worker.
 
-Only Caddy and Kuma join the private, non-attachable monitoring overlay. Do not publish Kuma's port 3001 or Caddy's internal health port 8081. Never mount the Docker socket in Kuma. Caddy exposes only explicit backend health paths on 8081; it does not offer an alternate application frontend there.
+Caddy, Kuma, and its OIDC proxy join the private, non-attachable monitoring overlay. Do not publish Kuma's port 3001 or Caddy's internal health port 8081. Never mount the Docker socket in Kuma. Caddy exposes only explicit backend health paths on 8081; it does not offer an alternate application frontend there.
 
 Protect all Kuma paths with Authelia, including `/socket.io`, API routes, assets, and status pages. Keep native Kuma authentication enabled and do not create public status pages. Authelia authorizes the administrator group; Kuma does not become a multi-user application simply because it sits behind SSO.
 
-The three browser hostnames use separate, narrowly scoped session cookies. Expect to sign in on each hostname. Never widen a cookie to `sslip.io`. Login pages and required authentication endpoints must remain reachable before login.
+Kuma uses oauth2-proxy on the Ampere worker to redirect the browser to the portfolio Authelia issuer. An active administrator MFA session on the portfolio hostname satisfies this check. Kuma then handles its own administrator login. The proxy checks the admins group and issues a five-minute, host-only session cookie. Signing out of the portfolio can leave that proxy session valid until expiry. ntfy uses its own Authelia session on its hostname.
+
+Before deploying this client, run `python3 scripts/setup-kuma-sso.py` on the manager as the checkout owner. Back up the private `.secrets/` directory together with `.auth/secrets/`. Restore matching cookie and client keys before restoring a saved release. Never widen a cookie to `sslip.io`. Login pages and required authentication endpoints must remain reachable before login.
 
 Keep the public portfolio, published blog/learning pages, and their required public APIs accessible. Gate administration, Portainer, Kuma, and the ntfy browser interface. Preserve ntfy's native authenticated API exception for iPhone subscriptions and publishing. ntfy still applies per-account topic permissions; a browser Authelia session does not replace those permissions.
 

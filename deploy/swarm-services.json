@@ -74,6 +74,58 @@
         "start_period": "90s",
         "retries": 3
       }
+    },
+    "kuma_sso": {
+      "image": "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048",
+      "command": [
+        "--config=/run/secrets/kuma_oidc",
+        "--http-address=0.0.0.0:4180",
+        "--provider=oidc",
+        "--oidc-issuer-url=https://rithvik.ddns.net/auth",
+        "--client-id=portfolio-kuma",
+        "--redirect-url=https://uptime.144.24.135.201.sslip.io/oauth2/callback",
+        "--code-challenge-method=S256",
+        "--scope=openid profile email groups",
+        "--email-domain=*",
+        "--allowed-group=admins",
+        "--upstream=http://uptime_kuma:3001",
+        "--skip-provider-button=true",
+        "--cookie-name=__Host-kuma_sso",
+        "--cookie-secure=true",
+        "--cookie-httponly=true",
+        "--cookie-samesite=lax",
+        "--cookie-expire=5m",
+        "--session-cookie-minimal=true",
+        "--pass-basic-auth=false",
+        "--pass-user-headers=false",
+        "--reverse-proxy=true",
+        "--request-logging=false"
+      ],
+      "networks": [
+        "swarm_monitoring"
+      ],
+      "secrets": [
+        "kuma_oidc"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.role == worker",
+            "node.labels.workload.compute == true"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "96M",
+            "cpus": "0.50"
+          }
+        }
+      }
     }
   },
   "networks": {
@@ -86,7 +138,11 @@
     "swarm_monitoring"
   ],
   "configs": {},
-  "secrets": {},
+  "secrets": {
+    "kuma_oidc": {
+      "file": ".secrets/kuma-oidc.cfg"
+    }
+  },
   "volumes": {},
   "http_checks": [
     {
@@ -137,6 +193,7 @@
     }
   ],
   "internal_checks": [
-    "http://uptime_kuma:3001/"
+    "http://uptime_kuma:3001/",
+    "http://kuma_sso:4180/ready"
   ]
 }
