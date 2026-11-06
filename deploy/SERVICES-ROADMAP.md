@@ -15,7 +15,7 @@ Use this plan to extend the existing Oracle Cloud Swarm. Implement one phase at 
 - Remove IT-Tools and general formatting/conversion utilities from the roadmap.
 - Leave the personal investment/trading app until last. Its new direction is Oracle Database plus Authelia, implemented in its own repository.
 
-Vaultwarden is the preferred password-manager candidate, pending a decision to operate family password storage. A developer secrets platform remains optional. Do not interpret those candidates as already selected or deployed.
+Use the owner console to manage access to the deployed Outline workspace and Vaultwarden web vault. See [account onboarding, permissions, and recovery](FAMILY-SERVICES.md). A developer secrets platform remains optional.
 
 ## Current topology and boundaries
 
@@ -23,7 +23,7 @@ Vaultwarden is the preferred password-manager candidate, pending a decision to o
 | --- | --- | --- | --- |
 | AMD node 1 | Swarm manager; `portfolio.data=true` | Caddy, portfolio/Fieldnotes, Authelia, ntfy, Portainer, existing data | Keep core services here; move builds off the host |
 | AMD node 2 | Worker; `portfolio.worker=true` | Uptime Kuma, Portainer agent | Keep monitoring data pinned to this worker |
-| Ampere A1 | Worker; `workload.compute=true` | Portainer agent; 4 OCPUs / 24 GB RAM compute capacity | New application services, approved persistent workloads, later trading app |
+| Ampere A1 | Worker; `workload.compute=true` | Portainer agent, service login proxies, Outline, PostgreSQL, Redis, and Vaultwarden | New application services, approved persistent workloads, later trading app |
 
 ### Capacity budget
 
@@ -66,7 +66,7 @@ Done when a new stateful service can be restored from the documented backup with
 
 ## Phase 3: monitoring
 
-Deploy Uptime Kuma on AMD node 2 only after confirming capacity and completing its storage/backup support. If headroom is insufficient, reconsider placement before deployment.
+Uptime Kuma runs on AMD node 2 with worker-local storage and backup coverage. Open it from the admin dashboard to reuse your existing MFA session.
 
 Keep Portainer for infrastructure operations and Kuma for availability history and alerts. Monitor public HTTPS, API readiness, certificate expiry, and eventually application-provided worker heartbeats and data-freshness checks. A successful HTTP response does not establish that imports are current.
 
@@ -91,7 +91,7 @@ Use different mechanisms for different consumers:
 | Need | Direction |
 | --- | --- |
 | Service runtime credentials | Expand Docker Swarm secrets usage; version and rotate secrets deliberately |
-| Family passwords and secure notes | Evaluate Vaultwarden with native Authelia OIDC, invitations, and encrypted recovery exports |
+| Family passwords and secure notes | Use the Vaultwarden web vault with Authelia OIDC and per-user service grants. Rehearse encrypted exports before storing important passwords. |
 | Developer/CI environment secrets | Consider Infisical only if project/environment workflows justify another service |
 
 Vaultwarden SSO authenticates the user; a master password still unlocks the vault. Verify clients, recovery, and two-user isolation before storing important credentials. Do not store passwords in Outline or Fieldnotes.
@@ -112,7 +112,7 @@ Done when one useful scheduled workflow works for each of two isolated users wit
 
 ## Phase 7: Outline personal and shared notes
 
-Select a self-hosted release containing Outline's Personal documents feature, announced 16 October 2026, and verify feature availability in that edition before deployment.
+Use Personal documents and restricted collections in the deployed Outline workspace. Complete the owner sign-in before granting anyone else access.
 
 - Authenticate each user through Authelia OIDC.
 - Give users their own Personal space; use document invitations and restricted collections for selective sharing.
