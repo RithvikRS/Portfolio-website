@@ -49,7 +49,8 @@ for filename in ['session-secret', 'storage-key']:
 users = {'users': {username: {'displayname': 'Rithvik', 'password': digest.group(1),
     'email': 'rithvik.career@gmail.com', 'groups': ['admins']}}}
 # JSON is a subset of YAML, avoiding an extra Python package for this setup script.
-(private / 'secrets' / 'users.yml').write_text(json.dumps(users, indent=2) + '\n', encoding='utf-8')
+(private / 'secrets' / 'directory').mkdir(mode=0o700)
+(private / 'secrets' / 'directory' / 'users.yml').write_text(json.dumps(users, indent=2) + '\n', encoding='utf-8')
 (private / 'bootstrap-login.txt').write_text(
     f'Portfolio admin dashboard\n\nURL: https://{domain}/admin/\nUsername: {username}\n'
     f'Password: {password.group(1)}\n\nSave this in your password manager. Do not commit or share this file.\n',

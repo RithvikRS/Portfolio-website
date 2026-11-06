@@ -44,6 +44,12 @@ class SwarmConfigurationTests(unittest.TestCase):
             (root / '.secrets').mkdir()
             (root / '.secrets/kuma-oidc.cfg').write_text('test fixture')
             catalog = swarm.load_catalog(Path(__file__).resolve().parents[1])
+            for definition in catalog['secrets'].values():
+                path = root / definition['file']
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('private fixture')
+            (root / 'scripts').mkdir()
+            (root / 'scripts/access-console.py').write_text('# fixture')
             settings = json.loads((Path(__file__).resolve().parents[1] / 'deploy/swarm.json').read_text())
             result = swarm.render(compose, settings, 'app:release', {name: name + '@sha256:pinned' for name in swarm.CORE + ['agent'] + list(catalog['services'])}, 'private$secret', root, root, catalog=catalog)
             for name in swarm.CORE:
@@ -62,7 +68,7 @@ class SwarmConfigurationTests(unittest.TestCase):
             self.assertNotIn('swarm_node2', result['networks'])
             self.assertEqual(result['services']['uptime_kuma']['deploy']['placement']['constraints'], ['node.id == kxm75m17suc2o1hp0s4ikyhri'])
             self.assertTrue(all(port['mode'] == 'host' for port in result['services']['caddy']['ports']))
-            self.assertEqual(len(result['configs']), 3)
+            self.assertEqual(len(result['configs']), 4)
             self.assertEqual(swarm.escape(result)['services']['agent']['environment']['AGENT_SECRET'], 'private$$secret')
 
     def test_escape_preserves_literal_secret_dollars(self):

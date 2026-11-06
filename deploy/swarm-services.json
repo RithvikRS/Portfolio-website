@@ -116,7 +116,8 @@
         "placement": {
           "constraints": [
             "node.role == worker",
-            "node.labels.workload.compute == true"
+            "node.labels.workload.compute == true",
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
           ]
         },
         "resources": {
@@ -126,21 +127,442 @@
           }
         }
       }
+    },
+    "access_console": {
+      "image": "python:3.13-alpine@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca",
+      "networks": [
+        "swarm_access"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.labels.portfolio.data == true"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "48M"
+          }
+        }
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "user": "1000:1000",
+      "command": [
+        "python",
+        "-B",
+        "/access-console.py"
+      ],
+      "configs": [
+        {
+          "source": "access_console",
+          "target": "/access-console.py"
+        }
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/opt/portfolio/.auth/secrets/directory",
+          "target": "/directory"
+        }
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ]
+    },
+    "notes_sso": {
+      "image": "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048",
+      "command": [
+        "--config=/run/secrets/notes_edge",
+        "--http-address=0.0.0.0:4180",
+        "--provider=oidc",
+        "--oidc-issuer-url=https://rithvik.ddns.net/auth",
+        "--client-id=portfolio-notes-edge",
+        "--redirect-url=https://notes.144.24.135.201.sslip.io/oauth2/callback",
+        "--code-challenge-method=S256",
+        "--scope=openid profile email groups",
+        "--email-domain=*",
+        "--allowed-group=admins",
+        "--upstream=http://outline:3000",
+        "--skip-provider-button=true",
+        "--cookie-name=__Host-notes_sso",
+        "--cookie-secure=true",
+        "--cookie-httponly=true",
+        "--cookie-samesite=lax",
+        "--cookie-expire=5m",
+        "--session-cookie-minimal=true",
+        "--pass-basic-auth=false",
+        "--pass-user-headers=false",
+        "--reverse-proxy=true",
+        "--request-logging=false",
+        "--allowed-group=notes"
+      ],
+      "networks": [
+        "swarm_notes_edge",
+        "swarm_notes_app"
+      ],
+      "secrets": [
+        "notes_edge"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.role == worker",
+            "node.labels.workload.compute == true",
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "96M",
+            "cpus": "0.50"
+          }
+        }
+      }
+    },
+    "vault_sso": {
+      "image": "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048",
+      "command": [
+        "--config=/run/secrets/vault_edge",
+        "--http-address=0.0.0.0:4180",
+        "--provider=oidc",
+        "--oidc-issuer-url=https://rithvik.ddns.net/auth",
+        "--client-id=portfolio-vault-edge",
+        "--redirect-url=https://vault.144.24.135.201.sslip.io/oauth2/callback",
+        "--code-challenge-method=S256",
+        "--scope=openid profile email groups",
+        "--email-domain=*",
+        "--allowed-group=admins",
+        "--upstream=http://vaultwarden:80",
+        "--skip-provider-button=true",
+        "--cookie-name=__Host-vault_sso",
+        "--cookie-secure=true",
+        "--cookie-httponly=true",
+        "--cookie-samesite=lax",
+        "--cookie-expire=5m",
+        "--session-cookie-minimal=true",
+        "--pass-basic-auth=false",
+        "--pass-user-headers=false",
+        "--reverse-proxy=true",
+        "--request-logging=false",
+        "--allowed-group=vault"
+      ],
+      "networks": [
+        "swarm_vault_edge",
+        "swarm_vault_app"
+      ],
+      "secrets": [
+        "vault_edge"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.role == worker",
+            "node.labels.workload.compute == true",
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "96M",
+            "cpus": "0.50"
+          }
+        }
+      }
+    },
+    "notes_db": {
+      "image": "postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac",
+      "networks": [
+        "swarm_notes_data"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "512M"
+          }
+        }
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "environment": {
+        "POSTGRES_USER": "outline",
+        "POSTGRES_DB": "outline",
+        "POSTGRES_PASSWORD_FILE": "/run/secrets/notes_db_password"
+      },
+      "secrets": [
+        "notes_db_password"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/swarm/notes_db",
+          "target": "/var/lib/postgresql/data"
+        }
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "outline"
+        ],
+        "interval": "20s",
+        "timeout": "5s",
+        "retries": 5
+      }
+    },
+    "notes_cache": {
+      "image": "redis:7-alpine@sha256:c5d34a98396a4775e223c74e929162c35c5a2182901ba26b50ade939941ce14b",
+      "networks": [
+        "swarm_notes_data"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "160M"
+          }
+        }
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "command": [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "96mb",
+        "--maxmemory-policy",
+        "noeviction"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/swarm/notes_cache",
+          "target": "/data"
+        }
+      ]
+    },
+    "outline": {
+      "image": "docker.getoutline.com/outlinewiki/outline:1.12.0@sha256:25d6a2ced2f1f0cf03c09abd776d87ba31941ed96d3a99992aa84b3bd0afc074",
+      "networks": [
+        "swarm_notes_data",
+        "swarm_notes_app"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "1200M"
+          }
+        }
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "environment": {
+        "NODE_ENV": "production",
+        "URL": "https://notes.144.24.135.201.sslip.io",
+        "PORT": "3000",
+        "SECRET_KEY_FILE": "/run/secrets/outline_key",
+        "UTILS_SECRET_FILE": "/run/secrets/outline_utils",
+        "DATABASE_URL_FILE": "/run/secrets/outline_db_url",
+        "PGSSLMODE": "disable",
+        "REDIS_URL": "redis://notes_cache:6379",
+        "OIDC_ISSUER_URL": "https://rithvik.ddns.net/auth",
+        "OIDC_DISPLAY_NAME": "Authelia",
+        "OIDC_CLIENT_ID": "portfolio-notes",
+        "OIDC_CLIENT_SECRET_FILE": "/run/secrets/outline_client",
+        "FILE_STORAGE": "local",
+        "FILE_STORAGE_LOCAL_ROOT_DIR": "/var/lib/outline/data",
+        "FILE_STORAGE_UPLOAD_MAX_SIZE": "26214400",
+        "ENABLE_UPDATES": "false",
+        "DEFAULT_LANGUAGE": "en_US"
+      },
+      "secrets": [
+        "outline_key",
+        "outline_utils",
+        "outline_db_url",
+        "outline_client"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/swarm/outline",
+          "target": "/var/lib/outline/data"
+        }
+      ]
+    },
+    "vaultwarden": {
+      "image": "vaultwarden/server:1.37.5@sha256:4fe17f415f90087377d37c755e0ea3cf189dcc6794e49cdd2a9adbb4937d9e1f",
+      "networks": [
+        "swarm_vault_app"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "256M"
+          }
+        }
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "environment": {
+        "DOMAIN": "https://vault.144.24.135.201.sslip.io",
+        "SIGNUPS_ALLOWED": "false",
+        "INVITATIONS_ALLOWED": "false",
+        "SSO_ENABLED": "true",
+        "SSO_ONLY": "true",
+        "SSO_SIGNUPS_ALLOWED": "true",
+        "SSO_SIGNUPS_MATCH_EMAIL": "false",
+        "SSO_PKCE": "true",
+        "SSO_AUTHORITY": "https://rithvik.ddns.net/auth",
+        "SSO_CLIENT_ID": "portfolio-vault",
+        "SSO_CLIENT_SECRET_FILE": "/run/secrets/vault_client",
+        "SSO_SCOPES": "email profile",
+        "SSO_AUTH_ONLY_NOT_SESSION": "true",
+        "SHOW_PASSWORD_HINT": "false",
+        "ORG_CREATION_USERS": "none",
+        "LOG_LEVEL": "warn"
+      },
+      "secrets": [
+        "vault_client"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/swarm/vaultwarden",
+          "target": "/data"
+        }
+      ]
     }
   },
   "networks": {
     "swarm_monitoring": {
       "driver": "overlay",
       "attachable": false
+    },
+    "swarm_access": {
+      "driver": "overlay",
+      "attachable": false
+    },
+    "swarm_notes_data": {
+      "driver": "overlay",
+      "attachable": false
+    },
+    "swarm_notes_edge": {
+      "driver": "overlay",
+      "attachable": false
+    },
+    "swarm_notes_app": {
+      "driver": "overlay",
+      "attachable": false
+    },
+    "swarm_vault_edge": {
+      "driver": "overlay",
+      "attachable": false
+    },
+    "swarm_vault_app": {
+      "driver": "overlay",
+      "attachable": false
     }
   },
   "caddy_networks": [
-    "swarm_monitoring"
+    "swarm_monitoring",
+    "swarm_access",
+    "swarm_notes_edge",
+    "swarm_vault_edge"
   ],
-  "configs": {},
+  "configs": {
+    "access_console": {
+      "file": "scripts/access-console.py"
+    }
+  },
   "secrets": {
     "kuma_oidc": {
       "file": ".secrets/kuma-oidc.cfg"
+    },
+    "notes_edge": {
+      "file": ".secrets/family/notes_edge"
+    },
+    "vault_edge": {
+      "file": ".secrets/family/vault_edge"
+    },
+    "notes_db_password": {
+      "file": ".secrets/family/notes_db_password"
+    },
+    "outline_key": {
+      "file": ".secrets/family/outline_key"
+    },
+    "outline_utils": {
+      "file": ".secrets/family/outline_utils"
+    },
+    "outline_db_url": {
+      "file": ".secrets/family/outline_db_url"
+    },
+    "outline_client": {
+      "file": ".secrets/family/outline_client"
+    },
+    "vault_client": {
+      "file": ".secrets/family/vault_client"
     }
   },
   "volumes": {},
@@ -190,10 +612,29 @@
       "statuses": [
         404
       ]
+    },
+    {
+      "url": "https://notes.144.24.135.201.sslip.io/",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
+    },
+    {
+      "url": "https://vault.144.24.135.201.sslip.io/",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
     }
   ],
   "internal_checks": [
     "http://uptime_kuma:3001/",
-    "http://kuma_sso:4180/ready"
+    "http://kuma_sso:4180/ready",
+    "http://notes_sso:4180/ready",
+    "http://vault_sso:4180/ready",
+    "http://access_console:8080/health"
   ]
 }

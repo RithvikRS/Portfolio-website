@@ -12,11 +12,12 @@ webauthn:
 log:
   level: 'info'
 authentication_backend:
+  refresh_interval: 1m
   password_reset:
     disable: true
   file:
-    path: '/secrets/users.yml'
-    watch: false
+    path: '/secrets/directory/users.yml'
+    watch: true
     password:
       algorithm: 'argon2'
       argon2:
@@ -70,6 +71,16 @@ identity_providers:
         rules:
           - policy: 'two_factor'
             subject: ['group:admins']
+      notes_members:
+        default_policy: 'deny'
+        rules:
+          - policy: 'two_factor'
+            subject: ['group:admins', 'group:notes']
+      vault_members:
+        default_policy: 'deny'
+        rules:
+          - policy: 'two_factor'
+            subject: ['group:admins', 'group:vault']
     clients:
       - client_id: 'portfolio-portainer'
         client_name: 'Portainer'
@@ -94,6 +105,58 @@ identity_providers:
         require_pkce: true
         pkce_challenge_method: 'S256'
         redirect_uris: ['https://uptime.144.24.135.201.sslip.io/oauth2/callback']
+        scopes: ['openid', 'profile', 'email', 'groups']
+        response_types: ['code']
+        grant_types: ['authorization_code']
+        token_endpoint_auth_method: 'client_secret_basic'
+      - client_id: 'portfolio-notes-edge'
+        client_name: 'notes-edge'
+        client_secret: '{{ secret "/secrets/notes-edge-client-hash" }}'
+        public: false
+        authorization_policy: 'notes_members'
+        consent_mode: 'implicit'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris: ['https://notes.144.24.135.201.sslip.io/oauth2/callback']
+        scopes: ['openid', 'profile', 'email', 'groups']
+        response_types: ['code']
+        grant_types: ['authorization_code']
+        token_endpoint_auth_method: 'client_secret_basic'
+      - client_id: 'portfolio-notes'
+        client_name: 'notes'
+        client_secret: '{{ secret "/secrets/notes-client-hash" }}'
+        public: false
+        authorization_policy: 'notes_members'
+        consent_mode: 'implicit'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris: ['https://notes.144.24.135.201.sslip.io/auth/oidc.callback']
+        scopes: ['openid', 'profile', 'email', 'groups']
+        response_types: ['code']
+        grant_types: ['authorization_code']
+        token_endpoint_auth_method: 'client_secret_post'
+      - client_id: 'portfolio-vault-edge'
+        client_name: 'vault-edge'
+        client_secret: '{{ secret "/secrets/vault-edge-client-hash" }}'
+        public: false
+        authorization_policy: 'vault_members'
+        consent_mode: 'implicit'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris: ['https://vault.144.24.135.201.sslip.io/oauth2/callback']
+        scopes: ['openid', 'profile', 'email', 'groups']
+        response_types: ['code']
+        grant_types: ['authorization_code']
+        token_endpoint_auth_method: 'client_secret_basic'
+      - client_id: 'portfolio-vault'
+        client_name: 'vault'
+        client_secret: '{{ secret "/secrets/vault-client-hash" }}'
+        public: false
+        authorization_policy: 'vault_members'
+        consent_mode: 'implicit'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris: ['https://vault.144.24.135.201.sslip.io/identity/connect/oidc-signin']
         scopes: ['openid', 'profile', 'email', 'groups']
         response_types: ['code']
         grant_types: ['authorization_code']
