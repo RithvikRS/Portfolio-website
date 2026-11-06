@@ -41,6 +41,8 @@ class SwarmConfigurationTests(unittest.TestCase):
             compose['services']['caddy']['networks'] = {'backend': {}, 'identity': {}, 'management': {}, 'notifications': {}}
             compose['services']['app']['volumes'] = [{'type': 'bind', 'source': str(root / '.notes'), 'target': '/writing'}]
             compose['services']['caddy']['volumes'] = [{'type': 'volume', 'source': 'caddy_data', 'target': '/data'}, {'type': 'bind', 'source': str(root / 'deploy'), 'target': '/etc/caddy/site'}]
+            (root / '.secrets').mkdir()
+            (root / '.secrets/kuma-oidc.cfg').write_text('test fixture')
             catalog = swarm.load_catalog(Path(__file__).resolve().parents[1])
             settings = json.loads((Path(__file__).resolve().parents[1] / 'deploy/swarm.json').read_text())
             result = swarm.render(compose, settings, 'app:release', {name: name + '@sha256:pinned' for name in swarm.CORE + ['agent'] + list(catalog['services'])}, 'private$secret', root, root, catalog=catalog)
