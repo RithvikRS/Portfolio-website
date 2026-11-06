@@ -5,7 +5,8 @@ server:
   disable_healthcheck: true
 theme: 'light'
 totp:
-  disable: true
+  disable: false
+  issuer: 'Portfolio Authelia'
 webauthn:
   disable: true
 log:
@@ -28,10 +29,10 @@ access_control:
     - domain: '{{ env "DOMAIN" }}'
       resources: ['^/admin(/.*)?$', '^/portainer(/.*)?$']
       subject: ['group:admins']
-      policy: 'one_factor'
+      policy: 'two_factor'
     - domain: ['uptime.144.24.135.201.sslip.io', 'ntfy.144.24.135.201.sslip.io']
       subject: ['group:admins']
-      policy: 'one_factor'
+      policy: 'two_factor'
 session:
   name: 'workspace_session'
   same_site: 'lax'
@@ -70,7 +71,7 @@ identity_providers:
       portainer_admins:
         default_policy: 'deny'
         rules:
-          - policy: 'one_factor'
+          - policy: 'two_factor'
             subject: ['group:admins']
     clients:
       - client_id: 'portfolio-portainer'
