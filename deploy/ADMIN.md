@@ -10,6 +10,7 @@ Use the admin dashboard to open private tools with one sign-in. The portfolio ap
 | --- | --- | --- |
 | Dashboard | Open private tools and manage your session | This guide |
 | Portainer | Manage containers with shared login | [Portainer guide](PORTAINER.md) |
+| Service access | Create individual accounts and grant access to notes and the vault | [Family services](FAMILY-SERVICES.md) |
 | Uptime Kuma | View service availability and outage history | [Monitoring guide](MONITORING.md) |
 | Fieldnotes | Write and publish blog posts and learning notes | [Fieldnotes guide](FIELDNOTES.md) |
 
@@ -51,7 +52,7 @@ Authelia's default access policy is deny; its rule permits the `admins` group on
 | `deploy/authelia/configuration.yml` | Versioned non-secret auth configuration |
 | `deploy/Caddyfile.swarm` | Login and dashboard routes; identity-header stripping |
 | `scripts/setup-admin.py` | One-time Linux account/key generation |
-| `.auth/secrets/users.yml` | Account metadata, Argon2id hash, `admins` group |
+| `.auth/secrets/directory/users.yml` | Account metadata, Argon2id hash, `admins` group |
 | `.auth/secrets/session-secret` | Session secret |
 | `.auth/secrets/storage-key` | SQLite encryption key |
 | `.auth/secrets/oidc-hmac`, `oidc-private.pem`, `portainer-client-hash` | OIDC signing and client credentials; preserve with the matching Portainer files |
@@ -110,7 +111,7 @@ auth_task=$(sudo docker ps -q --filter label=com.docker.swarm.service.name=portf
 sudo docker exec -it "$auth_task" authelia crypto hash generate argon2 --parallelism 1
 ```
 
-Enter the new password at the prompt, not as a command argument. Copy the generated digest, then edit `.auth/secrets/users.yml` with `nano` and replace only the account's quoted `password` hash. Preserve the username and `admins` group. The file is JSON-compatible YAML; keep its syntax valid.
+Enter the new password at the prompt, not as a command argument. Copy the generated digest, then edit `.auth/secrets/directory/users.yml` with `nano` and replace only the account's quoted `password` hash. Preserve the username and `admins` group. The file is JSON-compatible YAML; keep its syntax valid.
 
 ```sh
 sudo docker service update --force portfolio_auth

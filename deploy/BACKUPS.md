@@ -26,7 +26,7 @@ The backup archives contain credentials. Windows ACLs restrict the local folder 
 5. Prepare image recovery aliases on every node and rewrite both saved releases using the private `restore_images.py` helper below. Platform-specific image exports can change local IDs, so do not deploy the original image references blindly. Deploy the rewritten current stack with `sudo docker stack deploy --resolve-image never -c /opt/portfolio/.swarm/recovery-current.json portfolio`. Keep private files and command output out of Git and shared logs. Paths in the saved stack assume `/opt/portfolio`.
 6. Run `python3 scripts/swarm-deploy.py check`, `python3 scripts/swarm-portainer.py`, and `python3 scripts/setup-portainer.py --configure`. Check all three nodes, HTTPS, login, writing, and the iPhone subscription. Do not re-enable the retired ARM cron. Take a fresh backup after recovery.
 
-For restoring state onto the current cluster, acquire the deployment lock and scale all five core services to zero first. Wait until their tasks stop before replacing any data. Preserve a recovery copy of the current state. Restore complete directories and certificate volumes from one matched snapshot, then deploy its saved stack and check health. Never start legacy Compose containers alongside Swarm.
+For restoring state onto the current cluster, acquire the deployment lock and scale the five core services and the access console to zero first. Wait until their tasks stop before replacing any data. Preserve a recovery copy of the current state. Restore complete directories and certificate volumes from one matched snapshot, then deploy its saved stack and check health. Never start legacy Compose containers alongside Swarm.
 
 ## Migration fallback
 
@@ -34,7 +34,7 @@ Keep the private `pre-swarm-*` directory and its original Compose source, contai
 
 ## Extend backup coverage for new services
 
-The manager-only backup pauses and archives the five original core services. The cluster helper separately discovers and pauses supported worker writers under `/srv/swarm`. Adding a service to `deploy/swarm-services.json` does not extend that private tool. Its successful completion does not prove a new service's database, external secret, or host bind files were included.
+The manager-only backup pauses and archives the five original core services and the account directory writer when installed. The cluster helper separately discovers and pauses supported worker writers under `/srv/swarm`. Adding a service to `deploy/swarm-services.json` does not extend that private tool. Its successful completion does not prove a new service's database, external secret, or host bind files were included.
 
 Before storing important data in a new service:
 

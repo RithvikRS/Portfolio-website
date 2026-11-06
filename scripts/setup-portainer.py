@@ -37,7 +37,7 @@ def write_new(path, text):
 def prepare(config, docker):
     private = ROOT / '.portainer'
     auth = ROOT / '.auth/secrets'
-    if not (auth / 'users.yml').is_file():
+    if not any((auth / name).is_file() for name in ('directory/users.yml', 'users.yml')):
         raise RuntimeError('Run python3 scripts/setup-admin.py first.')
     service = config['services']['auth']
     if service['user'] != f'{os.getuid()}:{os.getgid()}':
@@ -107,7 +107,7 @@ def configure(config, docker, compose, swarm=False):
     username = service['environment']['ADMIN_USERNAME']
     if username == 'admin':
         raise RuntimeError('ADMIN_USERNAME must differ from the Portainer recovery account admin.')
-    users = json.loads((ROOT / '.auth/secrets/users.yml').read_text())['users']
+    users = json.loads(next(p for p in (ROOT / '.auth/secrets/directory/users.yml', ROOT / '.auth/secrets/users.yml') if p.is_file()).read_text())['users']
     if username not in users or 'admins' not in users[username]['groups']:
         raise RuntimeError('ADMIN_USERNAME must already exist in the Authelia admins group.')
     origin = 'https://' + config['services']['auth']['environment']['DOMAIN']
