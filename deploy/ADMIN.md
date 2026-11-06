@@ -80,7 +80,19 @@ Enroll the administrator before rolling out a two-factor policy. On the manager,
 
 ```sh
 auth_task=$(sudo docker ps -q --filter label=com.docker.swarm.service.name=portfolio_auth)
-sudo docker exec "$auth_task" authelia storage user totp generate rithvik --issuer 'Portfolio Authelia' --path /data/enrollment.png --config /etc/authelia/configuration.yml --config.experimental.filters template >/dev/null
+sudo docker exec "$auth_task" authelia storage user totp generate rithvik --algorithm SHA1 --digits 6 --period 30 --issuer 'Portfolio Authelia' --path /data/enrollment.png --config /etc/authelia/configuration.yml --config.experimental.filters template >/dev/null
+```
+
+Specify the algorithm, digits, and period even when enrolling before TOTP is enabled. On the manager, check that the stored values are `SHA1`, `6`, and `30` before transferring the QR or enforcing MFA:
+
+```sh
+python3 - <<'PY'
+import sqlite3
+with sqlite3.connect('file:/opt/portfolio/.auth/data/db.sqlite3?mode=ro', uri=True) as db:
+    row = db.execute('SELECT algorithm, digits, period FROM totp_configurations WHERE username = ?', ('rithvik',)).fetchone()
+    if row != ('SHA1', 6, 30):
+        raise SystemExit('Check the registration settings before enforcing MFA.')
+PY
 ```
 
 Transfer the PNG over SSH from `/opt/portfolio/.auth/data/enrollment.png` and remove the server copy after the transfer succeeds. Scan it in your authenticator, verify a fresh code against the registered factor, then apply the policy through the deployment PR. Use a private browser window to test the password and code on the admin dashboard. Open Portainer to exercise its OIDC login. The iPhone ntfy subscription uses its separate read-only credentials.
