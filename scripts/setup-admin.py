@@ -15,6 +15,12 @@ private = ROOT / '.auth'
 if private.exists():
     sys.exit('.auth already exists; preserving the current account and encryption keys.')
 
+email = os.environ.get('ADMIN_EMAIL', '').strip()
+if not email and sys.stdin.isatty():
+    email = input('Owner login email: ').strip()
+if not re.fullmatch(r'[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+', email):
+    sys.exit('Set ADMIN_EMAIL to the owner login email before running first-time setup.')
+
 docker = ['docker']
 if subprocess.run(docker + ['info'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
     docker = ['sudo', '-n', 'docker']
@@ -47,7 +53,7 @@ private.mkdir(mode=0o700)
 for filename in ['session-secret', 'storage-key']:
     (private / 'secrets' / filename).write_text(secrets.token_hex(32) + '\n', encoding='utf-8')
 users = {'users': {username: {'displayname': 'Rithvik', 'password': digest.group(1),
-    'email': 'rithvik.career@gmail.com', 'groups': ['admins']}}}
+    'email': email, 'groups': ['admins']}}}
 # JSON is a subset of YAML, avoiding an extra Python package for this setup script.
 (private / 'secrets' / 'directory').mkdir(mode=0o700)
 (private / 'secrets' / 'directory' / 'users.yml').write_text(json.dumps(users, indent=2) + '\n', encoding='utf-8')

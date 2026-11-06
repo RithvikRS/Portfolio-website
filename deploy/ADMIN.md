@@ -51,7 +51,7 @@ Authelia's default access policy is deny; its rule permits the `admins` group on
 | `tests/admin.test.mjs` | Trusted proxy, identity, escaping, caching and HTTP checks |
 | `deploy/authelia/configuration.yml` | Versioned non-secret auth configuration |
 | `deploy/Caddyfile.swarm` | Login and dashboard routes; identity-header stripping |
-| `scripts/setup-admin.py` | One-time Linux account/key generation |
+| `scripts/setup-admin.py` | One-time account/key generation. Enter the owner login email at the prompt or supply `ADMIN_EMAIL` for unattended setup. |
 | `.auth/secrets/directory/users.yml` | Account metadata, Argon2id hash, `admins` group |
 | `.auth/secrets/session-secret` | Session secret |
 | `.auth/secrets/storage-key` | SQLite encryption key |
