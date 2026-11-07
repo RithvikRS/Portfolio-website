@@ -89,6 +89,9 @@ http://:8081 {
         reverse_proxy auth:9091
     }
 
+    @modelsEntry path /models /models/
+    redir @modelsEntry https://models.144.24.135.201.sslip.io/ 302
+
     @notesEntry path /notes /notes/
     redir @notesEntry https://notes.144.24.135.201.sslip.io/ 302
     @uptimeEntry path /uptime /uptime/
@@ -172,4 +175,13 @@ vault.144.24.135.201.sslip.io {
     @privateEndpoints path /ready /ping /admin /admin/*
     respond @privateEndpoints 404
     reverse_proxy vault_sso:4180
+}
+
+models.144.24.135.201.sslip.io {
+    import private_identity
+    redir /return-to-dashboard https://{$DOMAIN}/dashboard/ 303
+    @diagnostics path /ping /ready /healthz
+    respond @diagnostics 404
+    # No inference API exception: harnesses use the private overlay and app keys.
+    reverse_proxy omniroute_sso:4180
 }

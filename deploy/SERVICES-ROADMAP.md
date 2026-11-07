@@ -98,6 +98,24 @@ Vaultwarden SSO authenticates the user; a master password still unlocks the vaul
 
 Infisical's generic OIDC on self-hosted instances currently requires an enterprise license. Do not assume a free Authelia integration or enable paid services without a separate decision.
 
+## Shared model gateway before Rakazo
+
+Run a shared OpenAI-compatible inference gateway on Ampere before adding Rakazo. Use OmniRoute, pinned to a tested ARM64 release, with its graphical provider, combo-routing and usage screens. Give applications stable model aliases and separate gateway credentials.
+
+- Start with OpenRouter and Groq. Use the owner's provider accounts and enter keys privately into OmniRoute. Keep its persistent database and encryption material outside Git; give each application its own limited gateway key.
+- Route chat and tool-using agents through separate approved model pools. Validate streaming, tool calls, context length and structured output with each candidate. Add vision only when a provider/model passes the image-input test.
+- Use explicitly free OpenRouter model variants. Treat Groq access as an account-plan allowance and check its actual limits. Restrict destinations and model IDs. Keep paid routes and paid add-ons disabled.
+- Prefer a tested primary model for an agent run. Fall back on eligible failures to another model with the required capabilities, with bounded retries and provider cooldowns. Respect retry/reset guidance. Stop with a clear quota error when all eligible routes are exhausted.
+- Enforce request, token and concurrency limits per application, plus shared provider-account limits. A dollar budget alone cannot control zero-price traffic. Avoid retrying a partially delivered stream automatically.
+- Keep the server API on a private overlay and authenticate applications with gateway keys. Protect the browser administration UI with Authelia MFA. Decide remote harness access separately because API clients cannot complete interactive browser login.
+- Record provider, model, usage, latency and errors without retaining prompt or response contents by default. Add persistent gateway state to worker backups and rehearse restoring keys and policy.
+- Connect Rakazo only after testing its custom model endpoint, authentication, streaming and tools against the gateway. Use a separate Rakazo key, and add future UIs with separate keys.
+- Validate cross-application isolation, key revocation, quota exhaustion, upstream failures and free-only routing before production promotion.
+
+Deploy the empty, administrator-only gateway first; see [OmniRoute](OMNIROUTE.md). The owner will enter the provider keys privately. Keep inference consumers disconnected until the approved models, ordered fallbacks and per-app limits pass real-provider tests.
+
+References: [OmniRoute](https://github.com/cheaper-inference/OmniRoute), [OpenRouter free router](https://openrouter.ai/openrouter/free), [Groq limits](https://console.groq.com/docs/rate-limits), and [Rakazo model endpoints](https://github.com/elie222/rakazo/blob/main/docs/self-host-models.md).
+
 ## Phase 6: Rakazo pilot and shared use
 
 Run Rakazo application services on Ampere after validating its selected release, ARM images, Swarm adaptation, PostgreSQL persistence, and backup coverage. Its supported PostgreSQL dependency remains separate from the trading app's Oracle decision.
