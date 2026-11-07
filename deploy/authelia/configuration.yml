@@ -27,6 +27,9 @@ authentication_backend:
 access_control:
   default_policy: 'deny'
   rules:
+    - domain: 'rakazo.144.24.135.201.sslip.io'
+      subject: ['user:rithvik']
+      policy: 'two_factor'
     - domain: '{{ env "DOMAIN" }}'
       resources: ['^/dashboard/(guide/)?$']
       policy: 'two_factor'
@@ -50,6 +53,9 @@ session:
     - domain: 'ntfy.144.24.135.201.sslip.io'
       authelia_url: 'https://ntfy.144.24.135.201.sslip.io/auth/'
       default_redirection_url: 'https://ntfy.144.24.135.201.sslip.io/'
+    - domain: 'rakazo.144.24.135.201.sslip.io'
+      authelia_url: 'https://rakazo.144.24.135.201.sslip.io/auth/'
+      default_redirection_url: 'https://rakazo.144.24.135.201.sslip.io/'
 regulation:
   max_retries: 5
   find_time: '2m'

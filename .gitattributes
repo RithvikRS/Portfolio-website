@@ -3,3 +3,6 @@
 *.sh text eol=lf
 # PDF byte offsets must not be changed by Windows line-ending conversion.
 *.pdf binary
+
+# Runtime scripts also execute directly on Linux.
+*.py text eol=lf

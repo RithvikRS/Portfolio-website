@@ -1,41 +1,80 @@
 # Rakazo restricted pilot
 
-## Current status
+## Checkpoint: controller ready, browser deployment pending
 
-Use gVisor `runsc release-20261102.0` with the `systrap` platform for the next pilot stage. The offline ARM64 runtime and Rakazo v0.8.0 computer image passed the checks below on Ampere. No KVM, Docker daemon restart, firewall reload or host SELinux change was needed.
+Use the pinned Rakazo v0.8.0 supervisor with a separate rootless Docker engine and gVisor on Ampere. The controller can start/resume/stop the real desktop, execute its internal commands and establish a noVNC framebuffer connection. Keep model connections and agent jobs disabled.
 
-**Runtime compatibility passed; Rakazo application integration remains pending.** No Rakazo browser endpoint or runtime-control API is exposed. Keep the future browser app owner-only behind Authelia MFA. Do not connect models, enable scheduled runs or admit additional users yet.
+**The pilot is stopped and its three user services are disabled at boot for this checkpoint.** The owner-only browser route, edge service and dashboard link are prepared locally but are not deployed. Keep these changes local until the deployment checks below pass. All 18 existing Swarm services retain their expected replicas; all three nodes remain Ready.
 
-### Passed on Ampere
+This phase provides a small desktop-control page around Rakazo's supervisor. It does not deploy Rakazo's full chat/API/worker application. The page exposes only the fixed owner's start, stop, view and control actions. Model/provider endpoints and agent-run endpoints return 404. No provider keys are installed.
 
-- Start Rakazo's actual desktop and load its local noVNC page.
-- Launch Chromium and render a local HTML document without network access.
-- Run the guest as UID 1000 with no capabilities and `no_new_privileges`.
-- Run the host Sentry as the dedicated unprivileged `rakazo-pilot` account, with host seccomp filters and `no_new_privileges` active.
-- Read actual host cgroup ceilings: 2 GiB RAM, no swap, one CPU and 512 host tasks. Limit each probe to 100 seconds.
-- Deny writes to the guest root filesystem and deny guest mounts. Hide production paths and sockets.
-- Deny cloud metadata, cluster public addresses, private addresses, public internet and tested IPv6 destinations; confirm that sandbox-local HTTP still works.
-- Stop all pilot processes after the test. Keep all three Swarm nodes Ready and all 18 existing services at their expected replicas.
+## Isolation and limits
 
-These checks establish a bounded offline compatibility baseline, not a proof against every escape. gVisor provides a userspace kernel boundary; its host processes do not gain an Incus-style SELinux container domain. Keep host SELinux Enforcing. The `--no-sandbox` Chromium test relies on the outer gVisor sandbox; do not reuse that browser command outside it.
+| Boundary | Pilot setting |
+| --- | --- |
+| Host identity | `rakazo-pilot`, UID 986/GID 984; subordinate range `2000000:65536` |
+| Guest identity | UID/GID 1000, no capabilities, no privilege escalation |
+| Runtime | `runsc release-20261102.0`, systrap; no KVM or privileged container |
+| Admission | One running computer across the entire dedicated engine |
+| Computer resources | 2 GiB RAM, no swap, one CPU, 512 host tasks |
+| Whole pilot user slice | 4 GiB RAM, no swap, 1.5 CPUs, 1,536 host tasks |
+| Storage | 8 GiB loop filesystem for images, writable layers and the disposable desktop home |
+| Guest mounts | Read-only root, bounded temporary memory, its own home and Docker-generated hosts/DNS files |
+| Networking | RootlessKit `net=none`, detached-network bypass disabled; no external route |
+| Controller | Loopback inside the isolated namespace, bearer authentication |
+| Browser bridge | Mode-0600 Unix socket; no host TCP listener or Docker socket in the edge service |
 
-### Repeat the offline gate
+The pinned runtime cannot use the rootless user manager's systemd connection. `runtime_launcher.py` validates the OCI limits and home mounts, joins an enforced cgroup **before** starting gVisor, and refuses unbounded computers. It handles the cgroup itself instead of granting access to host ancestors. Whole-cgroup OOM termination prevents a partially killed desktop from lingering.
 
-Run `sudo python3 scripts/verify-rakazo-gvisor.py` on Ampere after copying the script there privately. It starts only the fixed offline probe and checks both guest behavior and live host confinement. It creates a private report under `/var/lib/rakazo-pilot/verify-*/result.json`. The successful report is also saved on the PC at `Documents/Portfolio-private-backups/rakazo-pilot/gvisor-verification.json`.
+Keep the controller trusted and its Docker socket private. A default Docker runtime alone cannot constrain arbitrary Docker API callers. The browser bridge exposes no Docker API or arbitrary command endpoint. Do not mount either Docker socket into a computer or the browser edge.
 
-For a fresh staging area, use `scripts/stage-rakazo-gvisor.py`. It checks the Ampere node ID and free space, downloads the checksum-pinned official runtime, and exports the pinned computer image without starting it in Docker. It refuses an existing rootfs; preserve the current installation and rerun verification instead. The individual staging operations ran successfully on Ampere; the combined fresh-install helper has not been rerun against an empty host.
+The upstream supervisor uses `SANDBOX_COMPUTER_EGRESS=open` because its firewall helper does not support this rootless topology. Actual egress remains blocked by the enclosing network namespace. Do not copy that setting to a normal networked engine. Keep host SELinux Enforcing and leave production Docker/firewalld configuration unchanged.
 
-Runtime: `/opt/rakazo-runtime/release-20261102.0/`. Offline image rootfs: `/var/lib/rakazo-pilot/computer/rootfs`. These are reproducible test artifacts, not application state. Keep them out of Git and normal state backups. The staging-only Docker image and disposable Alpine probe were removed; the retained rootfs uses about 1.6 GiB of file data. No permanent pilot service starts at boot.
+## Checks completed on Ampere
 
-### Remaining integration gate
+- Resume the desktop and execute an authenticated supervisor command as guest UID 1000.
+- Reject unauthenticated supervisor creation requests.
+- Establish both a WebSocket upgrade and an actual RFB framebuffer handshake through the private bridge.
+- Reject a second computer and reject a computer with missing resource limits.
+- Read the live cgroup limits rather than relying on Docker's reported configuration.
+- Exceed the memory ceiling: terminate the whole computer with exit 137, record `oom_group_kill=1`, and resume it through the controller. CPU throttling counters also increase.
+- Deny cloud metadata, all three nodes' private/public addresses, and a public internet destination.
+- Keep production paths and sockets absent from the guest; keep the guest root read-only.
+- Serve the bridge to an unprivileged, networkless edge-container probe through the Unix socket.
+- Pass 114 Linux Python tests, the owner/CSRF edge tests, and 10 private backup-tool tests.
 
-Rakazo v0.8.0 has no direct `runsc` provider. Do not point its Incus adapter at gVisor, mount the production Docker socket into its supervisor, or deploy Kubernetes alongside Swarm merely to select a runtime class. A separate rootless Docker engine passed create/exec/stop/remove checks using gVisor, guest UID 1000 and metadata denial. Its Unix socket stayed private; it skipped firewalld management and used a separate data directory. The engine is stopped, with no boot service. The dedicated account has the non-overlapping subordinate UID/GID range `2000000:65536`. Its test configuration remains under `/var/lib/rakazo-pilot/engine/`.
+Run `sudo python3 scripts/verify-rakazo-controller.py` on Ampere after starting the pilot desktop. It checks real framebuffer traffic, model-route denial, live ceilings, denied egress and bounded home storage. It saves non-secret evidence in `/var/lib/rakazo-pilot/controller-verification.json`. Admission evidence comes from the separate negative startup probes; the verifier checks that saved result rather than creating extra computers itself.
 
-The engine probe used an enclosing 3 GiB, one-CPU, 768-host-task unit with a five-minute lifetime. Docker reported that per-container cgroups were unavailable in this configuration; do not claim separate per-computer limits. The successful engine report is `Documents/Portfolio-private-backups/rakazo-pilot/rootless-engine-verification.json` on the PC.
+The earlier standalone runtime probe remains available as `scripts/verify-rakazo-gvisor.py`. Do not confuse its results with browser sign-in verification.
 
-The next step is to validate Rakazo's supervisor against that dedicated engine, add enforced admission limits and verify the screen/control path while preserving denied egress. Use gVisor for every computer; a default runtime alone does not prevent a Docker API caller from selecting another runtime. Keep its API, filesystem access and networking separate from the production engine. Verify create/exec/stop, screen access, workspace recovery, resource limits and denied network destinations through that integration before exposing the app. If that integration cannot preserve the tested boundary, leave execution disabled.
+## Prepared browser access
 
-Authelia protects browser access; it does not constrain commands executed by an agent. Keep provider keys and model-connection writes disabled independently of computer-provider selection.
+The planned entry point is `/rakazo` from the admin dashboard, redirecting to `https://rakazo.144.24.135.201.sslip.io/`. Keep the desktop on its own browser origin, separate from the public portfolio and password vault.
+
+Caddy clears supplied identity headers and asks Authelia for MFA authorization. The dedicated Authelia rule admits only `rithvik`; the edge additionally requires that exact username and the `admins` group. State-changing requests and WebSocket upgrades require the expected browser Origin. The edge lives on a private, non-attachable, internal Swarm overlay with Caddy, has no published ports, and mounts only the bridge socket directory read-only.
+
+This pilot uses Authelia's login directly on the dedicated hostname, with its own cookie. Expect a separate MFA sign-in there; it has no additional native application password. Screen connections expire after four minutes and the pilot page reconnects through authorization. Complete the browser login, reconnect and non-owner-denial checks before calling this route live.
+
+## Resume and deploy
+
+1. Review the local changes and the private checkpoint on the PC under `Documents/Portfolio-private-backups/rakazo-pilot/`.
+2. Copy the current `deploy/rakazo/` files and `scripts/install-rakazo-controller.py` to the staged source tree on Ampere. Run the installer there as root. It checks the node ID, dedicated identity, existing 8 GiB mounted cache and staged prerequisites. It installs/enables only the dedicated pilot user services.
+3. Start the fixed desktop through the local Unix bridge, then run `verify-rakazo-controller.py`. Rerun negative admission tests after changing runtime policy. Keep model and worker services absent.
+4. Validate the candidate Caddy/Authelia configuration, backup inventory and edge service. Review the separate-origin screen and reconnect behavior. A host reboot has not been rehearsed; verify mount and user-service ordering before relying on unattended recovery.
+5. Batch the change into one PR and merge through the existing deployment pipeline. Confirm all existing services and the new edge converge, anonymous requests redirect to Authelia, non-owners fail, and the owner can view/control/stop the desktop.
+6. Only then publish the final completion status. Keep the full Rakazo application, model connections, scheduled runs and multi-user admission for a later phase.
+
+For maintenance, run the user service commands as `rakazo-pilot` with `XDG_RUNTIME_DIR=/run/user/986` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/986/bus`. The units are `rakazo-engine`, `rakazo-controller` and `rakazo-bridge`. Stop the desktop first, then stop bridge/controller/engine. Never restart production Docker to operate this pilot.
+
+## Staged prerequisites and recovery
+
+The upstream source is Rakazo v0.8.0, commit `747ece9641dcc60c95467ffae8ab2311fb1f3f81`, under `/var/lib/rakazo-pilot/controller-src`. Install its supervisor production dependencies from the frozen pnpm lockfile. The staged Node binary comes from the upstream pinned `node:24.22.1-bookworm-slim` image (the same digest appears in the service catalog). The installer expects these prerequisites; it is not a complete fresh-host bootstrap.
+
+Use `scripts/stage-rakazo-gvisor.py` for the earlier checksum-pinned runtime/computer staging step. The computer source is the pinned ARM64 v0.8.0 image described by that helper. The isolated engine imports its verified rootfs as `rakazo/computer:pilot-v0.8.0`; preserve the original image metadata used during staging. Keep the engine on VFS: overlay2 was incompatible with this rootless SELinux configuration. Cold desktop creation therefore takes several minutes.
+
+The private backup refresh kit archives the controller environment, engine configuration, user service definitions and custom runtime helpers. It exempts only the exact read-only bridge socket mount and excludes `/srv/swarm/.rakazo-runtime-cache.img`. That file contains disposable images **and the disposable pilot home**. Do not store important files in this desktop. Before durable use, add coordinated workspace snapshots and a restore rehearsal; existing production application backups retain their coverage.
+
+A private checkpoint archive and verification reports are saved on the PC outside Git. Keep tokens and private environment files there. Rebuild disposable images/cache during recovery; do not treat the cache exclusion as durable workspace backup.
 
 ## Previous Incus attempt
 

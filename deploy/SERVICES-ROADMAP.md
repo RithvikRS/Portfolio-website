@@ -165,3 +165,8 @@ Verify current versions, licensing, free quotas, and tenancy availability before
 - [Rakazo accounts and OIDC](https://github.com/elie222/rakazo/blob/main/docs/self-host-accounts.md) and [production architecture](https://github.com/elie222/rakazo/blob/main/docs/self-host-production.md).
 - [Outline Personal documents](https://www.getoutline.com/changelog/personal-documents) and [OIDC](https://www.getoutline.com/integrations/oidc).
 - [Vaultwarden OIDC](https://github.com/dani-garcia/vaultwarden/wiki/Enabling-SSO-support-using-OpenId-Connect), [Swarm secrets](https://docs.docker.com/engine/swarm/secrets/), and [Infisical SSO licensing](https://infisical.com/docs/documentation/platform/sso/overview).
+
+
+## Rakazo controller checkpoint
+
+The offline controller, desktop screen and enforced per-computer limits now pass the private integration checks. Keep the pilot stopped overnight. The owner-only Authelia route and dashboard link are prepared locally; deploy and verify browser access next. Model connections, full Rakazo agent jobs and additional users remain disabled. See [Rakazo pilot](RAKAZO.md) for the exact resume gate and disposable-storage limits.
