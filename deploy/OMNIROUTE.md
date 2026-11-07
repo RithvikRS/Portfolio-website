@@ -63,6 +63,16 @@ See [cluster backup and restore](BACKUPS.md) and [Swarm operations](SWARM.md). K
 
 ## Brief login errors
 
-The edge session expires after five minutes so Authelia rechecks administrator access. Parallel tabs or requests can start more than one login at that point. Keep `--cookie-csrf-per-request=true` on the OmniRoute SSO proxy so each flow retains its own CSRF/PKCE cookie; cap outstanding cookies at eight to bound request-header size. Do not disable PKCE or extend access indefinitely to hide callback failures.
+The edge renews its session in the background every two minutes on an incoming request. The browser ticket and refresh token expire after 30 minutes without renewal; access and ID tokens last five minutes. MFA is required for a new login grant. An active session renews without another MFA prompt. Parallel tabs or requests can also start more than one login. Keep `--cookie-csrf-per-request=true` on the OmniRoute SSO proxy so each flow retains its own CSRF/PKCE cookie; set the existing-cookie limit to eight (the proxy may retain those plus the newest flow) to bound request-header size. Do not disable PKCE or extend access indefinitely to hide callback failures.
 
 If a login started before a proxy update fails, open `/models` again to start a fresh flow. For recurring errors, compare the proxy callback timestamp with Authelia's token-exchange log. A PKCE mismatch followed by an authentication-method error can be the OAuth library retrying a failed exchange; do not change the registered client authentication method just because that secondary error appears.
+
+## Background session renewal
+
+Use the dedicated `omniroute_sessions` Redis service for encrypted proxy sessions and renewal locks. Only the OmniRoute proxy joins its private overlay. Redis has no published port, disk persistence or provider credentials; losing this cache requires a fresh login and does not affect OmniRoute data. Do not reuse the Outline database/cache network for authentication sessions.
+
+The edge OIDC client requests `offline_access` and the refresh-token grant. Authelia may ask you to approve this scope once. Its dedicated claims policy supplies current administrator groups in refreshed ID tokens, and the proxy checks `admins` on each request. Keep the native OmniRoute owner allowlist and password-login prohibition unchanged. Do not remove the MFA authorization policy, expose health endpoints, or lengthen token validity to mask renewal failures.
+
+Sign out through `/oauth2/sign_out` on the models host to remove the proxy session. Logging out of Authelia alone is not a guarantee that an already-issued application refresh grant is revoked. For emergency offboarding, disable the account/remove its administrator membership and verify denial after renewal; revoke the grant or clear the affected Redis session if immediate invalidation is required. Group changes can take up to the two-minute renewal interval to reach an already-issued proxy session. A long-running WebSocket is not reauthorized until it reconnects.
+
+When testing, use a disposable MFA-enrolled identity, poll `/api/health/ping` for longer than five minutes with redirects disabled, confirm renewal in proxy logs, then remove its administrator group and confirm access is denied. Delete the disposable identity and session afterward. Do not use provider API keys for this check.
