@@ -150,6 +150,19 @@ def page(users, edit=None):
             f'<a class="action" href="{BASE}?new=1">Create account</a></div><section class="panel"><h2>Accounts ({len(users)})</h2>' + "".join(rows) + '</section>')
 
 
+def model_admin_allowed(directory, email):
+    """Accept only the email from Caddy's verified OIDC proxy response."""
+    if not email or len(email) > 254:
+        return False
+    try:
+        users = json.loads(directory.read_text())["users"].values()
+        matches = [u for u in users if u.get("email", "").casefold() == email.casefold()]
+        return (len(matches) == 1 and not matches[0].get("disabled", False)
+                and "admins" in matches[0].get("groups", []))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -174,7 +187,13 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get("Remote-User") == OWNER and "admins" in self.headers.get("Remote-Groups","").split(",")
 
     def do_GET(self):
-        if self.path == "/health":
+        if self.path == "/internal/authorize-models":
+            allowed = model_admin_allowed(DIRECTORY, self.headers.get("X-Models-Email", ""))
+            self.send_response(204 if allowed else 403)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        elif self.path == "/health":
             self.send_page(200, "ok")
         elif self.path == GUIDE and self.headers.get("Remote-User"):
             self.send_page(200, guide(self.headers.get("Remote-Groups", "").split(","), self.authorized()))
