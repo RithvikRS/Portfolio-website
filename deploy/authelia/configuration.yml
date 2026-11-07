@@ -68,6 +68,10 @@ identity_providers:
       - algorithm: 'RS256'
         use: 'sig'
         key: {{ secret "/secrets/oidc-private.pem" | mindent 10 "|" | msquote }}
+    claims_policies:
+      omniroute_identity:
+        # OmniRoute validates admission from the ID token, not userinfo.
+        id_token: ['email', 'email_verified']
     authorization_policies:
       infrastructure_admins:
         default_policy: 'deny'
@@ -178,6 +182,7 @@ identity_providers:
         grant_types: ['authorization_code']
         token_endpoint_auth_method: 'client_secret_basic'
       - client_id: 'portfolio-omniroute'
+        claims_policy: 'omniroute_identity'
         client_name: 'OmniRoute'
         client_secret: '{{ secret "/secrets/omniroute-client-hash" }}'
         public: false
