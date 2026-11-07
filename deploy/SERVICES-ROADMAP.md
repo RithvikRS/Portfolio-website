@@ -118,7 +118,7 @@ References: [OmniRoute](https://github.com/cheaper-inference/OmniRoute), [OpenRo
 
 ## Phase 6: Rakazo pilot and shared use
 
-Start with the [restricted Incus pilot and its isolation gates](RAKAZO.md). The Oracle Linux OCI confinement probe currently blocks deployment; keep model connections and agent execution disabled.
+Start with the [restricted runtime pilot and its isolation gates](RAKAZO.md). Rootless gVisor passed the offline ARM64 computer-image checks after the Incus confinement probe failed. Complete the application/controller integration before exposing Rakazo; keep model connections and agent execution disabled.
 
 Run Rakazo application services on Ampere after validating its selected release, ARM images, Swarm adaptation, PostgreSQL persistence, and backup coverage. Its supported PostgreSQL dependency remains separate from the trading app's Oracle decision.
 
