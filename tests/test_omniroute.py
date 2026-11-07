@@ -28,3 +28,14 @@ class GatewayBoundaryTests(unittest.TestCase):
         spec.loader.exec_module(console)
         self.assertNotIn('/models', console.navigation(False, ['notes', 'vault'], '/dashboard/'))
         self.assertIn('/models', console.navigation(True, ['admins'], '/dashboard/'))
+
+    def test_native_oidc_receives_verified_email_without_broadening_admission(self):
+        config = (ROOT / "deploy/authelia/configuration.yml").read_text()
+        policy = config.split("      omniroute_identity:", 1)[1].split("    authorization_policies:", 1)[0]
+        self.assertIn("id_token: ['email', 'email_verified']", policy)
+        client = config.split("      - client_id: 'portfolio-omniroute'", 1)[1].split("      - client_id:", 1)[0]
+        self.assertIn("claims_policy: 'omniroute_identity'", client)
+        self.assertIn("authorization_policy: 'infrastructure_admins'", client)
+        self.assertIn("require_pkce: true", client)
+        bootstrap = (ROOT / "scripts/bootstrap-omniroute.mjs").read_text()
+        self.assertIn("oidcAllowedSubjects: ['rithvik.stuff@gmail.com']", bootstrap)

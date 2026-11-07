@@ -41,7 +41,7 @@ Future approved app -> private swarm_models_app -> OmniRoute /v1 -> providers
 - Store SQLite and generated encryption/session keys under `/srv/swarm/omniroute`, owned by UID/GID 1000 with private permissions. Do not move this task to another node without restoring its data.
 - Cap the app at 1.5 GiB RAM and 2 CPUs; reserve 384 MiB. The SSO proxy has a separate 96 MiB limit.
 - Keep host ports unpublished. Only the SSO proxy joins both `swarm_models_edge` and `swarm_models_app`; Caddy joins the edge network only. Do not attach unrelated services to the application network.
-- Protect every public host route with the administrator-only Authelia OIDC proxy, including `/v1/*`. Native OmniRoute also requires OIDC and allows only the owner's email. Password login is disabled.
+- Protect every public host route with the administrator-only Authelia OIDC proxy, including `/v1/*`. Native OmniRoute also requires OIDC and allows only the owner's email. Password login is disabled. Its native OIDC client uses the `omniroute_identity` claims policy to include `email` and `email_verified` in the ID token. OmniRoute checks those claims directly rather than fetching userinfo; omitting them rejects the owner and returns to login.
 - Use `http://omniroute:20128/v1` for a future explicitly approved internal consumer, after attaching it to the private overlay and configuring its inference key. Browser-host URLs are not a remote harness API: external API access needs a separate design.
 - Keep optional MCP, A2A, cloud sync and Radar off. Do not mount the host Docker socket or production SSH credentials.
 
