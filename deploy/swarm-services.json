@@ -514,6 +514,8 @@
         "--cookie-secure=true",
         "--cookie-httponly=true",
         "--cookie-samesite=lax",
+        "--cookie-csrf-per-request=true",
+        "--cookie-csrf-per-request-limit=8",
         "--cookie-expire=5m",
         "--session-cookie-minimal=true",
         "--pass-basic-auth=false",

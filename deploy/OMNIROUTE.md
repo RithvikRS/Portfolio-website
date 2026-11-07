@@ -60,3 +60,9 @@ Refresh the private PC cluster backup after entering providers or changing routi
 Restore the entire OmniRoute directory, including `server.env`, SQLite files and the completion marker, while the service is stopped. Restore the matching manager OIDC secrets. Preserve UID/GID 1000 and private permissions. Start the exact saved image first, verify login and key decryption, then test one approved free model before reconnecting consumers. A service-spec rollback does not roll back database migrations; retain a pre-upgrade data snapshot.
 
 See [cluster backup and restore](BACKUPS.md) and [Swarm operations](SWARM.md). Keep a local private copy of the bootstrap recovery set; its random management password is needed for sensitive settings changes even though interactive password login is disabled.
+
+## Brief login errors
+
+The edge session expires after five minutes so Authelia rechecks administrator access. Parallel tabs or requests can start more than one login at that point. Keep `--cookie-csrf-per-request=true` on the OmniRoute SSO proxy so each flow retains its own CSRF/PKCE cookie; cap outstanding cookies at eight to bound request-header size. Do not disable PKCE or extend access indefinitely to hide callback failures.
+
+If a login started before a proxy update fails, open `/models` again to start a fresh flow. For recurring errors, compare the proxy callback timestamp with Authelia's token-exchange log. A PKCE mismatch followed by an authentication-method error can be the OAuth library retrying a failed exchange; do not change the registered client authentication method just because that secondary error appears.
