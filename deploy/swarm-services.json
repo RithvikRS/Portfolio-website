@@ -523,7 +523,8 @@
         "--request-logging=false",
         "--cookie-refresh=2m",
         "--session-store-type=redis",
-        "--redis-connection-url=redis://omniroute_sessions:6379/0"
+        "--redis-connection-url=redis://omniroute_sessions:6379/0",
+        "--set-xauthrequest=true"
       ],
       "networks": [
         "swarm_models_edge",

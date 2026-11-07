@@ -52,3 +52,17 @@ class AccessTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.apply(action="create",username="shadow",name="Shadow",email="Owner@EXAMPLE.org")
         self.assertEqual(list(self.users()), ["rithvik"])
+
+    def test_model_authorization_uses_current_enabled_admin(self):
+        self.assertTrue(console.model_admin_allowed(self.directory, "OWNER@example.org"))
+        for email in ["", "missing@example.org", "owner@example.org,attacker@example.org"]:
+            self.assertFalse(console.model_admin_allowed(self.directory, email))
+        for changes in [{"groups": []}, {"groups": ["notes"]}, {"disabled": True}]:
+            record = {**self.owner, **changes}
+            self.directory.write_text(json.dumps({"users": {"rithvik": record}}))
+            self.assertFalse(console.model_admin_allowed(self.directory, "owner@example.org"))
+        self.directory.write_text(json.dumps({"users": {"a": self.owner, "b": self.owner}}))
+        self.assertFalse(console.model_admin_allowed(self.directory, "owner@example.org"))
+        for content in ['{}', 'invalid', '{"users": {}}']:
+            self.directory.write_text(content)
+            self.assertFalse(console.model_admin_allowed(self.directory, "owner@example.org"))

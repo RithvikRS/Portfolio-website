@@ -62,3 +62,13 @@ class GatewayBoundaryTests(unittest.TestCase):
         self.assertIn("authorization_policy: 'infrastructure_admins'", client)
         self.assertIn("require_pkce: true", client)
         self.assertIn("claims_policy: 'omniroute_edge_identity'", client)
+
+    def test_current_admin_guard_requires_verified_proxy_identity(self):
+        caddy = (ROOT / "deploy/Caddyfile.swarm").read_text().split("models.144.24.135.201.sslip.io {", 1)[1]
+        self.assertLess(caddy.index("request_header -X-Models-Email"), caddy.index("rewrite /oauth2/auth?"))
+        self.assertIn("request_header X-Models-Email {rp.header.X-Auth-Request-Email}", caddy)
+        self.assertIn("uri /internal/authorize-models?", caddy)
+        self.assertIn("copy_response_headers {", caddy)
+        self.assertIn("include Set-Cookie", caddy)
+        args = json.loads((ROOT / "deploy/swarm-services.json").read_text())["services"]["omniroute_sso"]["command"]
+        self.assertIn("--set-xauthrequest=true", args)

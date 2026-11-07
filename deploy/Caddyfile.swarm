@@ -182,6 +182,36 @@ models.144.24.135.201.sslip.io {
     redir /return-to-dashboard https://{$DOMAIN}/dashboard/ 303
     @diagnostics path /ping /ready /healthz
     respond @diagnostics 404
-    # No inference API exception: harnesses use the private overlay and app keys.
-    reverse_proxy omniroute_sso:4180
+    # Callback/logout routes terminate at the OIDC proxy, never at the app.
+    handle /oauth2/* {
+        reverse_proxy omniroute_sso:4180
+    }
+    handle {
+        route {
+            request_header -X-Models-Email
+            reverse_proxy omniroute_sso:4180 {
+                method GET
+                rewrite /oauth2/auth?
+                @authenticated status 2xx
+                handle_response @authenticated {
+                    route {
+                        # Preserve the renewed browser ticket from the auth probe.
+                        copy_response_headers {
+                            include Set-Cookie
+                        }
+                        request_header X-Models-Email {rp.header.X-Auth-Request-Email}
+                        forward_auth access_console:8080 {
+                            uri /internal/authorize-models?
+                        }
+                        request_header -X-Models-Email
+                        reverse_proxy omniroute_sso:4180
+                    }
+                }
+                @unauthenticated status 401
+                handle_response @unauthenticated {
+                    reverse_proxy omniroute_sso:4180
+                }
+            }
+        }
+    }
 }
