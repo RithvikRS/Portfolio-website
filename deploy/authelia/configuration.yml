@@ -68,7 +68,15 @@ identity_providers:
       - algorithm: 'RS256'
         use: 'sig'
         key: {{ secret "/secrets/oidc-private.pem" | mindent 10 "|" | msquote }}
+    lifespans:
+      custom:
+        omniroute_edge:
+          access_token: '5m'
+          id_token: '5m'
+          refresh_token: '30m'
     claims_policies:
+      omniroute_edge_identity:
+        id_token: ['email', 'email_verified', 'groups']
       omniroute_identity:
         # OmniRoute validates admission from the ID token, not userinfo.
         id_token: ['email', 'email_verified']
@@ -169,6 +177,8 @@ identity_providers:
         grant_types: ['authorization_code']
         token_endpoint_auth_method: 'client_secret_basic'
       - client_id: 'portfolio-omniroute-edge'
+        lifespan: 'omniroute_edge'
+        claims_policy: 'omniroute_edge_identity'
         client_name: 'OmniRoute-edge'
         client_secret: '{{ secret "/secrets/omniroute-edge-client-hash" }}'
         public: false
@@ -177,9 +187,9 @@ identity_providers:
         require_pkce: true
         pkce_challenge_method: 'S256'
         redirect_uris: ['https://models.144.24.135.201.sslip.io/oauth2/callback']
-        scopes: ['openid', 'profile', 'email', 'groups']
+        scopes: ['openid', 'profile', 'email', 'groups', 'offline_access']
         response_types: ['code']
-        grant_types: ['authorization_code']
+        grant_types: ['authorization_code', 'refresh_token']
         token_endpoint_auth_method: 'client_secret_basic'
       - client_id: 'portfolio-omniroute'
         claims_policy: 'omniroute_identity'

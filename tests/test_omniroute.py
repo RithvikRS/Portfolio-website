@@ -42,3 +42,23 @@ class GatewayBoundaryTests(unittest.TestCase):
         self.assertIn("require_pkce: true", client)
         bootstrap = (ROOT / "scripts/bootstrap-omniroute.mjs").read_text()
         self.assertIn("oidcAllowedSubjects: ['rithvik.stuff@gmail.com']", bootstrap)
+
+    def test_renewal_remains_private_and_rechecks_admin_groups(self):
+        catalog = json.loads((ROOT / "deploy/swarm-services.json").read_text())
+        services = catalog["services"]
+        args = services["omniroute_sso"]["command"]
+        for option in ["--cookie-refresh=2m", "--cookie-expire=30m", "--session-store-type=redis", "--allowed-group=admins"]:
+            self.assertIn(option, args)
+        self.assertNotIn("--session-cookie-minimal=true", args)
+        peers = {name for name, service in services.items() if "swarm_models_sessions" in service.get("networks", [])}
+        self.assertEqual(peers, {"omniroute_sessions", "omniroute_sso"})
+        self.assertNotIn("ports", services["omniroute_sessions"])
+        self.assertTrue(all(v["type"] == "tmpfs" for v in services["omniroute_sessions"]["volumes"]))
+        self.assertNotIn("swarm_models_sessions", catalog["caddy_networks"])
+        self.assertTrue(catalog["networks"]["swarm_models_sessions"]["internal"])
+        auth = (ROOT / "deploy/authelia/configuration.yml").read_text()
+        client = auth.split("      - client_id: 'portfolio-omniroute-edge'", 1)[1].split("      - client_id:", 1)[0]
+        self.assertIn("grant_types: ['authorization_code', 'refresh_token']", client)
+        self.assertIn("authorization_policy: 'infrastructure_admins'", client)
+        self.assertIn("require_pkce: true", client)
+        self.assertIn("claims_policy: 'omniroute_edge_identity'", client)

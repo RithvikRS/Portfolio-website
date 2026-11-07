@@ -505,7 +505,7 @@
         "--client-id=portfolio-omniroute-edge",
         "--redirect-url=https://models.144.24.135.201.sslip.io/oauth2/callback",
         "--code-challenge-method=S256",
-        "--scope=openid profile email groups",
+        "--scope=openid profile email groups offline_access",
         "--email-domain=*",
         "--allowed-group=admins",
         "--upstream=http://omniroute:20128",
@@ -516,16 +516,19 @@
         "--cookie-samesite=lax",
         "--cookie-csrf-per-request=true",
         "--cookie-csrf-per-request-limit=8",
-        "--cookie-expire=5m",
-        "--session-cookie-minimal=true",
+        "--cookie-expire=30m",
         "--pass-basic-auth=false",
         "--pass-user-headers=false",
         "--reverse-proxy=true",
-        "--request-logging=false"
+        "--request-logging=false",
+        "--cookie-refresh=2m",
+        "--session-store-type=redis",
+        "--redis-connection-url=redis://omniroute_sessions:6379/0"
       ],
       "networks": [
         "swarm_models_edge",
-        "swarm_models_app"
+        "swarm_models_app",
+        "swarm_models_sessions"
       ],
       "secrets": [
         "omniroute_edge"
@@ -633,6 +636,70 @@
         "start_period": "120s",
         "retries": 3
       }
+    },
+    "omniroute_sessions": {
+      "image": "redis:7-alpine@sha256:c5d34a98396a4775e223c74e929162c35c5a2182901ba26b50ade939941ce14b",
+      "user": "999:999",
+      "networks": [
+        "swarm_models_sessions"
+      ],
+      "command": [
+        "redis-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "32mb",
+        "--maxmemory-policy",
+        "noeviction"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.role == worker",
+            "node.labels.workload.compute == true",
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "96M",
+            "cpus": "0.25"
+          }
+        }
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 3
+      },
+      "volumes": [
+        {
+          "type": "tmpfs",
+          "target": "/data",
+          "tmpfs": {
+            "size": 16777216
+          }
+        }
+      ]
     }
   },
   "networks": {
@@ -671,6 +738,11 @@
     "swarm_models_app": {
       "driver": "overlay",
       "attachable": false
+    },
+    "swarm_models_sessions": {
+      "driver": "overlay",
+      "attachable": false,
+      "internal": true
     }
   },
   "caddy_networks": [
