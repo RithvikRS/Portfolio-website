@@ -82,7 +82,7 @@ def navigation(owner, groups, current):
     personal = [(title, "/" + key) for key, title in [("notes", "Outline"), ("vault", "Vaultwarden")] if owner or key in groups]
     sections = [("Workspace", workspace), ("Personal tools", personal)]
     if owner:
-        sections.append(("Administration", [("Uptime Kuma", "/uptime"), ("Portainer", "/portainer/"), ("Fieldnotes", "/admin/notes/")]))
+        sections.append(("Administration", [("OmniRoute", "/models"), ("Uptime Kuma", "/uptime"), ("Portainer", "/portainer/"), ("Fieldnotes", "/admin/notes/")]))
     parts = []
     for title, items in sections:
         if items:
@@ -107,7 +107,7 @@ def guide(groups, owner):
     if owner or "vault" in groups:
         parts.append('<section class="panel"><h2>Password vault</h2><p>Open <a href="/vault">Vaultwarden</a>, enter the email assigned to your workspace account and choose single sign-on. On your first visit, set your own master password. Use <strong>Lock now</strong> when you want to unlock the vault again on the same device. Keep your master password private.</p></section>')
     if owner:
-        parts.append('<section class="panel"><h2>Administrator tools</h2><p>Open <a href="/admin/access/">Service access</a> to create a member or edit their grants. Use <a href="/uptime">Kuma</a> for monitoring, <a href="/portainer/">Portainer</a> for containers and <a href="/admin/notes/">Fieldnotes</a> for public writing.</p></section>')
+        parts.append('<section class="panel"><h2>Administrator tools</h2><p>Open <a href="/admin/access/">Service access</a> to create a member or edit their grants. Use <a href="/models">OmniRoute</a> for provider keys and model routing, <a href="/uptime">Kuma</a> for monitoring, <a href="/portainer/">Portainer</a> for containers and <a href="/admin/notes/">Fieldnotes</a> for public writing.</p></section>')
     parts.append('<section class="panel"><h2>Sign out or get help</h2><p>Use Log out inside a service to return to your dashboard. On a shared device, also sign out of the dashboard and close the browser. If you lose access to your authenticator, contact the workspace owner privately.</p></section>')
     return "".join(parts)
 

@@ -24,6 +24,7 @@ const sections = [
   { title: 'Site administration', apps: [
     { name: 'Service access', path: '/admin/access/', icon: square, description: 'Create accounts and manage each person’s service permissions.' },
     { name: 'Uptime Kuma', path: '/uptime', icon: pulse, description: 'Review availability, outages and alerts.' },
+    { name: 'OmniRoute', path: '/models', icon: stack, description: 'Manage provider keys, model routing and application usage.' },
     { name: 'Portainer', path: '/portainer/', icon: stack, description: 'Inspect Swarm nodes, services and container logs.' },
     { name: 'Fieldnotes', path: '/admin/notes/', icon: book, description: 'Edit and publish your blog and learning notebook.' },
   ] },
@@ -40,7 +41,7 @@ function workspaceNavigation() {
   const links = [
     ['Workspace', [['Overview', '/admin/'], ['Service access', '/admin/access/'], ['User guide', '/dashboard/guide/']]],
     ['Personal tools', [['Outline', '/notes'], ['Vaultwarden', '/vault']]],
-    ['Administration', [['Uptime Kuma', '/uptime'], ['Portainer', '/portainer/'], ['Fieldnotes', '/admin/notes/']]],
+    ['Administration', [['OmniRoute', '/models'], ['Uptime Kuma', '/uptime'], ['Portainer', '/portainer/'], ['Fieldnotes', '/admin/notes/']]],
   ];
   const nav = links.map(([label, items]) => `<p class="nav-label">${label}</p>${items.map(([name, path]) =>
     `<a class="nav-item${path === '/admin/' ? ' active' : ''}" href="${path}"${path === '/admin/' ? ' aria-current="page"' : ''}>${name}</a>`).join('')}`).join('');

@@ -58,3 +58,5 @@ The Caddy template replaces `X-Real-IP` with the connected client's IP. Enable `
 Use the [private-state backup and restore guide](BACKUPS.md) to preserve all service credentials, databases, writing, and ntfy delivery state together.
 
 Use [monitoring](MONITORING.md) for the private Uptime Kuma dashboard, alert policy, and recovery steps.
+
+- [OmniRoute model gateway](OMNIROUTE.md): private provider key entry, routing, application limits and recovery.

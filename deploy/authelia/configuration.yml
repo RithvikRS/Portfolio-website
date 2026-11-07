@@ -164,3 +164,29 @@ identity_providers:
         response_types: ['code']
         grant_types: ['authorization_code']
         token_endpoint_auth_method: 'client_secret_basic'
+      - client_id: 'portfolio-omniroute-edge'
+        client_name: 'OmniRoute-edge'
+        client_secret: '{{ secret "/secrets/omniroute-edge-client-hash" }}'
+        public: false
+        authorization_policy: 'infrastructure_admins'
+        consent_mode: 'implicit'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris: ['https://models.144.24.135.201.sslip.io/oauth2/callback']
+        scopes: ['openid', 'profile', 'email', 'groups']
+        response_types: ['code']
+        grant_types: ['authorization_code']
+        token_endpoint_auth_method: 'client_secret_basic'
+      - client_id: 'portfolio-omniroute'
+        client_name: 'OmniRoute'
+        client_secret: '{{ secret "/secrets/omniroute-client-hash" }}'
+        public: false
+        authorization_policy: 'infrastructure_admins'
+        consent_mode: 'implicit'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris: ['https://models.144.24.135.201.sslip.io/api/auth/oidc/callback']
+        scopes: ['openid', 'profile', 'email', 'groups']
+        response_types: ['code']
+        grant_types: ['authorization_code']
+        token_endpoint_auth_method: 'client_secret_post'

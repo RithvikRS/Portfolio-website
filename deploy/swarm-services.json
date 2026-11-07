@@ -494,6 +494,143 @@
           "target": "/data"
         }
       ]
+    },
+    "omniroute_sso": {
+      "image": "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048",
+      "command": [
+        "--config=/run/secrets/omniroute_edge",
+        "--http-address=0.0.0.0:4180",
+        "--provider=oidc",
+        "--oidc-issuer-url=https://rithvik.ddns.net/auth",
+        "--client-id=portfolio-omniroute-edge",
+        "--redirect-url=https://models.144.24.135.201.sslip.io/oauth2/callback",
+        "--code-challenge-method=S256",
+        "--scope=openid profile email groups",
+        "--email-domain=*",
+        "--allowed-group=admins",
+        "--upstream=http://omniroute:20128",
+        "--skip-provider-button=true",
+        "--cookie-name=__Host-models_sso",
+        "--cookie-secure=true",
+        "--cookie-httponly=true",
+        "--cookie-samesite=lax",
+        "--cookie-expire=5m",
+        "--session-cookie-minimal=true",
+        "--pass-basic-auth=false",
+        "--pass-user-headers=false",
+        "--reverse-proxy=true",
+        "--request-logging=false"
+      ],
+      "networks": [
+        "swarm_models_edge",
+        "swarm_models_app"
+      ],
+      "secrets": [
+        "omniroute_edge"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.role == worker",
+            "node.labels.workload.compute == true",
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "96M",
+            "cpus": "0.50"
+          }
+        }
+      }
+    },
+    "omniroute": {
+      "image": "ghcr.io/cheaper-inference/omniroute:3.8.53@sha256:b52a17661a1aff42ffb78f349f423e986dfc55b57274f28559f8387622ef8ee4",
+      "user": "1000:1000",
+      "networks": [
+        "swarm_models_app"
+      ],
+      "environment": {
+        "DATA_DIR": "/app/data",
+        "HOSTNAME": "0.0.0.0",
+        "PORT": "20128",
+        "API_HOST": "127.0.0.1",
+        "API_PORT": "20129",
+        "AUTH_COOKIE_SECURE": "true",
+        "REQUIRE_API_KEY": "true",
+        "NODE_OPTIONS": "--max-old-space-size=1024",
+        "ENABLE_REQUEST_LOGS": "false",
+        "CALL_LOG_PIPELINE_CAPTURE_STREAM_CHUNKS": "false",
+        "CALL_LOG_RETENTION_DAYS": "7",
+        "CALL_LOGS_TABLE_MAX_ROWS": "5000",
+        "APP_LOG_LEVEL": "warn",
+        "APP_LOG_TO_FILE": "false",
+        "RADAR_ENABLED": "false"
+      },
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/swarm/omniroute",
+          "target": "/app/data"
+        }
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.role == worker",
+            "node.labels.workload.compute == true",
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "1536M",
+            "cpus": "2.0"
+          },
+          "reservations": {
+            "memory": "384M"
+          }
+        },
+        "update_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "failure_action": "pause",
+          "monitor": "60s"
+        },
+        "rollback_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "monitor": "60s"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "healthcheck.mjs"
+        ],
+        "interval": "30s",
+        "timeout": "15s",
+        "start_period": "120s",
+        "retries": 3
+      }
     }
   },
   "networks": {
@@ -524,13 +661,22 @@
     "swarm_vault_app": {
       "driver": "overlay",
       "attachable": false
+    },
+    "swarm_models_edge": {
+      "driver": "overlay",
+      "attachable": false
+    },
+    "swarm_models_app": {
+      "driver": "overlay",
+      "attachable": false
     }
   },
   "caddy_networks": [
     "swarm_monitoring",
     "swarm_access",
     "swarm_notes_edge",
-    "swarm_vault_edge"
+    "swarm_vault_edge",
+    "swarm_models_edge"
   ],
   "configs": {
     "access_console": {
@@ -564,6 +710,9 @@
     },
     "vault_client": {
       "file": ".secrets/family/vault_client"
+    },
+    "omniroute_edge": {
+      "file": ".secrets/omniroute/edge.cfg"
     }
   },
   "volumes": {},
@@ -629,6 +778,30 @@
         303,
         401
       ]
+    },
+    {
+      "url": "https://models.144.24.135.201.sslip.io/",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
+    },
+    {
+      "url": "https://models.144.24.135.201.sslip.io/api/settings",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
+    },
+    {
+      "url": "https://models.144.24.135.201.sslip.io/v1/models",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
     }
   ],
   "internal_checks": [
@@ -636,6 +809,7 @@
     "http://kuma_sso:4180/ready",
     "http://notes_sso:4180/ready",
     "http://vault_sso:4180/ready",
-    "http://access_console:8080/health"
+    "http://access_console:8080/health",
+    "http://omniroute_sso:4180/ready"
   ]
 }
