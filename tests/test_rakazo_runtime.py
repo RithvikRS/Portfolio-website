@@ -1,4 +1,5 @@
 import copy
+import json
 import importlib.util
 from pathlib import Path
 import unittest
@@ -10,6 +11,12 @@ spec.loader.exec_module(runtime)
 class RuntimePolicyTests(unittest.TestCase):
     def setUp(self):
         self.spec = {"linux": {"resources": {"memory": {"limit": 2147483648}, "cpu": {"quota": 100000, "period": 100000}, "pids": {"limit": 512}}}, "process": {"user": {"uid": 1000, "gid": 1000}, "noNewPrivileges": True, "capabilities": {}}}
+
+    def test_anonymous_health_gate_accepts_native_auth_challenge_but_not_access(self):
+        root = Path(__file__).resolve().parents[1]
+        catalog = json.loads((root / "deploy/swarm-services.json").read_text())
+        check = next(c for c in catalog["http_checks"] if c["url"] == "https://rakazo.144.24.135.201.sslip.io/")
+        self.assertEqual(set(check["statuses"]), {302, 303, 401})
 
     def test_requires_every_resource_ceiling(self):
         for resource in ("memory", "cpu", "pids"):
