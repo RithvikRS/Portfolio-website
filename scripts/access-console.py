@@ -82,7 +82,7 @@ def navigation(owner, groups, current):
     personal = [(title, "/" + key) for key, title in [("notes", "Outline"), ("vault", "Vaultwarden")] if owner or key in groups]
     sections = [("Workspace", workspace), ("Personal tools", personal)]
     if owner:
-        sections.append(("Administration", [("OmniRoute", "/models"), ("Uptime Kuma", "/uptime"), ("Portainer", "/portainer/"), ("Fieldnotes", "/admin/notes/")]))
+        sections.append(("Administration", [("Rakazo pilot", "/rakazo"), ("OmniRoute", "/models"), ("Uptime Kuma", "/uptime"), ("Portainer", "/portainer/"), ("Fieldnotes", "/admin/notes/")]))
     parts = []
     for title, items in sections:
         if items:

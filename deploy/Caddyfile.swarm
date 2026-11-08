@@ -89,6 +89,9 @@ http://:8081 {
         reverse_proxy auth:9091
     }
 
+    @rakazoEntry path /rakazo /rakazo/
+    redir @rakazoEntry https://rakazo.144.24.135.201.sslip.io/ 302
+
     @modelsEntry path /models /models/
     redir @modelsEntry https://models.144.24.135.201.sslip.io/ 302
 
@@ -213,5 +216,22 @@ models.144.24.135.201.sslip.io {
                 }
             }
         }
+    }
+}
+
+# The pilot screen uses a separate origin from the portfolio and password vault.
+rakazo.144.24.135.201.sslip.io {
+    import private_identity
+    handle /auth/* {
+        reverse_proxy auth:9091
+    }
+    @privateDiagnostics path /healthz
+    respond @privateDiagnostics 404
+    handle {
+        forward_auth auth:9091 {
+            uri /api/authz/forward-auth?authelia_url=https://rakazo.144.24.135.201.sslip.io/auth/
+            copy_headers Remote-User Remote-Groups
+        }
+        reverse_proxy rakazo_pilot:8080
     }
 }

@@ -118,6 +118,8 @@ References: [OmniRoute](https://github.com/cheaper-inference/OmniRoute), [OpenRo
 
 ## Phase 6: Rakazo pilot and shared use
 
+Start with the [restricted runtime pilot and its isolation gates](RAKAZO.md). Rootless gVisor passed the offline ARM64 computer-image checks after the Incus confinement probe failed. Complete the application/controller integration before exposing Rakazo; keep model connections and agent execution disabled.
+
 Run Rakazo application services on Ampere after validating its selected release, ARM images, Swarm adaptation, PostgreSQL persistence, and backup coverage. Its supported PostgreSQL dependency remains separate from the trading app's Oracle decision.
 
 Use native Authelia OIDC and an explicit admitted-user group/registration policy. Test SSO-only login and email/identity claims with the actual versions. Give each family member or friend an individual account and workspace. Start with two users before expanding.
@@ -163,3 +165,8 @@ Verify current versions, licensing, free quotas, and tenancy availability before
 - [Rakazo accounts and OIDC](https://github.com/elie222/rakazo/blob/main/docs/self-host-accounts.md) and [production architecture](https://github.com/elie222/rakazo/blob/main/docs/self-host-production.md).
 - [Outline Personal documents](https://www.getoutline.com/changelog/personal-documents) and [OIDC](https://www.getoutline.com/integrations/oidc).
 - [Vaultwarden OIDC](https://github.com/dani-garcia/vaultwarden/wiki/Enabling-SSO-support-using-OpenId-Connect), [Swarm secrets](https://docs.docker.com/engine/swarm/secrets/), and [Infisical SSO licensing](https://infisical.com/docs/documentation/platform/sso/overview).
+
+
+## Rakazo offline controller pilot
+
+The offline controller, desktop screen and enforced per-computer limits now pass the private integration checks. Use the owner-only Authelia route and dashboard link for the fixed offline desktop. Check browser access and reconnect behavior after deploying the release. Model connections, full Rakazo agent jobs and additional users remain disabled. See [Rakazo pilot](RAKAZO.md) for the exact resume gate and disposable-storage limits.

@@ -26,6 +26,22 @@ Create one inference-only API key per app, restrict its models/combos, and set r
 
 Use the usage dashboard for traffic, model, latency and failure information. Detailed request-body logging and stream capture are disabled. Do not turn on prompt/response capture for shared apps without deciding retention and access first.
 
+## Deferred option: Gemini Web model-filter exception
+
+Keep this option deferred. Do not change the live free-only policy or disable `hidePaidModels` globally.
+
+OmniRoute 3.8.53 labels Gemini Web as free in its provider UI, but omits `gemini-web` from the shipped free-model catalog. Its connection-test filter therefore reports “Paid model blocked while hidePaidModels is enabled.” The global setting has no per-provider override in the connection edit dialog.
+
+If we choose to support an exception later:
+
+- Allow only the canonical `gemini-web` provider to use models that OmniRoute classifies as paid or does not recognize as free. Resolve its `gweb` alias to the same provider; do not extend the exception to the Gemini API or other Google providers.
+- Keep every other provider subject to the free-only policy. Do not turn off the global filter to enable one connection.
+- Apply and test the rule consistently across listings, connection/model tests, direct inference, combos, automatic routing and fallbacks. Audit the separate strict free-access policy too; a `hidePaidModels` exception alone may not permit dispatch.
+- Keep MFA, current administrator checks, native owner restrictions and per-app inference-key limits unchanged.
+- Test that Gemini Web is the only exception, including requests through aliases and fallback paths, before enabling it in production. Make the exception explicit and disabled by default so it can be removed easily.
+
+This would require an upstream feature or a maintained OmniRoute customization, not just a change to the portfolio's provider settings. Allowing a model through the router does not grant a paid Gemini subscription, unlock restricted features, or bypass Google account quotas. Check the account's actual entitlement before adding models to an approved combo.
+
 ## Architecture
 
 ```text

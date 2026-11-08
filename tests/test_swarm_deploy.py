@@ -30,6 +30,7 @@ class CIRequestTests(unittest.TestCase):
 
 
 class SwarmConfigurationTests(unittest.TestCase):
+    @unittest.skipIf(sys.platform == "win32", "Real catalog uses Linux host paths; run this integration fixture on Linux")
     def test_data_stays_pinned_and_proxy_network_is_exclusive(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -49,7 +50,10 @@ class SwarmConfigurationTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text('private fixture')
             (root / 'scripts').mkdir()
-            (root / 'scripts/access-console.py').write_text('# fixture')
+            for definition in catalog['configs'].values():
+                path = root / definition['file']
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('# fixture')
             settings = json.loads((Path(__file__).resolve().parents[1] / 'deploy/swarm.json').read_text())
             result = swarm.render(compose, settings, 'app:release', {name: name + '@sha256:pinned' for name in swarm.CORE + ['agent'] + list(catalog['services'])}, 'private$secret', root, root, catalog=catalog)
             for name in swarm.CORE:
@@ -68,7 +72,7 @@ class SwarmConfigurationTests(unittest.TestCase):
             self.assertNotIn('swarm_node2', result['networks'])
             self.assertEqual(result['services']['uptime_kuma']['deploy']['placement']['constraints'], ['node.id == kxm75m17suc2o1hp0s4ikyhri'])
             self.assertTrue(all(port['mode'] == 'host' for port in result['services']['caddy']['ports']))
-            self.assertEqual(len(result['configs']), 4)
+            self.assertEqual(len(result['configs']), 3 + len(catalog['configs']))
             self.assertEqual(swarm.escape(result)['services']['agent']['environment']['AGENT_SECRET'], 'private$$secret')
 
     def test_escape_preserves_literal_secret_dollars(self):
