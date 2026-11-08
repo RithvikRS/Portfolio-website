@@ -25,3 +25,8 @@
 
 !css/notes.css
 !js/notes.js
+
+# Public edge helper required by build-stage authorization tests.
+!deploy/
+!deploy/rakazo/
+!deploy/rakazo/edge.mjs

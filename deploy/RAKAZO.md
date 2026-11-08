@@ -1,10 +1,10 @@
 # Rakazo restricted pilot
 
-## Checkpoint: controller ready, browser deployment pending
+## Owner-only offline desktop
 
 Use the pinned Rakazo v0.8.0 supervisor with a separate rootless Docker engine and gVisor on Ampere. The controller can start/resume/stop the real desktop, execute its internal commands and establish a noVNC framebuffer connection. Keep model connections and agent jobs disabled.
 
-**The pilot is stopped and its three user services are disabled at boot for this checkpoint.** The owner-only browser route, edge service and dashboard link are prepared locally but are not deployed. Keep these changes local until the deployment checks below pass. All 18 existing Swarm services retain their expected replicas; all three nodes remain Ready.
+Open **Rakazo pilot** from the admin dashboard after deploying this release. The dedicated engine, controller and bridge run on Ampere under their own bounded user services. The browser edge runs in Swarm. Keep the existing production Docker engine and its services separate from the pilot.
 
 This phase provides a small desktop-control page around Rakazo's supervisor. It does not deploy Rakazo's full chat/API/worker application. The page exposes only the fixed owner's start, stop, view and control actions. Model/provider endpoints and agent-run endpoints return 404. No provider keys are installed.
 
@@ -47,22 +47,22 @@ Run `sudo python3 scripts/verify-rakazo-controller.py` on Ampere after starting 
 
 The earlier standalone runtime probe remains available as `scripts/verify-rakazo-gvisor.py`. Do not confuse its results with browser sign-in verification.
 
-## Prepared browser access
+## Browser access
 
-The planned entry point is `/rakazo` from the admin dashboard, redirecting to `https://rakazo.144.24.135.201.sslip.io/`. Keep the desktop on its own browser origin, separate from the public portfolio and password vault.
+The entry point is `/rakazo` from the admin dashboard, redirecting to `https://rakazo.144.24.135.201.sslip.io/`. Keep the desktop on its own browser origin, separate from the public portfolio and password vault.
 
 Caddy clears supplied identity headers and asks Authelia for MFA authorization. The dedicated Authelia rule admits only `rithvik`; the edge additionally requires that exact username and the `admins` group. State-changing requests and WebSocket upgrades require the expected browser Origin. The edge lives on a private, non-attachable, internal Swarm overlay with Caddy, has no published ports, and mounts only the bridge socket directory read-only.
 
-This pilot uses Authelia's login directly on the dedicated hostname, with its own cookie. Expect a separate MFA sign-in there; it has no additional native application password. Screen connections expire after four minutes and the pilot page reconnects through authorization. Complete the browser login, reconnect and non-owner-denial checks before calling this route live.
+This pilot uses Authelia's login directly on the dedicated hostname, with its own cookie. Expect a separate MFA sign-in there; it has no additional native application password. Screen connections expire after four minutes and the pilot page reconnects through authorization. After each release, check browser login, reconnect and non-owner denial before enabling further capabilities.
 
-## Resume and deploy
+## Install or update
 
-1. Review the local changes and the private checkpoint on the PC under `Documents/Portfolio-private-backups/rakazo-pilot/`.
+1. Review the changes and the private recovery checkpoint on the PC under `Documents/Portfolio-private-backups/rakazo-pilot/`.
 2. Copy the current `deploy/rakazo/` files and `scripts/install-rakazo-controller.py` to the staged source tree on Ampere. Run the installer there as root. It checks the node ID, dedicated identity, existing 8 GiB mounted cache and staged prerequisites. It installs/enables only the dedicated pilot user services.
 3. Start the fixed desktop through the local Unix bridge, then run `verify-rakazo-controller.py`. Rerun negative admission tests after changing runtime policy. Keep model and worker services absent.
-4. Validate the candidate Caddy/Authelia configuration, backup inventory and edge service. Review the separate-origin screen and reconnect behavior. A host reboot has not been rehearsed; verify mount and user-service ordering before relying on unattended recovery.
+4. Validate the candidate Caddy/Authelia configuration, backup inventory and edge service. Review the separate-origin screen and reconnect behavior. The dedicated user-manager restart test recreates the cgroups and recovers the controller without restarting production Docker. A whole-host reboot remains outside that rehearsal.
 5. Batch the change into one PR and merge through the existing deployment pipeline. Confirm all existing services and the new edge converge, anonymous requests redirect to Authelia, non-owners fail, and the owner can view/control/stop the desktop.
-6. Only then publish the final completion status. Keep the full Rakazo application, model connections, scheduled runs and multi-user admission for a later phase.
+6. Keep the full Rakazo application, model connections, scheduled runs and multi-user admission for a later phase.
 
 For maintenance, run the user service commands as `rakazo-pilot` with `XDG_RUNTIME_DIR=/run/user/986` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/986/bus`. The units are `rakazo-engine`, `rakazo-controller` and `rakazo-bridge`. Stop the desktop first, then stop bridge/controller/engine. Never restart production Docker to operate this pilot.
 

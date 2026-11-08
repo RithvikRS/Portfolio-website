@@ -167,6 +167,6 @@ Verify current versions, licensing, free quotas, and tenancy availability before
 - [Vaultwarden OIDC](https://github.com/dani-garcia/vaultwarden/wiki/Enabling-SSO-support-using-OpenId-Connect), [Swarm secrets](https://docs.docker.com/engine/swarm/secrets/), and [Infisical SSO licensing](https://infisical.com/docs/documentation/platform/sso/overview).
 
 
-## Rakazo controller checkpoint
+## Rakazo offline controller pilot
 
-The offline controller, desktop screen and enforced per-computer limits now pass the private integration checks. Keep the pilot stopped overnight. The owner-only Authelia route and dashboard link are prepared locally; deploy and verify browser access next. Model connections, full Rakazo agent jobs and additional users remain disabled. See [Rakazo pilot](RAKAZO.md) for the exact resume gate and disposable-storage limits.
+The offline controller, desktop screen and enforced per-computer limits now pass the private integration checks. Use the owner-only Authelia route and dashboard link for the fixed offline desktop. Check browser access and reconnect behavior after deploying the release. Model connections, full Rakazo agent jobs and additional users remain disabled. See [Rakazo pilot](RAKAZO.md) for the exact resume gate and disposable-storage limits.
