@@ -80,3 +80,13 @@ The recovery kit includes the private scripts and settings under `backup-tools`.
 Keep large worker images off the small manager. The manager backup excludes services explicitly pinned to a different node ID or to `node.role == worker`; worker snapshots include their required current/previous release images. Keep all matching node kits together.
 
 When rewriting a saved stack on the restored manager, pass each worker's `snapshot-inventory.json` through a separate `--peer-inventory <path>` argument to the private `restore_images.py` helper. It accepts missing manager images only when the service is pinned to that inventory's exact node ID and its saved image reference matches. Run the image helper on each worker after loading its own archive before deploying the rewritten stack. Update placement IDs deliberately when replacing nodes. Never copy an ARM-only image to an AMD node to satisfy a missing reference.
+
+## Worker backup staging
+
+Keep Ampere's temporary worker archives on its data filesystem in `/srv/swarm/.backup-staging`. The private backup settings select this location only for Ampere; the manager and AMD worker retain their existing staging directories. Keep the directory private to the backup account and do not mount it into application containers.
+
+The worker helper checks the node's storage marker, staging ownership and permissions, path containment, and available space before pausing writers. It excludes this exact staging directory from both the data-size estimate and the worker-data archive, so a backup cannot include its own temporary files. It also refuses application mounts that overlap the staging directory. The disposable Rakazo runtime cache remains a separate exclusion.
+
+Run `Backup-Cluster.ps1 -CheckOnly` before a refresh. After downloading and validating a worker snapshot, the helper removes only that job's temporary files. Keep incomplete jobs for the documented resume flow. Do not delete current or previous release images to make room for a backup, and do not count temporary archives as an independent backup copy.
+
+This staging change does not make the pilot desktop durable: its home remains inside the excluded Rakazo cache. Add workspace snapshots and rehearse their restore before storing important files there.
