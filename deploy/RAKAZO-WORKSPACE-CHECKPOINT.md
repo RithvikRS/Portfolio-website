@@ -1,6 +1,6 @@
 # Rakazo workspace integration checkpoint
 
-Stop date: 10 November 2026. Keep this work local until the remaining gates pass. Do not merge or deploy the placeholder application image in the service catalog.
+Stop date: 10 November 2026. This checkpoint branch may be pushed for transfer. Follow [the laptop handoff](../HANDOFF.md); keep it unmerged and undeployed until the remaining gates pass and deployment is authorized. Do not merge or deploy the placeholder application image in the service catalog.
 
 ## Current production
 
