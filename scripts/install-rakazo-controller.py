@@ -74,7 +74,8 @@ MemoryMax=1G
 TasksMax=512'''
     write(units/'rakazo-engine.service',engine+common,owner=(986,984))
     for mode,limit in [('controller','512M'),('bridge','128M')]:
-        write(units/('rakazo-'+mode+'.service'),f'[Unit]\nDescription=Rakazo pilot {mode}\nAfter=rakazo-engine.service\nBindsTo=rakazo-engine.service\n[Service]\nEnvironmentFile={BASE}/controller.env\nExecStart=/usr/bin/python3 {DEST}/enter_namespace.py {mode}\nMemoryMax={limit}\nTasksMax=128'+common,owner=(986,984))
+        base_path = '\nEnvironment=BASE_PATH=/computer' if mode == 'bridge' else ''
+        write(units/('rakazo-'+mode+'.service'),f'[Unit]\nDescription=Rakazo pilot {mode}\nAfter=rakazo-engine.service\nBindsTo=rakazo-engine.service\n[Service]\nEnvironmentFile={BASE}/controller.env{base_path}\nExecStart=/usr/bin/python3 {DEST}/enter_namespace.py {mode}\nMemoryMax={limit}\nTasksMax=128'+common,owner=(986,984))
     run('systemctl','daemon-reload')
     for name in ['rakazo-controller-probe','rakazo-engine-probe']:
         subprocess.run(PREFIX+['systemctl','--user','stop',name],capture_output=True)

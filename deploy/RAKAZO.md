@@ -1,5 +1,7 @@
 # Rakazo restricted pilot
 
+For the unfinished full-app work, follow the [workspace integration checkpoint](RAKAZO-WORKSPACE-CHECKPOINT.md). Keep the current pilot in production until its remaining gates pass.
+
 ## Owner-only offline desktop
 
 Use the pinned Rakazo v0.8.0 supervisor with a separate rootless Docker engine and gVisor on Ampere. The controller can start/resume/stop the real desktop, execute its internal commands and establish a noVNC framebuffer connection. Keep model connections and agent jobs disabled.

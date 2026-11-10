@@ -219,19 +219,39 @@ models.144.24.135.201.sslip.io {
     }
 }
 
-# The pilot screen uses a separate origin from the portfolio and password vault.
+# Keep the full workspace and offline desktop behind the same owner-only MFA gate.
 rakazo.144.24.135.201.sslip.io {
     import private_identity
-    handle /auth/* {
+    @identity path /auth /auth/*
+    handle @identity {
         reverse_proxy auth:9091
     }
-    @privateDiagnostics path /healthz
+    @privateDiagnostics path /healthz /health /ready /internal/*
     respond @privateDiagnostics 404
     handle {
-        forward_auth auth:9091 {
-            uri /api/authz/forward-auth?authelia_url=https://rakazo.144.24.135.201.sslip.io/auth/
-            copy_headers Remote-User Remote-Groups
+        route {
+            forward_auth auth:9091 {
+                uri /api/authz/forward-auth?authelia_url=https://rakazo.144.24.135.201.sslip.io/auth/
+                copy_headers Remote-User Remote-Groups
+            }
+            @owner {
+                header Remote-User rithvik
+                header_regexp Remote-Groups (^|,\s*)admins(\s*,|$)
+            }
+            handle @owner {
+                redir /dashboard-exit https://rithvik.ddns.net/admin/ 302
+                redir /computer /computer/ 302
+                handle_path /computer/* {
+                    reverse_proxy rakazo_pilot:8080
+                }
+                handle /api/* {
+                    reverse_proxy rakazo_api:3100
+                }
+                handle {
+                    reverse_proxy rakazo_web:5173
+                }
+            }
+            respond "Owner access required" 403
         }
-        reverse_proxy rakazo_pilot:8080
     }
 }

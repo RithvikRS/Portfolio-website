@@ -1,0 +1,410 @@
+diff --git a/apps/web/src/App.tsx b/apps/web/src/App.tsx
+index 6353c4e..db93408 100644
+--- a/apps/web/src/App.tsx
++++ b/apps/web/src/App.tsx
+@@ -19,6 +19,7 @@ import { MarkdownLinkPrompt } from "./components/markdown-link-prompt";
+ import { PageLoading } from "./components/PageLoading";
+ import { SubscriptionGate } from "./components/SubscriptionGate";
+ import { authClient } from "./lib/auth";
++import { fetchAuthCapabilities } from "./lib/auth-capabilities";
+ import { getTicketBoardEnabled, subscribeTicketBoardEnabled } from "./lib/bootstrap";
+ import { syncCallIdentity } from "./lib/call-session";
+ import { desktopBridge } from "./lib/desktop";
+@@ -46,6 +47,10 @@ import { SharedPagePage } from "./pages/SharedPage";
+ import { ShellPage } from "./pages/Shell";
+ import { SlackInstallCallbackPage } from "./pages/SlackInstallCallback";
+ 
++const WorkspaceOnlyPage = lazyComponent(() =>
++  import("./pages/WorkspaceOnly").then((module) => module.WorkspaceOnlyPage),
++);
++
+ const AuthPage = lazyComponent(() => import("./pages/Auth").then((module) => module.AuthPage));
+ const PasswordResetPage = lazyComponent(() =>
+   import("./pages/Auth").then((module) => module.PasswordResetPage),
+@@ -109,6 +114,16 @@ const MCP_OAUTH_CALLBACK_PATH = "/mcp/oauth/callback";
+ const SLACK_INSTALL_CALLBACK_PATH = "/messaging/slack/callback";
+ 
+ function SessionApp() {
++  const [workspaceOnly, setWorkspaceOnly] = useState<boolean | null>(null);
++  const [capabilitiesFailed, setCapabilitiesFailed] = useState(false);
++  useEffect(() => {
++    let active = true;
++    fetchAuthCapabilities().then(
++      (value) => { if (active) setWorkspaceOnly(value.workspaceOnly === true); },
++      () => { if (active) setCapabilitiesFailed(true); },
++    );
++    return () => { active = false; };
++  }, []);
+   const [searchParams] = useSearchParams();
+   const next = searchParams.get("next") ?? "";
+   // A connector sign-in started on another device lands here signed out; finish it after sign-in.
+@@ -136,7 +151,7 @@ function SessionApp() {
+     void identifyMonitoringUser(Boolean(analyticsUserId));
+   }, [analyticsUserId, session.isPending]);
+   useEffect(() => {
+-    if (!analyticsUserId) {
++    if (!analyticsUserId || workspaceOnly !== false) {
+       lastScreen.current = undefined;
+       return;
+     }
+@@ -147,7 +162,7 @@ function SessionApp() {
+     void Promise.resolve()
+       .then(() => rpc.analytics.screen({ screen, surface: desktopBridge() ? "desktop" : "web" }))
+       .catch(() => undefined);
+-  }, [analyticsUserId, screen]);
++  }, [analyticsUserId, screen, workspaceOnly]);
+   const gate = sessionGate(session);
+   useLayoutEffect(() => {
+     if (gate !== "authenticated" && gate !== "anonymous") return;
+@@ -180,6 +195,21 @@ function SessionApp() {
+   }
+ 
+   const user = session.data?.user;
++  // Wait for the server policy before mounting any onboarding, chat or provider UI.
++  if (user && workspaceOnly === null) {
++    return capabilitiesFailed ? (
++      <div className="grid h-full place-items-center bg-background">
++        <Button onClick={() => window.location.reload()}>Retry workspace</Button>
++      </div>
++    ) : <PageLoading />;
++  }
++  if (user && workspaceOnly) {
++    return (
++      <QueryUserProvider value={user.id}>
++        <Suspense fallback={<PageLoading />}><WorkspaceOnlyPage /></Suspense>
++      </QueryUserProvider>
++    );
++  }
+   return (
+     <QueryUserProvider value={user?.id ?? null}>
+       <MarkdownLinkPrompt>
+diff --git a/apps/web/src/pages/WorkspaceOnly.test.tsx b/apps/web/src/pages/WorkspaceOnly.test.tsx
+new file mode 100644
+index 0000000..019eaba
+--- /dev/null
++++ b/apps/web/src/pages/WorkspaceOnly.test.tsx
+@@ -0,0 +1,114 @@
++// @vitest-environment jsdom
++import type { ComponentProps, ReactNode } from "react";
++import { act } from "react";
++import { createRoot } from "react-dom/client";
++import { MemoryRouter } from "react-router-dom";
++import { afterEach, beforeEach, expect, it, vi } from "vitest";
++
++const state = vi.hoisted(() => ({
++  space: "space-1", calls: [] as Array<{path: string; input?: unknown}>, destination: "",
++  notes: [] as Array<{id: string; botId: string; title: string; notes: string; updatedAt: string}>,
++  bot: {id: "bot-1", name: "Research", description: "Prepare research", instructions: "Keep sources", updatedAt: "first"},
++}));
++vi.mock("../lib/auth", () => ({authClient: {useSession: () => ({data: {user: {id: "owner", name: "Owner"}}})}}));
++vi.mock("../lib/sign-out", () => ({useSignOut: (destination: string) => {
++  state.destination = destination;
++  return {signingOut: false, logOut: vi.fn()};
++}}));
++vi.mock("../lib/rpc", () => ({
++  selectedSpaceId: () => state.space,
++  selectSpace: (id: string) => {state.space = id; return true;},
++  createSpaceRpc: (spaceId: string) => {
++    const record = (path: string, input?: unknown) => state.calls.push({path, input});
++    return {
++      spaces: {
++        list: async () => {
++          record("spaces.list", spaceId);
++          return {current: {id: spaceId, name: "Workspace", bots: [state.bot]}, spaces: [{id: spaceId, name: "Workspace", canRename: true, canDelete: false}]};
++        },
++        create: async (input: unknown) => {record("spaces.create", input); return {id: "space-2"};},
++        rename: async (input: unknown) => {record("spaces.rename", input);},
++      },
++      bots: {
++        create: async (input: {name: string}) => {record("bots.create", input); state.bot = {...state.bot, name: input.name}; return state.bot;},
++        update: async (input: {name: string; description: string; instructions: string}) => {record("bots.update", input); state.bot = {...state.bot, ...input, updatedAt: "changed"}; return state.bot;},
++        remove: async (input: unknown) => {record("bots.remove", input);},
++      },
++      scratchpad: {
++        list: async (input: unknown) => {record("scratchpad.list", input); return [...state.notes];},
++        create: async (input: {botId: string; title: string; notes: string}) => {record("scratchpad.create", input); const item = {...input, id: "note-1", updatedAt: "first"}; state.notes.push(item); return item;},
++        update: async (input: {itemId: string; title: string; notes: string}) => {record("scratchpad.update", input); state.notes = state.notes.map(item => item.id === input.itemId ? {...item, ...input, updatedAt: "changed"} : item);},
++        remove: async (input: {itemId: string}) => {record("scratchpad.remove", input); state.notes = state.notes.filter(item => item.id !== input.itemId);},
++      },
++    };
++  },
++}));
++vi.mock("@rakazo/ui-web", () => ({
++  Button: ({variant: _variant, ...props}: ComponentProps<"button"> & {variant?: string}) => <button {...props} />,
++  Field: ({children, ...props}: ComponentProps<"div">) => <div {...props}>{children}</div>,
++  FieldLabel: (props: ComponentProps<"label">) => <label {...props} />,
++  Input: (props: ComponentProps<"input">) => <input {...props} />,
++  Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
++  SectionHeading: ({children}: {children: ReactNode}) => <h2>{children}</h2>,
++}));
++
++import { WorkspaceOnlyPage } from "./WorkspaceOnly";
++let root: ReturnType<typeof createRoot>;
++let host: HTMLDivElement;
++beforeEach(async () => {
++  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
++  state.space = "space-1"; state.calls = []; state.notes = [];
++  state.bot = {id: "bot-1", name: "Research", description: "Prepare research", instructions: "Keep sources", updatedAt: "first"};
++  host = document.body.appendChild(document.createElement("div")); root = createRoot(host);
++  await act(async () => root.render(<MemoryRouter initialEntries={["/onboarding/model"]}><WorkspaceOnlyPage /></MemoryRouter>));
++});
++afterEach(() => {act(() => root.unmount()); document.body.innerHTML = ""; vi.unstubAllGlobals(); vi.restoreAllMocks();});
++async function change(id: string, value: string) {
++  await act(async () => {
++    const element = host.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`)!;
++    const prototype = element.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
++    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, value);
++    element.dispatchEvent(new Event("input", {bubbles: true}));
++  });
++}
++async function submit(id: string) {
++  await act(async () => {host.querySelector(`#${id}`)!.closest("form")!.dispatchEvent(new Event("submit", {bubbles: true, cancelable: true}));});
++}
++async function openProfile() {
++  await act(async () => {Array.from(host.querySelectorAll("button")).find(button => button.textContent?.includes("Research"))!.click();});
++}
++
++it("shows persistent workspace actions without model onboarding, chats or run controls", () => {
++  expect(host.textContent).toContain("Model connections and agent runs are disabled.");
++  expect(host.querySelector('a[href="/computer/"]')?.textContent).toBe("Offline desktop pilot");
++  expect(host.querySelector('a[href="/dashboard-exit"]')).not.toBeNull();
++  expect(state.destination).toBe("/dashboard-exit");
++  expect(state.calls.map(call => call.path)).toEqual(["spaces.list"]);
++  for (const text of ["Connect a model", "Send message", "Run agent", "Chief"]) expect(host.textContent).not.toContain(text);
++});
++
++it("creates a workspace and binds subsequent requests to its selected space", async () => {
++  await change("new-workspace", "Planning"); await submit("new-workspace");
++  expect(state.calls).toContainEqual({path: "spaces.create", input: {name: "Planning"}});
++  expect(state.calls).toContainEqual({path: "spaces.list", input: "space-2"});
++  expect(state.space).toBe("space-2");
++});
++
++it("creates an inert profile and saves instructions through the real RPC shape", async () => {
++  await change("new-profile", "Planner"); await submit("new-profile");
++  expect(state.calls).toContainEqual({path: "bots.create", input: {name: "Planner", description: "", instructions: "", notifyOnFinish: false, dailyCheckIns: false, fleetManagement: false, computerMode: "team"}});
++  await change("profile-instructions", "Use the project notes"); await submit("profile-instructions");
++  expect(state.calls).toContainEqual({path: "bots.update", input: {botId: "bot-1", name: "Planner", description: "Prepare research", instructions: "Use the project notes", expectedInstructions: "Keep sources"}});
++  expect(state.calls.some(call => /onboarding|threads|models|computer|runs/.test(call.path))).toBe(false);
++});
++
++it("creates, edits and removes profile notes without starting work", async () => {
++  await openProfile(); await change("new-note-title", "Plan"); await change("new-note-body", "Draft outline"); await submit("new-note-title");
++  expect(state.calls).toContainEqual({path: "scratchpad.create", input: {botId: "bot-1", title: "Plan", notes: "Draft outline", status: "open"}});
++  await change("note-body-note-1", "Updated outline"); await submit("note-body-note-1");
++  expect(state.calls).toContainEqual({path: "scratchpad.update", input: {itemId: "note-1", title: "Plan", notes: "Updated outline"}});
++  vi.spyOn(window, "confirm").mockReturnValue(true);
++  await act(async () => {Array.from(host.querySelectorAll("button")).find(button => button.textContent === "Delete note")!.click();});
++  expect(state.calls).toContainEqual({path: "scratchpad.remove", input: {itemId: "note-1"}});
++  expect(host.querySelector("#note-body-note-1")).toBeNull();
++});
+diff --git a/apps/web/src/pages/WorkspaceOnly.tsx b/apps/web/src/pages/WorkspaceOnly.tsx
+new file mode 100644
+index 0000000..dfe1f5e
+--- /dev/null
++++ b/apps/web/src/pages/WorkspaceOnly.tsx
+@@ -0,0 +1,204 @@
++import type { Bot, ScratchpadItem, SpaceNavigation } from "@rakazo/contracts";
++import { Button, Field, FieldLabel, Input, SectionHeading, Textarea } from "@rakazo/ui-web";
++import { ArrowLeft, Monitor, Plus } from "lucide-react";
++import { useCallback, useEffect, useMemo, useState } from "react";
++import { useNavigate } from "react-router-dom";
++import { authClient } from "../lib/auth";
++import type { RpcClient } from "../lib/rpc";
++import { createSpaceRpc, selectedSpaceId, selectSpace } from "../lib/rpc";
++import { useSignOut } from "../lib/sign-out";
++import { errorText } from "../lib/user-error";
++
++/** The real workspace records, without controls for capabilities disabled by the server. */
++export function WorkspaceOnlyPage() {
++  const navigate = useNavigate();
++  const session = authClient.useSession();
++  const [spaceId, setSpaceId] = useState(selectedSpaceId);
++  const client = useMemo(() => createSpaceRpc(spaceId), [spaceId]);
++  const [navigation, setNavigation] = useState<SpaceNavigation | null>(null);
++  const [selectedBot, setSelectedBot] = useState<string | null>(null);
++  const [newSpace, setNewSpace] = useState("");
++  const [newBot, setNewBot] = useState("");
++  const [busy, setBusy] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++  const [notice, setNotice] = useState("");
++  const [revision, setRevision] = useState(0);
++  const { signingOut, logOut } = useSignOut("/dashboard-exit", setError);
++
++  useEffect(() => { navigate("/app", { replace: true }); }, [navigate]);
++  useEffect(() => {
++    let active = true;
++    setNavigation(null);
++    client.spaces.list().then(
++      value => { if (active) setNavigation(value); },
++      reason => { if (active) setError(errorText(reason)); },
++    );
++    return () => { active = false; };
++  }, [client, revision]);
++
++  async function perform(action: () => Promise<void>) {
++    if (busy) return;
++    setBusy(true); setError(null); setNotice("");
++    try { await action(); }
++    catch (reason) { setError(errorText(reason)); }
++    finally { setBusy(false); }
++  }
++
++  function switchSpace(id: string) {
++    if (!selectSpace(id)) { setError("Could not save the workspace selection."); return; }
++    setNavigation(null); setSelectedBot(null); setError(null); setNotice(""); setSpaceId(id);
++  }
++
++  const current = navigation?.spaces.find(space => space.id === navigation.current.id);
++  const bot = navigation?.current.bots.find(value => value.id === selectedBot);
++  return (
++    <div className="h-full overflow-auto bg-background text-foreground" data-rakazo-surface="workspace-only">
++      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
++        <div><p className="text-lg font-semibold">Rakazo</p><p className="text-sm text-muted-foreground">Model connections and agent runs are disabled.</p></div>
++        <nav aria-label="Account" className="flex flex-wrap items-center gap-4 text-sm">
++          <a href="/computer/" className="inline-flex items-center gap-2 hover:underline"><Monitor className="size-4" aria-hidden="true" />Offline desktop pilot</a>
++          <a href="/dashboard-exit" className="hover:underline">Your dashboard</a>
++          <Button variant="outline" disabled={signingOut || busy} onClick={() => void logOut()}>Log out</Button>
++        </nav>
++      </header>
++      <div className="mx-auto grid max-w-6xl gap-8 p-6 md:grid-cols-[240px_minmax(0,1fr)]">
++        <aside className="space-y-5">
++          <SectionHeading as="h2">Workspaces</SectionHeading>
++          <nav aria-label="Workspaces" className="flex flex-col gap-1">
++            {navigation?.spaces.map(space => (
++              <Button key={space.id} variant={space.id === navigation.current.id ? "secondary" : "ghost"} className="justify-start truncate" disabled={busy} aria-current={space.id === navigation.current.id ? "page" : undefined} onClick={() => switchSpace(space.id)}>{space.name}</Button>
++            ))}
++          </nav>
++          <form className="space-y-2" onSubmit={event => { event.preventDefault(); void perform(async () => {
++            const created = await client.spaces.create({ name: newSpace.trim() });
++            setNewSpace(""); switchSpace(created.id);
++          }); }}>
++            <Field><FieldLabel htmlFor="new-workspace">New workspace</FieldLabel><Input id="new-workspace" value={newSpace} maxLength={60} disabled={busy} onChange={event => setNewSpace(event.target.value)} /></Field>
++            <Button type="submit" variant="outline" disabled={busy || !newSpace.trim()}><Plus className="size-4" aria-hidden="true" />Create workspace</Button>
++          </form>
++          <p className="break-words text-xs text-muted-foreground">{session.data?.user.name}</p>
++        </aside>
++        <main className="min-w-0 space-y-6">
++          {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
++          <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{busy ? "Saving…" : notice}</p>
++          {!navigation ? (
++            error ? <Button variant="outline" onClick={() => { setError(null); setRevision(value => value + 1); }}>Retry</Button> : <p className="text-muted-foreground">Loading workspace…</p>
++          ) : (
++            <>
++              <div className="flex flex-wrap items-start justify-between gap-3">
++                <h1 className="text-2xl font-semibold">{navigation.current.name}</h1>
++                {current?.canRename || current?.canDelete ? <details className="max-w-full rounded-lg border border-border p-3 text-sm">
++                  <summary className="cursor-pointer">Workspace settings</summary>
++                  {current.canRename ? <RenameWorkspace key={current.id + current.name} name={current.name} busy={busy} onRename={name => perform(async () => {
++                    await client.spaces.rename({ spaceId: current.id, name });
++                    setNavigation(await client.spaces.list()); setNotice("Workspace saved.");
++                  })} /> : null}
++                  {current.canDelete ? <Button variant="destructive" className="mt-3" disabled={busy} onClick={() => {
++                    if (!window.confirm(`Delete “${current.name}” and its profiles and notes? This cannot be undone.`)) return;
++                    void perform(async () => { const result = await client.spaces.remove({ spaceId: current.id }); switchSpace(result.activeSpaceId); });
++                  }}>Delete workspace</Button> : null}
++                </details> : null}
++              </div>
++              {bot ? (
++                <>
++                  <Button variant="ghost" disabled={busy} onClick={() => { setSelectedBot(null); setNotice(""); }}><ArrowLeft className="size-4" aria-hidden="true" />Profiles</Button>
++                  <ProfileEditor key={bot.id} bot={bot} client={client} busy={busy} perform={perform} onSaved={async () => { setNavigation(await client.spaces.list()); setNotice("Profile saved."); }} onRemoved={async () => { setSelectedBot(null); setNavigation(await client.spaces.list()); setNotice("Profile deleted."); }} />
++                </>
++              ) : (
++                <section className="space-y-4">
++                  <SectionHeading as="h2">Agent profiles</SectionHeading>
++                  <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); void perform(async () => {
++                    const created = await client.bots.create({ name: newBot.trim(), description: "", instructions: "", notifyOnFinish: false, dailyCheckIns: false, fleetManagement: false, computerMode: "team" });
++                    setNewBot(""); setNavigation(await client.spaces.list()); setSelectedBot(created.id);
++                  }); }}>
++                    <Field className="min-w-40 flex-1"><FieldLabel htmlFor="new-profile">Profile name</FieldLabel><Input id="new-profile" maxLength={80} value={newBot} disabled={busy} onChange={event => setNewBot(event.target.value)} /></Field>
++                    <Button type="submit" disabled={busy || !newBot.trim()}><Plus className="size-4" aria-hidden="true" />Create profile</Button>
++                  </form>
++                  {navigation.current.bots.length ? <div className="grid gap-3 sm:grid-cols-2">{navigation.current.bots.map(value => (
++                    <button key={value.id} type="button" disabled={busy} onClick={() => { setSelectedBot(value.id); setNotice(""); }} className="rounded-xl border border-border bg-card p-5 text-start transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
++                      <p className="font-medium">{value.name}</p><p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{value.description || "Instructions and notes"}</p>
++                    </button>
++                  ))}</div> : <p className="text-sm text-muted-foreground">No profiles yet.</p>}
++                </section>
++              )}
++            </>
++          )}
++        </main>
++      </div>
++    </div>
++  );
++}
++
++function RenameWorkspace({name, busy, onRename}: {name: string; busy: boolean; onRename: (name: string) => Promise<void>}) {
++  const [value, setValue] = useState(name);
++  return <form className="mt-3 space-y-2" onSubmit={event => { event.preventDefault(); void onRename(value.trim()); }}>
++    <Field><FieldLabel htmlFor="workspace-name">Name</FieldLabel><Input id="workspace-name" maxLength={60} value={value} disabled={busy} onChange={event => setValue(event.target.value)} /></Field>
++    <Button type="submit" variant="outline" disabled={busy || !value.trim() || value === name}>Save name</Button>
++  </form>;
++}
++
++type Perform = (action: () => Promise<void>) => Promise<void>;
++function ProfileEditor({bot, client, busy, perform, onSaved, onRemoved}: {bot: Bot; client: RpcClient; busy: boolean; perform: Perform; onSaved: () => Promise<void>; onRemoved: () => Promise<void>}) {
++  const [name, setName] = useState(bot.name);
++  const [description, setDescription] = useState(bot.description);
++  const [instructions, setInstructions] = useState(bot.instructions);
++  return <div className="space-y-8">
++    <form className="space-y-4" onSubmit={event => { event.preventDefault(); void perform(async () => {
++      await client.bots.update({ botId: bot.id, name: name.trim(), description, instructions, expectedInstructions: bot.instructions });
++      await onSaved();
++    }); }}>
++      <SectionHeading as="h2">Profile</SectionHeading>
++      <Field><FieldLabel htmlFor="profile-name">Name</FieldLabel><Input id="profile-name" maxLength={80} value={name} disabled={busy} onChange={event => setName(event.target.value)} /></Field>
++      <Field><FieldLabel htmlFor="profile-description">Description</FieldLabel><Textarea id="profile-description" rows={2} maxLength={4000} value={description} disabled={busy} onChange={event => setDescription(event.target.value)} /></Field>
++      <Field><FieldLabel htmlFor="profile-instructions">Instructions</FieldLabel><Textarea id="profile-instructions" rows={6} maxLength={20000} value={instructions} disabled={busy} onChange={event => setInstructions(event.target.value)} /></Field>
++      <div className="flex flex-wrap gap-3"><Button type="submit" disabled={busy || !name.trim()}>Save profile</Button><Button type="button" variant="outline" disabled={busy} onClick={() => {
++        if (!window.confirm(`Delete “${bot.name}” and its notes? This cannot be undone.`)) return;
++        void perform(async () => { await client.bots.remove({botId: bot.id, deleteMemories: true}); await onRemoved(); });
++      }}>Delete profile</Button></div>
++    </form>
++    <ProfileNotes botId={bot.id} client={client} busy={busy} perform={perform} />
++  </div>;
++}
++
++function ProfileNotes({botId, client, busy, perform}: {botId: string; client: RpcClient; busy: boolean; perform: Perform}) {
++  const [items, setItems] = useState<ScratchpadItem[] | null>(null);
++  const [error, setError] = useState<string | null>(null);
++  const [title, setTitle] = useState("");
++  const [notes, setNotes] = useState("");
++  const [revision, setRevision] = useState(0);
++  const reload = useCallback(async () => { setItems(await client.scratchpad.list({botId, includeDone: true})); }, [client, botId]);
++  useEffect(() => {
++    let active = true;
++    client.scratchpad.list({botId, includeDone: true}).then(value => { if (active) setItems(value); }, reason => { if (active) setError(errorText(reason)); });
++    return () => { active = false; };
++  }, [client, botId, revision]);
++  return <section className="space-y-4">
++    <SectionHeading as="h2">Notes</SectionHeading>
++    {error ? <div role="alert" className="text-sm text-destructive">{error} <Button variant="outline" onClick={() => { setError(null); setRevision(value => value + 1); }}>Retry notes</Button></div> : null}
++    <form className="space-y-3 rounded-xl border border-border bg-card p-4" onSubmit={event => { event.preventDefault(); void perform(async () => {
++      await client.scratchpad.create({botId, title: title.trim(), notes, status: "open"}); setTitle(""); setNotes(""); await reload();
++    }); }}>
++      <Field><FieldLabel htmlFor="new-note-title">New note</FieldLabel><Input id="new-note-title" maxLength={200} value={title} disabled={busy} onChange={event => setTitle(event.target.value)} /></Field>
++      <Field><FieldLabel htmlFor="new-note-body">Note text</FieldLabel><Textarea id="new-note-body" maxLength={4000} rows={3} value={notes} disabled={busy} onChange={event => setNotes(event.target.value)} /></Field>
++      <Button type="submit" variant="outline" disabled={busy || !title.trim()}>Add note</Button>
++    </form>
++    {items === null && !error ? <p className="text-sm text-muted-foreground">Loading notes…</p> : null}
++    {items?.map(item => <NoteEditor key={item.id} item={item} client={client} busy={busy} perform={perform} reload={reload} />)}
++  </section>;
++}
++
++function NoteEditor({item, client, busy, perform, reload}: {item: ScratchpadItem; client: RpcClient; busy: boolean; perform: Perform; reload: () => Promise<void>}) {
++  const [title, setTitle] = useState(item.title);
++  const [notes, setNotes] = useState(item.notes);
++  const [saved, setSaved] = useState(false);
++  return <form className="space-y-3 rounded-xl border border-border p-4" onSubmit={event => { event.preventDefault(); void perform(async () => {
++    await client.scratchpad.update({itemId: item.id, title: title.trim(), notes}); await reload(); setSaved(true);
++  }); }}>
++    <Field><FieldLabel htmlFor={`note-title-${item.id}`}>Title</FieldLabel><Input id={`note-title-${item.id}`} value={title} maxLength={200} disabled={busy} onChange={event => { setTitle(event.target.value); setSaved(false); }} /></Field>
++    <Field><FieldLabel htmlFor={`note-body-${item.id}`}>Note</FieldLabel><Textarea id={`note-body-${item.id}`} value={notes} maxLength={4000} rows={3} disabled={busy} onChange={event => { setNotes(event.target.value); setSaved(false); }} /></Field>
++    <div className="flex flex-wrap items-center gap-3"><Button type="submit" variant="outline" disabled={busy || !title.trim()}>Save note</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => {
++      if (!window.confirm(`Delete “${item.title}”?`)) return;
++      void perform(async () => { await client.scratchpad.remove({itemId: item.id}); await reload(); });
++    }}>Delete note</Button>{saved ? <span role="status" className="text-sm text-muted-foreground">Saved.</span> : null}</div>
++  </form>;
++}

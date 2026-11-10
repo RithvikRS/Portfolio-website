@@ -762,6 +762,316 @@
           "max-file": "2"
         }
       }
+    },
+    "rakazo_db": {
+      "image": "postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395",
+      "user": "70:70",
+      "networks": [
+        "swarm_rakazo_data"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "512M",
+            "cpus": "0.75"
+          }
+        },
+        "update_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "failure_action": "pause",
+          "monitor": "60s"
+        },
+        "rollback_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "monitor": "60s"
+        }
+      },
+      "environment": {
+        "POSTGRES_USER": "rakazo",
+        "POSTGRES_DB": "rakazo",
+        "POSTGRES_PASSWORD_FILE": "/run/secrets/rakazo_database_owner_password"
+      },
+      "secrets": [
+        "rakazo_database_owner_password"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/swarm/rakazo_db",
+          "target": "/var/lib/postgresql"
+        },
+        {
+          "type": "tmpfs",
+          "target": "/var/run/postgresql",
+          "tmpfs": {
+            "size": 16777216
+          }
+        },
+        {
+          "type": "tmpfs",
+          "target": "/tmp",
+          "tmpfs": {
+            "size": 16777216
+          }
+        }
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "rakazo",
+          "-d",
+          "rakazo"
+        ],
+        "interval": "20s",
+        "timeout": "5s",
+        "start_period": "30s",
+        "retries": 5
+      }
+    },
+    "rakazo_api": {
+      "image": "ghcr.io/rithvikrs/portfolio-website:rakazo-workspace-pending@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "user": "1000:1000",
+      "networks": [
+        "swarm_rakazo_app",
+        "swarm_rakazo_data"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "1024M",
+            "cpus": "1.0"
+          }
+        },
+        "update_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "failure_action": "pause",
+          "monitor": "60s"
+        },
+        "rollback_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "monitor": "60s"
+        }
+      },
+      "command": [
+        "node",
+        "/rakazo-entrypoint.mjs",
+        "api"
+      ],
+      "configs": [
+        {
+          "source": "rakazo_entrypoint",
+          "target": "/rakazo-entrypoint.mjs"
+        }
+      ],
+      "environment": {
+        "NODE_ENV": "production",
+        "WORKSPACE_ONLY": "true",
+        "DATA_DIR": "/data",
+        "API_HOST": "0.0.0.0",
+        "API_PORT": "3100",
+        "API_URL": "https://rakazo.144.24.135.201.sslip.io",
+        "BETTER_AUTH_URL": "https://rakazo.144.24.135.201.sslip.io",
+        "WEB_ORIGIN": "https://rakazo.144.24.135.201.sslip.io",
+        "OIDC_ISSUER": "https://rithvik.ddns.net/auth",
+        "OIDC_CLIENT_ID": "portfolio-rakazo",
+        "OIDC_NAME": "Authelia",
+        "OIDC_SCOPES": "openid email profile",
+        "OIDC_ALLOW_SIGNUP_BYPASS": "false",
+        "AUTH_PASSWORD_ENABLED": "false",
+        "SIGNUPS_ENABLED": "true",
+        "CONTENT_ENCRYPTION": "on",
+        "MASTER_KEY_PROVIDER": "local",
+        "SECRET_STORE": "encrypted",
+        "SANDBOX_PROVIDER": "none",
+        "CLOUD_AGENT_PROVIDER": "none",
+        "USER_DEVICES_ENABLED": "false",
+        "WAKEUP_DRIVER": "graphile",
+        "EMAIL_PROVIDER": "none",
+        "MCP_STDIO_ENABLED": "false",
+        "MCP_ALLOW_PRIVATE_ENDPOINT": "false",
+        "MEDIA_GENERATION_PROVIDER": "disabled",
+        "NODE_OPTIONS": "--max-old-space-size=768",
+        "DB_POOL_MAX": "5",
+        "LOG_LEVEL": "warn"
+      },
+      "secrets": [
+        "rakazo_database_url",
+        "rakazo_encryption_key",
+        "rakazo_auth_secret",
+        "rakazo_screen_secret",
+        "rakazo_oidc_secret",
+        "rakazo_owner_email"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/swarm/rakazo_api",
+          "target": "/data"
+        },
+        {
+          "type": "tmpfs",
+          "target": "/tmp",
+          "tmpfs": {
+            "size": 67108864
+          }
+        }
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3100/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ],
+        "interval": "20s",
+        "timeout": "5s",
+        "start_period": "90s",
+        "retries": 5
+      }
+    },
+    "rakazo_web": {
+      "image": "ghcr.io/rithvikrs/portfolio-website:rakazo-workspace-pending@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "user": "1000:1000",
+      "networks": [
+        "swarm_rakazo_app"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "stop_grace_period": "45s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "512M",
+            "cpus": "0.5"
+          }
+        },
+        "update_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "failure_action": "pause",
+          "monitor": "60s"
+        },
+        "rollback_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "monitor": "60s"
+        }
+      },
+      "command": [
+        "node",
+        "/rakazo-entrypoint.mjs",
+        "web"
+      ],
+      "configs": [
+        {
+          "source": "rakazo_entrypoint",
+          "target": "/rakazo-entrypoint.mjs"
+        }
+      ],
+      "environment": {
+        "NODE_ENV": "production",
+        "WORKSPACE_ONLY": "true",
+        "RAKAZO_HOST": "rakazo.144.24.135.201.sslip.io",
+        "RAKAZO_ALLOWED_HOSTS": "rakazo_web,localhost,127.0.0.1",
+        "API_PROXY_TARGET": "http://rakazo_api:3100",
+        "WEB_ORIGIN": "https://rakazo.144.24.135.201.sslip.io",
+        "NODE_OPTIONS": "--max-old-space-size=320"
+      },
+      "secrets": [
+        "rakazo_screen_secret"
+      ],
+      "volumes": [
+        {
+          "type": "tmpfs",
+          "target": "/tmp",
+          "tmpfs": {
+            "size": 67108864
+          }
+        },
+        {
+          "type": "tmpfs",
+          "target": "/app/apps/web/asset-archive",
+          "tmpfs": {
+            "size": 134217728
+          }
+        },
+        {
+          "type": "tmpfs",
+          "target": "/app/apps/web/node_modules/.vite-temp",
+          "tmpfs": {
+            "size": 67108864
+          }
+        }
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5173/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ],
+        "interval": "20s",
+        "timeout": "5s",
+        "start_period": "90s",
+        "retries": 5
+      }
     }
   },
   "networks": {
@@ -810,6 +1120,16 @@
       "driver": "overlay",
       "attachable": false,
       "internal": true
+    },
+    "swarm_rakazo_app": {
+      "driver": "overlay",
+      "attachable": false,
+      "internal": true
+    },
+    "swarm_rakazo_data": {
+      "driver": "overlay",
+      "attachable": false,
+      "internal": true
     }
   },
   "caddy_networks": [
@@ -818,7 +1138,8 @@
     "swarm_notes_edge",
     "swarm_vault_edge",
     "swarm_models_edge",
-    "swarm_rakazo_edge"
+    "swarm_rakazo_edge",
+    "swarm_rakazo_app"
   ],
   "configs": {
     "access_console": {
@@ -826,6 +1147,9 @@
     },
     "rakazo_edge": {
       "file": "deploy/rakazo/edge.mjs"
+    },
+    "rakazo_entrypoint": {
+      "file": "deploy/rakazo/entrypoint.mjs"
     }
   },
   "secrets": {
@@ -858,6 +1182,27 @@
     },
     "omniroute_edge": {
       "file": ".secrets/omniroute/edge.cfg"
+    },
+    "rakazo_database_owner_password": {
+      "file": ".secrets/rakazo/database_owner_password"
+    },
+    "rakazo_database_url": {
+      "file": ".secrets/rakazo/database_url"
+    },
+    "rakazo_encryption_key": {
+      "file": ".secrets/rakazo/encryption_key"
+    },
+    "rakazo_auth_secret": {
+      "file": ".secrets/rakazo/auth_secret"
+    },
+    "rakazo_screen_secret": {
+      "file": ".secrets/rakazo/screen_secret"
+    },
+    "rakazo_oidc_secret": {
+      "file": ".secrets/rakazo/oidc_secret"
+    },
+    "rakazo_owner_email": {
+      "file": ".secrets/rakazo/owner_email"
     }
   },
   "volumes": {},
@@ -955,6 +1300,22 @@
         303,
         401
       ]
+    },
+    {
+      "url": "https://rakazo.144.24.135.201.sslip.io/api/auth/get-session",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
+    },
+    {
+      "url": "https://rakazo.144.24.135.201.sslip.io/computer/",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
     }
   ],
   "internal_checks": [
@@ -964,6 +1325,13 @@
     "http://vault_sso:4180/ready",
     "http://access_console:8080/health",
     "http://omniroute_sso:4180/ready",
-    "http://rakazo_pilot:8080/healthz"
-  ]
+    "http://rakazo_pilot:8080/healthz",
+    "http://rakazo_api:3100/ready",
+    "http://rakazo_web:5173/"
+  ],
+  "caddy_network_aliases": {
+    "swarm_rakazo_app": [
+      "rithvik.ddns.net"
+    ]
+  }
 }
