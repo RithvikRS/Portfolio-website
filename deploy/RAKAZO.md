@@ -74,7 +74,7 @@ Use `scripts/stage-rakazo-gvisor.py` for the earlier checksum-pinned runtime/com
 
 The private backup refresh kit archives the controller environment, engine configuration, user service definitions and custom runtime helpers. It exempts only the exact read-only bridge socket mount and excludes `/srv/swarm/.rakazo-runtime-cache.img`. That file contains disposable images **and the disposable pilot home**. Do not store important files in this desktop. Before durable use, add coordinated workspace snapshots and a restore rehearsal; existing production application backups retain their coverage.
 
-A private checkpoint archive and verification reports are saved on the PC outside Git. Keep tokens and private environment files there. Rebuild disposable images/cache during recovery; do not treat the cache exclusion as durable workspace backup.
+Keep the private checkpoint archive and verification reports on the PC outside Git. Refresh the full cluster recovery kit with `Backup-Cluster.ps1`; Ampere stages temporary archives on its data filesystem as described in [worker backup staging](BACKUPS.md#worker-backup-staging). Keep tokens and private environment files outside Git. Rebuild disposable images/cache during recovery; do not treat the cache exclusion as durable workspace backup.
 
 ## Previous Incus attempt
 
