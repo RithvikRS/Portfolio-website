@@ -1,0 +1,467 @@
+diff --git a/apps/api/src/app.ts b/apps/api/src/app.ts
+index 1879c0d..8253785 100644
+--- a/apps/api/src/app.ts
++++ b/apps/api/src/app.ts
+@@ -166,6 +166,7 @@ import { configuredEmailProvider } from "./email.js";
+ import type { AppEnv } from "./env.js";
+ import { loadEnv } from "./env.js";
+ import { healthRoutes } from "./health.js";
++import { disabledWorkspaceJobs, disabledWorkspaceRuntime, workspaceOwnerAllowed, workspaceRequestAllowed, WORKSPACE_ONLY_MESSAGE } from "./workspace-only.js";
+ import { homeRetentionSweep } from "./home-retention.js";
+ import { startHourlySweep } from "./hourly-sweep.js";
+ import { trackInFlightRequests } from "./in-flight-requests.js";
+@@ -358,7 +359,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
+     },
+   });
+ 
+-  const jobKind = env.wakeupDriver;
++  const jobKind = env.workspaceOnly ? "disabled" : env.wakeupDriver;
+   const inMemoryJobs = jobKind === "memory" ? new InMemoryJobQueue() : undefined;
+   // prismaOverride skips createDb, so there is no shared pool; keep a bounded one for jobs.
+   let ownedJobPool: Pool | undefined;
+@@ -371,8 +372,8 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
+   const jobPool = created.pool ?? ownedJobPool;
+   const shutdown = new AbortController();
+   // Chat starts in the process that receives it; the worker only takes what this one can't.
+-  const runs = inMemoryJobs ? undefined : new RunStarter(realtime, { signal: shutdown.signal });
+-  const jobs =
++  const runs = env.workspaceOnly || inMemoryJobs ? undefined : new RunStarter(realtime, { signal: shutdown.signal });
++  const jobs = env.workspaceOnly ? disabledWorkspaceJobs() :
+     inMemoryJobs ??
+     new RunJobPublisher(
+       prisma,
+@@ -450,7 +451,9 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
+     })
+       ? new ChatSdkMessagingSurface(messagingPlatforms)
+       : undefined);
+-  const { messaging, installations: messagingInstallations } = messagingOverride
++  const { messaging, installations: messagingInstallations } = env.workspaceOnly
++    ? { messaging: undefined, installations: undefined }
++    : messagingOverride
+     ? { messaging: messagingOverride, installations: undefined }
+     : installedMessaging(prisma, secrets, env, legacyMessaging, jobs);
+   const configuredEmail = emailOverride ?? configuredEmailProvider(env);
+@@ -512,8 +515,8 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
+     mcp,
+     ...connectorOverrides,
+   ]);
+-  integrationSettings.warmDirectories();
+-  const runtime =
++  if (!env.workspaceOnly) integrationSettings.warmDirectories();
++  const runtime = env.workspaceOnly ? disabledWorkspaceRuntime() :
+     runtimeOverride ??
+     (env.agentRuntime === "scripted"
+       ? new ScriptedAgentRuntime()
+@@ -831,6 +834,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
+       openSignup: env.messagingOpenSignup,
+     },
+     env: {
++      workspaceOnly: env.workspaceOnly,
+       phoneCallsEnabled: env.phoneCallsEnabled,
+       phoneCallRingSeconds: env.phoneCallRingSeconds,
+       ticketBoardEnabled,
+@@ -861,6 +865,13 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
+     clientInterceptors: [onError((error, { path, signal }) => handleRpcError(error, path, signal))],
+   });
+   const app = new Hono();
++  if (env.workspaceOnly) {
++    app.use("*", async (c, next) => {
++      if (!workspaceRequestAllowed(c.req.method, c.req.path))
++        return c.json({ code: "FORBIDDEN", message: WORKSPACE_ONLY_MESSAGE }, 403);
++      return next();
++    });
++  }
+   const inFlight = trackInFlightRequests();
+   app.use("*", inFlight.middleware);
+   app.use("*", requestLogging(logger));
+@@ -890,6 +901,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
+       sso: env.oidc
+         ? { name: env.oidc.name, availability: auth.ssoAvailability() ?? "checking" }
+         : null,
++      ...(env.workspaceOnly ? { workspaceOnly: true } : {}),
+       passwordAuth: env.passwordAuth !== false,
+       passwordReset: env.passwordAuth !== false && Boolean(email),
+       resetUrl:
+@@ -965,7 +977,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
+   const requestSession = async (request: Request) => {
+     // The bearer plugin turns a signed `Authorization: Bearer` into the session cookie.
+     const session = await auth.api.getSession({ headers: request.headers });
+-    if (!session?.user) return null;
++    if (!session?.user || !workspaceOwnerAllowed(env.workspaceOwnerEmail, session.user)) return null;
+     const actor = await actorFromMembership(
+       requireMembership(
+         prisma,
+@@ -1474,7 +1486,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
+     runtime,
+     awaitIdle: inMemoryJobs ? () => inMemoryJobs.awaitIdle() : undefined,
+     backgroundFailures: inMemoryJobs ? () => inMemoryJobs.failureCounts() : undefined,
+-    handleUpgrade: userDeviceHub?.handleUpgrade,
++    handleUpgrade: env.workspaceOnly ? undefined : userDeviceHub?.handleUpgrade,
+     stop: async () => {
+       // Handlers still running would otherwise query the pool after it ends.
+       const requestsSettled = settleWithTimeout(inFlight.settled(), REQUEST_DRAIN_MS);
+diff --git a/apps/api/src/env.ts b/apps/api/src/env.ts
+index 646d567..201aee2 100644
+--- a/apps/api/src/env.ts
++++ b/apps/api/src/env.ts
+@@ -30,6 +30,7 @@ import {
+   uploadSizeFromEnv,
+ } from "@rakazo/core";
+ import { monitoringPseudonymSecret } from "@rakazo/logging";
++import { workspaceOwnerEmail } from "./workspace-only.js";
+ 
+ export { resolveCloudAgentProvider, resolveSandboxProvider } from "@rakazo/adapters";
+ 
+@@ -37,6 +38,8 @@ export { resolveCloudAgentProvider, resolveSandboxProvider } from "@rakazo/adapt
+ const DEFAULT_WEB_ORIGIN = "http://127.0.0.1:5173";
+ 
+ export interface AppEnv {
++  workspaceOnly?: boolean;
++  workspaceOwnerEmail?: string;
+   passwordAuth?: boolean;
+   /** Opt-in Have I Been Pwned check for new passwords. Default off: it calls an outside service. */
+   breachedPasswordCheck?: boolean;
+@@ -198,6 +201,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
+     }
+   }
+   for (const key of [
++    "WORKSPACE_ONLY",
+     "AUTH_PASSWORD_ENABLED",
+     "AUTH_BREACHED_PASSWORD_CHECK_ENABLED",
+     "OIDC_ALLOW_SIGNUP_BYPASS",
+@@ -224,10 +228,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
+       : undefined;
+   const authSecret = resolveAuthSecret(source);
+   const webOrigin = resolveWebOrigin(source.WEB_ORIGIN, DEFAULT_WEB_ORIGIN, "WEB_ORIGIN");
+-  const sandboxProvider = resolveSandboxProvider(source);
+-  const cloudAgentProvider = resolveCloudAgentProvider(source);
++  const sandboxProvider = source.WORKSPACE_ONLY === "true" ? "none" : resolveSandboxProvider(source);
++  const cloudAgentProvider = source.WORKSPACE_ONLY === "true" ? "none" : resolveCloudAgentProvider(source);
+   const deploymentModel = resolveDeploymentModel(source);
+   return {
++    workspaceOnly: source.WORKSPACE_ONLY === "true",
++    workspaceOwnerEmail: workspaceOwnerEmail(source.WORKSPACE_ONLY === "true", source.SIGNUP_ALLOWLIST),
+     passwordAuth,
+     breachedPasswordCheck: source.AUTH_BREACHED_PASSWORD_CHECK_ENABLED === "true",
+     oidc,
+@@ -255,7 +261,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
+     dataDir: source.DATA_DIR ?? "./data",
+     piSessionRecording: source.PI_SESSION_RECORDING === "true",
+     ticketBoardEnabled: source.TICKET_BOARD_ENABLED === "true",
+-    userDevicesEnabled: source.USER_DEVICES_ENABLED !== "false",
++    userDevicesEnabled: source.WORKSPACE_ONLY !== "true" && source.USER_DEVICES_ENABLED !== "false",
+     navLinks: parseNavLinks(source.RAKAZO_NAV_LINKS),
+     adminEmails: list(source.RAKAZO_ADMIN_EMAILS).map((email) => email.toLowerCase()),
+     ...phoneCallSettings(source),
+diff --git a/apps/api/src/router.ts b/apps/api/src/router.ts
+index 5940cd7..539773b 100644
+--- a/apps/api/src/router.ts
++++ b/apps/api/src/router.ts
+@@ -119,6 +119,7 @@ export interface RouterDeps {
+   onEmailError?: (error: unknown) => void;
+   speechSummary?: VoiceDeps["speechSummary"];
+   env: {
++    workspaceOnly?: boolean;
+     ticketBoardEnabled?: boolean;
+     navLinks?: NavLink[];
+     adminEmails?: string[];
+diff --git a/apps/api/src/routes/bots.ts b/apps/api/src/routes/bots.ts
+index b3da1f1..6696560 100644
+--- a/apps/api/src/routes/bots.ts
++++ b/apps/api/src/routes/bots.ts
+@@ -1,3 +1,4 @@
++import { workspaceBotInputAllowed, WORKSPACE_ONLY_MESSAGE } from "../workspace-only.js";
+ import { randomBytes } from "node:crypto";
+ import { ORPCError } from "@orpc/server";
+ import { runContinueJob } from "@rakazo/adapter-kit";
+@@ -245,6 +246,7 @@ export function botIntroPrompt(input: {
+  * bot's own profile, and answering resumes the run as the user's turn.
+  */
+ export async function enqueueBotIntroRun(deps: RouterDeps, actor: Actor, bot: Bot): Promise<void> {
++  if (deps.env.workspaceOnly) return;
+   const threadId = bot.threadId;
+   if (!threadId) return;
+   // In the scripted test/eval runtime an automatic run would compete with the harness's next
+@@ -308,11 +310,15 @@ export function botsRoutes(ctx: RouterContext) {
+         return found;
+       }),
+       create: authed.bots.create.handler(async ({ context, input }) => {
++        if (deps.env.workspaceOnly && !workspaceBotInputAllowed(input))
++          throw new ORPCError("FORBIDDEN", { message: WORKSPACE_ONLY_MESSAGE });
+         let bot: Bot;
+         try {
+           // Older apps always send Original, which would pin every new bot to it.
+           const { avatarSet: _ignored, ...request } = input;
+-          bot = await repos.createBot(context.actor, request);
++          bot = await repos.createBot(context.actor, deps.env.workspaceOnly
++            ? { ...request, notifyOnFinish: false, dailyCheckIns: false, fleetManagement: false, computerMode: "team" }
++            : request);
+         } catch (error) {
+           throw mapSpaceLifecycleError(error);
+         }
+@@ -384,6 +390,8 @@ export function botsRoutes(ctx: RouterContext) {
+         return { ok: true as const };
+       }),
+       update: authed.bots.update.handler(async ({ context, input }) => {
++        if (deps.env.workspaceOnly && !workspaceBotInputAllowed(input))
++          throw new ORPCError("FORBIDDEN", { message: WORKSPACE_ONLY_MESSAGE });
+         const existing = await repos.getBot(context.actor, input.botId);
+         if (input.sectionId) {
+           const section = await deps.prisma.botSection.findFirst({
+@@ -396,7 +404,7 @@ export function botsRoutes(ctx: RouterContext) {
+           });
+           if (!section) throw new IsolationError();
+         }
+-        const modelChange = await validateBotModelChange(botModelValidation(context.actor), {
++        const modelChange = deps.env.workspaceOnly ? { ok: true as const } : await validateBotModelChange(botModelValidation(context.actor), {
+           userId: context.actor.userId,
+           spaceId: context.actor.spaceId,
+           provider:
+diff --git a/apps/api/src/routes/context.ts b/apps/api/src/routes/context.ts
+index e24f3fa..241a152 100644
+--- a/apps/api/src/routes/context.ts
++++ b/apps/api/src/routes/context.ts
+@@ -48,6 +48,7 @@ import { createRoutineAnnouncer } from "../routines.js";
+ import { procedureSecurityEvent } from "../security-audit.js";
+ import { createTaughtSkillsService } from "../taught-skills.js";
+ import { meDto } from "./shared.js";
++import { workspaceRequestAllowed, WORKSPACE_ONLY_MESSAGE } from "../workspace-only.js";
+ 
+ /**
+  * Runs an authenticated procedure with row-level security scoped to the actor's
+@@ -360,7 +361,9 @@ export function createRouterContext(deps: RouterDeps) {
+   const agentSkills = createAgentSkillsService(deps.prisma);
+ 
+   const authed = os
+-    .use(async ({ context, next }) => {
++    .use(async ({ context, next, path }) => {
++      if (deps.env.workspaceOnly && !workspaceRequestAllowed("POST", "/rpc/" + path.join("/")))
++        throw new ORPCError("FORBIDDEN", { message: WORKSPACE_ONLY_MESSAGE });
+       const actor = context.actor;
+       if (!actor) throw new ORPCError("UNAUTHORIZED");
+       return asTenant(actor, () => next({ context: { ...context, actor } }));
+diff --git a/apps/api/src/routes/models.ts b/apps/api/src/routes/models.ts
+index f63886d..36b80e2 100644
+--- a/apps/api/src/routes/models.ts
++++ b/apps/api/src/routes/models.ts
+@@ -68,8 +68,9 @@ export function modelsRoutes(ctx: RouterContext) {
+   } = ctx;
+   return {
+     models: {
+-      list: authed.models.list.handler(async ({ context }) => chatCatalog(context.actor)),
++      list: authed.models.list.handler(async ({ context }) => deps.env.workspaceOnly ? [] : chatCatalog(context.actor)),
+       credentials: authed.models.credentials.handler(async ({ context }) => {
++        if (deps.env.workspaceOnly) return [];
+         const [rows, main] = await Promise.all([
+           deps.prisma.userModelCredential.findMany({
+             where: { userId: context.actor.userId },
+diff --git a/apps/api/src/routes/shared.ts b/apps/api/src/routes/shared.ts
+index c0fa39d..ebff25f 100644
+--- a/apps/api/src/routes/shared.ts
++++ b/apps/api/src/routes/shared.ts
+@@ -56,7 +56,8 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
+     spaceId: actor.spaceId,
+     isDeploymentOwner: false,
+     isAdmin: admin,
+-    needsModel: setup.needsModel,
++    ...(deps.env.workspaceOnly ? { workspaceOnly: true } : {}),
++    needsModel: !deps.env.workspaceOnly && setup.needsModel,
+     defaultProvider: canonicalPiProviderId(setup.model?.provider ?? deps.env.defaultProvider),
+     defaultModel: setup.model?.modelId ?? deps.env.defaultModel,
+     // Set only while the active default is the deployment's own, running on host credentials.
+diff --git a/apps/api/src/workspace-only.test.ts b/apps/api/src/workspace-only.test.ts
+new file mode 100644
+index 0000000..16c7daf
+--- /dev/null
++++ b/apps/api/src/workspace-only.test.ts
+@@ -0,0 +1,83 @@
++import { describe, expect, it, vi } from "vitest";
++import { Hono } from "hono";
++import type { AgentRunRequest, BackgroundJob } from "@rakazo/adapter-kit";
++import { workspaceBotInputAllowed, disabledWorkspaceJobs, disabledWorkspaceRuntime, workspaceOwnerAllowed, workspaceOwnerEmail, workspaceRequestAllowed } from "./workspace-only.js";
++import { loadEnv } from "./env.js";
++
++const owner = "owner@example.test";
++const base = { DATABASE_URL: "postgres://test:test@localhost/test", NODE_ENV: "test" };
++
++describe("workspace-only deployment boundary", () => {
++  it("allows inert profiles but rejects automation and model configuration", () => {
++    expect(workspaceBotInputAllowed({ name: "Draft", instructions: "Plan later", dailyCheckIns: false, fleetManagement: false })).toBe(true);
++    for (const input of [{dailyCheckIns:true}, {fleetManagement:true}, {autoSpeak:true}, {modelProvider:"test",modelId:"test"}, {teamChatRules:"run"}, {disabledBuiltinTools:[]}]) {
++      expect(workspaceBotInputAllowed(input)).toBe(false);
++    }
++    expect(workspaceRequestAllowed("POST", "/rpc/bots/duplicate")).toBe(false);
++  });
++  it("is opt-in, validates its flag, requires one exact owner, and disables device access", () => {
++    expect(loadEnv(base).workspaceOnly).toBe(false);
++    expect(() => loadEnv({ ...base, WORKSPACE_ONLY: "1" })).toThrow("WORKSPACE_ONLY");
++    expect(() => loadEnv({ ...base, WORKSPACE_ONLY: "true" })).toThrow("SIGNUP_ALLOWLIST");
++    const env = loadEnv({ ...base, WORKSPACE_ONLY: "true", SIGNUP_ALLOWLIST: owner, USER_DEVICES_ENABLED: "true", SANDBOX_PROVIDER: "docker", CLOUD_AGENT_PROVIDER: "emulator" });
++    expect(env.workspaceOnly).toBe(true);
++    expect(env.workspaceOwnerEmail).toBe(owner);
++    expect(env.userDevicesEnabled).toBe(false);
++    expect(env.sandboxProvider).toBe("none");
++    expect(env.cloudAgentProvider).toBe("none");
++    for (const value of ["@example.test", "first@example.test,second@example.test", "", "not-email"]) {
++      expect(() => workspaceOwnerEmail(true, value)).toThrow();
++    }
++  });
++  it("requires the admitted owner's currently verified email for native app requests", () => {
++    expect(workspaceOwnerAllowed(owner, { email: owner, emailVerified: true })).toBe(true);
++    expect(workspaceOwnerAllowed(owner, { email: owner, emailVerified: false })).toBe(false);
++    expect(workspaceOwnerAllowed(owner, { email: "other@example.test", emailVerified: true })).toBe(false);
++  });
++  it.each(["spaces/create", "spaces/rename", "spaces/remove", "organizations/create", "bots/create", "bots/update", "scratchpad/create", "threads/messages"])("keeps reviewed workspace operation %s available", path => {
++    expect(workspaceRequestAllowed("POST", "/rpc/" + path)).toBe(true);
++  });
++  it.each([
++    "/rpc/models/connect", "/rpc/models/probeOpenAiCompatible", "/rpc/models/probeCatalog", "/rpc/models/beginOAuth", "/rpc/models/completeOAuth",
++    "/rpc/threads/send", "/rpc/threads/sendWithRoutines", "/rpc/threads/followUp", "/rpc/threads/answer",
++    "/rpc/routines/create", "/rpc/routines/update", "/rpc/routines/run", "/rpc/connections/begin", "/rpc/mcp/add", "/rpc/memory/connectProvider",
++    "/rpc/voice/connect", "/rpc/voice/prepare", "/rpc/computer/start", "/rpc/computerProvider/configure", "/rpc/bots/importCreate", "/rpc/onboarding/start",
++    "/rpc", "/rpc/batch", "/rpc/spaces/create/extra", "/rpc/spaces%2fcreate", "/rpc/spaces/create%00", "/rpc//spaces/create",
++    "/api/account/import", "/api/v1/bots/example/webhook", "/api/v1/phone/inbound", "/api/devices/connect", "/api/voice/transcribe", "/novnc/session/control/example",
++    "/api/auth/sign-up/email", "/api/auth/sign-in/email", "/api/auth/update-user", "/api/auth/link-social", "/api/auth/organization/invite-member",
++  ])("denies %s before handlers, including future methods and alternate protocols", async path => {
++    const reached = vi.fn();
++    const app = new Hono();
++    app.use("*", async (c, next) => {
++      if (!workspaceRequestAllowed(c.req.method, c.req.path)) return c.text("disabled", 403);
++      return next();
++    });
++    app.all("*", c => { reached(); return c.text("unexpected"); });
++    expect((await app.request(path, { method: "POST", body: "{}" })).status).toBe(403);
++    expect(reached).not.toHaveBeenCalled();
++  });
++  it("keeps only the necessary OIDC/session paths and rejects other methods", () => {
++    expect(workspaceRequestAllowed("POST", "/api/auth/sign-in/social")).toBe(true);
++    expect(workspaceRequestAllowed("POST", "/api/auth/sign-in/oauth2")).toBe(true);
++    expect(workspaceRequestAllowed("GET", "/api/auth/callback/oidc")).toBe(true);
++    expect(workspaceRequestAllowed("GET", "/api/auth/get-session")).toBe(true);
++    expect(workspaceRequestAllowed("POST", "/api/auth/sign-out")).toBe(true);
++    for (const method of ["PUT", "DELETE", "PATCH", "CONNECT", "TRACE"]) {
++      expect(workspaceRequestAllowed(method, "/rpc/spaces/create")).toBe(false);
++    }
++  });
++  it("refuses every background job instead of leaving work queued for a later worker", async () => {
++    const jobs = disabledWorkspaceJobs();
++    for (const name of ["run.continue", "routine.execute", "computer.resume", "anything-new"]) {
++      await expect(jobs.enqueue({ name, payload: {} } as BackgroundJob)).rejects.toThrow("disabled");
++    }
++    await jobs.cancel("run:test");
++    await jobs.close();
++  });
++  it("refuses the runtime itself even if called outside the HTTP dispatcher", async () => {
++    const runtime = disabledWorkspaceRuntime();
++    expect(runtime.describe().capabilities.tools).toBe(false);
++    const events = runtime.run({ runId: "test", prompt: "do work" } as AgentRunRequest);
++    await expect(events[Symbol.asyncIterator]().next()).rejects.toThrow("disabled");
++  });
++});
+diff --git a/apps/api/src/workspace-only.ts b/apps/api/src/workspace-only.ts
+new file mode 100644
+index 0000000..1a5ce94
+--- /dev/null
++++ b/apps/api/src/workspace-only.ts
+@@ -0,0 +1,77 @@
++import type { AgentRuntime, JobPublisher } from "@rakazo/adapter-kit";
++
++export const WORKSPACE_ONLY_MESSAGE = "Model connections and agent execution are disabled on this deployment.";
++
++// Exact procedures, not prefixes: future methods stay closed until reviewed.
++const RPC = new Set([
++  "health", "me",
++  "spaces/list", "spaces/create", "spaces/rename", "spaces/remove",
++  "organizations/list", "organizations/create", "organizations/rename", "organizations/remove",
++  "bots/list", "bots/listArchived", "bots/get", "bots/create", "bots/reorder",
++  "bots/update", "bots/restoreInstructions", "bots/archive", "bots/restore", "bots/remove",
++  "groups/list", "groups/listArchived", "groups/get", "groups/create", "groups/duplicate",
++  "groups/update", "groups/archive", "groups/restore", "groups/remove",
++  "botSections/list", "botSections/create", "botSections/update", "botSections/remove",
++  "threads/head", "threads/get", "threads/messages", "threads/subscribe", "threads/markRead", "threads/markUnread",
++  "preferences/update", "preferences/adoptTimezone", "notifications/subscribe",
++  "models/list", "models/credentials", "routines/list",
++  "pages/list", "pages/get", "pages/rename", "pages/pin", "pages/remove",
++  "artifacts/list", "artifacts/listSpace", "artifacts/listVersions", "artifacts/get", "artifacts/getById", "artifacts/remove",
++  "search/query", "runs/list", "usage/list", "usage/summary", "spaceSettings/overrides",
++  "availability/items", "agentSkills/list", "agentSkills/get", "memory/list", "memory/budget",
++  "scratchpad/list", "scratchpad/create", "scratchpad/update", "scratchpad/remove",
++]);
++const AUTH_GET = new Set([
++  "/api/auth/capabilities", "/api/auth/get-session", "/api/auth/list-sessions",
++  "/api/auth/list-accounts", "/api/auth/account-security", "/api/auth/callback/oidc",
++]);
++const AUTH_POST = new Set([
++  "/api/auth/sign-in/social", "/api/auth/sign-in/oauth2", "/api/auth/callback/oidc", "/api/auth/sign-out",
++  "/api/auth/revoke-session", "/api/auth/revoke-sessions", "/api/auth/revoke-other-sessions",
++]);
++
++export function workspaceRequestAllowed(method: string, path: string): boolean {
++  if (path.includes("%") || path.includes("\\") || path.includes("//")) return false;
++  if (method === "GET" && ["/health", "/ready", "/internal/health"].includes(path)) return true;
++  if (method === "GET" && AUTH_GET.has(path)) return true;
++  if (method === "POST" && AUTH_POST.has(path)) return true;
++  return ["GET", "POST"].includes(method) && path.startsWith("/rpc/") && RPC.has(path.slice(5));
++}
++
++export function workspaceOwnerEmail(enabled: boolean, allowlist: string | undefined): string | undefined {
++  if (!enabled) return undefined;
++  const value = allowlist?.trim().toLowerCase();
++  if (!value || !/^[^@\s,]+@[^@\s,]+\.[^@\s,]+$/.test(value)) {
++    throw new Error("WORKSPACE_ONLY requires SIGNUP_ALLOWLIST to contain exactly one owner email");
++  }
++  return value;
++}
++
++export function workspaceOwnerAllowed(owner: string | undefined, user: { email: string; emailVerified: boolean }): boolean {
++  return owner === undefined || (user.emailVerified === true && user.email.toLowerCase() === owner);
++}
++
++// Never publish a deferred job that could run when a worker is later introduced.
++export function disabledWorkspaceJobs(): JobPublisher {
++  return {
++    async enqueue() { throw new Error(WORKSPACE_ONLY_MESSAGE); },
++    async cancel() {},
++    async close() {},
++  };
++}
++
++export function disabledWorkspaceRuntime(): AgentRuntime {
++  return {
++    describe: () => ({ id: "workspace-only", contractVersion: "1", adapterVersion: "1",
++      capabilities: { streaming: false, compaction: false, tools: false, scripted: false } }),
++    async *run() { throw new Error(WORKSPACE_ONLY_MESSAGE); },
++    async abort() {},
++  };
++}
++
++// Profile edits remain local; no dormant automation or model configuration is accepted.
++export function workspaceBotInputAllowed(input: Record<string, unknown>): boolean {
++  const disabled = ["dailyCheckIns", "fleetManagement", "autoSpeak", "teamChatAmbientEnabled", "crossSpaceCommunication"];
++  if (disabled.some(key => input[key] !== undefined && input[key] !== false)) return false;
++  return !["modelProvider", "modelId", "thinkingLevel", "voiceId", "teamChatRules", "disabledBuiltinTools"].some(key => input[key] !== undefined);
++}
+diff --git a/packages/contracts/src/auth.ts b/packages/contracts/src/auth.ts
+index e28dce3..4302918 100644
+--- a/packages/contracts/src/auth.ts
++++ b/packages/contracts/src/auth.ts
+@@ -7,6 +7,7 @@ export const authCapabilitiesSchema = z.object({
+       availability: z.enum(["available", "unavailable", "checking"]),
+     })
+     .nullable(),
++  workspaceOnly: z.boolean().optional(),
+   passwordAuth: z.boolean(),
+   passwordReset: z.boolean(),
+   resetUrl: z.string().url().nullable(),
+diff --git a/packages/contracts/src/domain.ts b/packages/contracts/src/domain.ts
+index b4d5dd4..b280676 100644
+--- a/packages/contracts/src/domain.ts
++++ b/packages/contracts/src/domain.ts
+@@ -1938,6 +1938,7 @@ export const MeSchema = z.object({
+   isDeploymentOwner: z.boolean(),
+   /** Listed in RAKAZO_ADMIN_EMAILS with a verified email: reviews plugins, adds stdio MCP servers, grants access. */
+   isAdmin: z.boolean().default(false),
++  workspaceOnly: z.boolean().optional(),
+   needsModel: z.boolean(),
+   defaultProvider: z.string().nullable(),
+   defaultModel: z.string().nullable(),

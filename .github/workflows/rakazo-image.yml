@@ -1,0 +1,22 @@
+name: Publish tested Rakazo image
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: rakazo-image-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Publish the verified native ARM build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAKAZO_IMAGE_DOWNLOAD_URL: ${{ secrets.RAKAZO_IMAGE_DOWNLOAD_URL }}
+        run: python3 scripts/publish-rakazo-image.py

@@ -112,7 +112,7 @@ def catalog_image(service, settings):
 
 def load_catalog(root=ROOT):
     catalog = json.loads((root / 'deploy/swarm-services.json').read_text(encoding='utf-8'))
-    allowed = {'services', 'networks', 'volumes', 'configs', 'secrets', 'caddy_networks', 'http_checks', 'internal_checks'}
+    allowed = {'services', 'networks', 'volumes', 'configs', 'secrets', 'caddy_networks', 'caddy_network_aliases', 'http_checks', 'internal_checks'}
     if set(catalog) - allowed:
         raise RuntimeError('Unknown service catalog keys: ' + ', '.join(sorted(set(catalog) - allowed)))
     return catalog
@@ -136,6 +136,20 @@ def add_catalog(result, catalog, pins, release, root, data_constraint, storage_n
     if not isinstance(caddy_networks, list) or not set(caddy_networks) <= set(networks):
         raise RuntimeError('Caddy can join only networks declared in the catalog.')
     result['services']['caddy']['networks'].extend(caddy_networks)
+    aliases = catalog.get('caddy_network_aliases', {})
+    if not isinstance(aliases, dict) or not set(aliases) <= set(caddy_networks):
+        raise RuntimeError('Caddy aliases require an attached catalog network.')
+    if aliases:
+        for network, names in aliases.items():
+            if (not networks[network].get('internal') or not isinstance(names, list) or not names or
+                    any(not isinstance(name, str) for name in names) or
+                    len(names) != len(set(names)) or any(
+                    not re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?', name) or
+                    '..' in name or '.' not in name for name in names)):
+                raise RuntimeError('Caddy DNS aliases require valid hostnames on an internal network.')
+        result['services']['caddy']['networks'] = {
+            name: {'aliases': aliases[name]} if name in aliases else {}
+            for name in result['services']['caddy']['networks']}
     for name, volume in catalog.get('volumes', {}).items():
         if name in result['volumes'] or not volume.get('external') or not volume.get('name'):
             raise RuntimeError('Use unique external volumes with explicit names in the catalog.')

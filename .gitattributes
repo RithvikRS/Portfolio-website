@@ -6,3 +6,6 @@
 
 # Runtime scripts also execute directly on Linux.
 *.py text eol=lf
+
+# Preserve patch bytes; unified-diff context lines intentionally contain spaces.
+*.patch text eol=lf -whitespace

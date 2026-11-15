@@ -87,6 +87,11 @@ identity_providers:
         # OmniRoute validates admission from the ID token, not userinfo.
         id_token: ['email', 'email_verified']
     authorization_policies:
+      rakazo_owner:
+        default_policy: 'deny'
+        rules:
+          - policy: 'two_factor'
+            subject: ['user:rithvik']
       infrastructure_admins:
         default_policy: 'deny'
         rules:
@@ -103,6 +108,22 @@ identity_providers:
           - policy: 'two_factor'
             subject: ['group:admins', 'group:vault']
     clients:
+      - client_id: 'portfolio-rakazo'
+        client_name: 'Rakazo'
+        client_secret: '{{ secret "/secrets/rakazo-client-hash" }}'
+        public: false
+        authorization_policy: 'rakazo_owner'
+        claims_policy: 'omniroute_identity'
+        consent_mode: 'implicit'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris: ['https://rakazo.144.24.135.201.sslip.io/api/auth/callback/oidc']
+        scopes: ['openid', 'profile', 'email']
+        response_types: ['code']
+        grant_types: ['authorization_code', 'refresh_token']
+        access_token_signed_response_alg: 'none'
+        userinfo_signed_response_alg: 'none'
+        token_endpoint_auth_method: 'client_secret_post'
       - client_id: 'portfolio-portainer'
         client_name: 'Portainer'
         client_secret: '{{ secret "/secrets/portainer-client-hash" }}'

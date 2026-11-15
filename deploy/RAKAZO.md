@@ -1,12 +1,20 @@
-# Rakazo restricted pilot
+# Rakazo owner workspace and offline desktop
+
+Open **Rakazo** from your admin dashboard, or use `/rakazo` on the portfolio domain. Sign in through Authelia with your owner account and authenticator, then use Rakazo's Authelia sign-in button if shown. Other users, including other administrators, cannot access this service.
+
+Create workspaces, profiles and scratchpad notes in the workspace app. Model connections, chat execution, schedules, integrations and agent jobs stay disabled. The app does not connect profiles to the offline computer. Use **Your dashboard** to return without signing out; **Log out** ends the Rakazo session and returns to your dashboard.
+
+API, web and PostgreSQL run on the approved Ampere worker with private internal networks, read-only container roots, explicit resource limits and file-backed secrets. The runtime database account cannot bypass row-level security. Keep database/data directories and their matching private recovery keys in your backups. Scratchpad notes and profile instructions are database plaintext, so protect database access and encrypt complete backup archives.
+
+The immutable image lives in `deploy/swarm-services.json`. Follow [the verification and publication runbook](RAKAZO-WORKSPACE-VERIFY.md) for updates, and [PR #51](https://github.com/RithvikRS/Portfolio-website/pull/51) for the initial rollout's execution results. The [checkpoint](RAKAZO-WORKSPACE-CHECKPOINT.md) records the earlier development gates.
 
 ## Owner-only offline desktop
 
 Use the pinned Rakazo v0.8.0 supervisor with a separate rootless Docker engine and gVisor on Ampere. The controller can start/resume/stop the real desktop, execute its internal commands and establish a noVNC framebuffer connection. Keep model connections and agent jobs disabled.
 
-Open **Rakazo pilot** from the admin dashboard after deploying this release. The dedicated engine, controller and bridge run on Ampere under their own bounded user services. The browser edge runs in Swarm. Keep the existing production Docker engine and its services separate from the pilot.
+Choose **Offline desktop pilot** inside Rakazo to open `/computer/`. The dedicated engine, controller and bridge run on Ampere under their own bounded user services. The browser edge runs in Swarm. Keep the existing production Docker engine and its services separate from the pilot.
 
-This phase provides a small desktop-control page around Rakazo's supervisor. It does not deploy Rakazo's full chat/API/worker application. The page exposes only the fixed owner's start, stop, view and control actions. Model/provider endpoints and agent-run endpoints return 404. No provider keys are installed.
+The desktop-control page wraps Rakazo's supervisor and stays separate from the workspace API/database. The page exposes only the fixed owner's start, stop, view and control actions. Model/provider endpoints and agent-run endpoints return 404. No provider keys are installed.
 
 ## Isolation and limits
 
@@ -116,3 +124,9 @@ The private pre-change host archive is under `Documents/Portfolio-private-backup
 - [gVisor ARM64 installation](https://gvisor.dev/docs/user_guide/install/)
 - [gVisor systrap platform](https://gvisor.dev/docs/architecture_guide/platforms/)
 - [gVisor rootless execution](https://gvisor.dev/docs/user_guide/rootless/)
+
+## Full-app checkpoint and recovery checks
+
+The owner authorized the full-app release on 15 November after the isolated verification gates passed. The isolated ARM build, compiled API/web secret entrypoints, browser workspace controls and encrypted backup/restore rehearsal passed on 15 November 2026. Use [the handoff](../HANDOFF.md) for the candidate image and remaining gates, and [the verification runbook](RAKAZO-WORKSPACE-VERIFY.md) to reproduce the checks. Real Authelia MFA, the production dashboard/desktop routes and a post-deployment cluster backup remain separate gates.
+
+Treat scratchpad notes and profile instructions as database plaintext. The pinned upstream content-encryption setting does not cover those fields. Encrypt complete backups and keep their recovery keys outside Git; do not describe workspace notes as end-to-end encrypted. The existing desktop home remains disposable and is not made durable by the application database restore test.
