@@ -2,13 +2,15 @@
 
 Updated: 15 November 2026. Branch: `codex/rakazo-workspace-integration`.
 
-The owner authorized image publication, conventional commits, one PR, merge and production deployment on 15 November. The isolated verification gates passed. Publish the tested image, replace the catalog placeholders with its registry manifest digest, reuse the existing private recovery set, and verify live login/routing. Keep exact-owner Authelia MFA, workspace-only mode and disabled model connections throughout the release. The earlier no-merge/no-deploy checkpoint restriction is superseded by this authorization.
+The owner authorized this release, including publication, a conventional commit, one PR, merge and deployment. Use [PR #51](https://github.com/RithvikRS/Portfolio-website/pull/51) for the latest rollout and production-login evidence. The previous no-merge/no-deploy checkpoint boundary no longer applies.
 
-## Published image
+## Release configuration
 
-Use `ghcr.io/rithvikrs/portfolio-website@sha256:000c96b19063f891a26f1148e90b81b806a3452a9762aa9863c1fc324794f67a` for both API and web. [Publication run](https://github.com/RithvikRS/Portfolio-website/actions/runs/43742500343) passed archive checksum, Docker identity, ARM64 platform, provenance and disabled-runtime checks. PR: [#51](https://github.com/RithvikRS/Portfolio-website/pull/51). Production promotion is the next gate.
+Both API and web use `ghcr.io/rithvikrs/portfolio-website@sha256:000c96b19063f891a26f1148e90b81b806a3452a9762aa9863c1fc324794f67a`. [Publication](https://github.com/RithvikRS/Portfolio-website/actions/runs/43742500343) passed checksum, image identity, ARM64, provenance and runtime checks. Temporary transfer assets and Actions credentials were removed.
 
-## Current result
+Use the owner-only workspace at `/rakazo` and its separate offline desktop at `/computer/` on the Rakazo hostname. Keep Authelia MFA, the exact-owner API allowlist and disabled model connections. The dedicated production database bootstrap passed with the existing private recovery set and a restricted runtime role. Follow [the service guide](deploy/RAKAZO.md) and [verification runbook](deploy/RAKAZO-WORKSPACE-VERIFY.md).
+
+## Isolated verification evidence before promotion
 
 - Build candidate `portfolio-rakazo:workspace-03536e98fda038d5` remains cached on Ampere. Its local image ID is `sha256:6424db1aa85a72863979517a9ba284739bad544d10e92abae8ae552699dda029`. All 56 API/UI policy tests, API/web compilation, incremental image assembly and image provenance/runtime checks passed.
 - The real PostgreSQL/OIDC fixture passed owner admission, outsider/unverified-owner denial, workspace/profile/note persistence, logout, blocked execution and zero provider/job activity.
@@ -17,7 +19,7 @@ Use `ghcr.io/rithvikrs/portfolio-website@sha256:000c96b19063f891a26f1148e90b81b8
 - The coordinated database, data and secret snapshot was encrypted with AES-256-GCM. Wrong-key and tampered-archive checks failed as expected. The original test database and volumes were removed before restoring new ones; the browser then confirmed recovery.
 - Every labelled test container, network and volume was removed. Existing Ampere task IDs and health states stayed unchanged. No production Docker restart, firewall change, production-data mount, model connection, registry publication, Git push, merge or deployment occurred.
 
-The browser identity provider was a disposable HTTPS/OIDC fixture, **not live Authelia MFA**. The dashboard/desktop endpoints were test destinations; production routing and the actual desktop integration still need final release checks.
+The browser identity provider was a disposable HTTPS/OIDC fixture, **not live Authelia MFA**. The dashboard/desktop endpoints in those tests were test destinations. Record production routing and actual desktop integration separately in the release PR.
 
 ## Storage and recovery limits
 
@@ -29,7 +31,7 @@ The completed synthetic rehearsal copy is on the PC under:
 
 `Documents/Portfolio-private-backups/rakazo-workspace/rehearsal-2026-11-15-2ca629b2ea6a/`
 
-Keep `archive.aesgcm` and its separate `recovery/backup.key` private. The archive checksum matches Ampere. This is test data, not a new production or whole-cluster backup. The earlier complete cluster snapshot remains the 10 November set until a separate live refresh runs.
+Keep `archive.aesgcm` and its separate `recovery/backup.key` private. The archive checksum matches Ampere. This is test data, not a new production or whole-cluster backup. Use the private backup folder’s `latest-cluster.json` and `SUCCESS.json` records to identify the latest complete production backup. The 15 November pre-release refresh runs before the PR merge; it does not replace a backup of later workspace changes.
 
 The production recovery set under the manager's `.secrets/rakazo` and `.auth/secrets` remains unchanged. Reuse it; do not regenerate or commit credentials.
 
@@ -43,14 +45,12 @@ The PC browser tooling and screenshots are under `Documents/Codex/rakazo-browser
 
 Local Python discovery ran 136 tests: 122 passed and 14 skipped. The crypto-dependent release test also passed on Ampere with its existing cryptography package (all four release safety tests passed there). Earlier Node regression tests passed all 27 cases. JavaScript syntax and portfolio page/link checks pass. The actual browser and restore runs are separate evidence from mocked helper tests.
 
-## Next release steps
+## Complete or inspect the release
 
-1. Review the local diff and secrets scan. Keep all test keys, screenshots, private backups and generated state outside Git. Batch this authorized release into one PR.
-2. Publish the tested ARM candidate to an approved registry and verify its immutable registry digest and replace both pending catalog image references. The local `sha256:6424...` value is the cached OCI manifest ID; use the digest returned by registry publication rather than assuming format conversion preserves it.
-3. Recheck live service/disk health and private backup inventory before any production change. Preserve current/previous images, manager roles and the separate rootless desktop engine.
-4. For this authorized deployment, use the existing recovery set to bootstrap the dedicated production database, apply the candidate Caddy/Authelia configuration, and move only the pilot bridge assets to `/computer/`. Do not enable inference or agents.
-5. Validate actual Authelia MFA and exact-owner admission, workspace browser controls, current-account checks, real dashboard/logout navigation and the existing desktop screen/reconnect path. The disposable IdP/browser tests do not replace this step.
-6. Refresh the coordinated private cluster backup after production state changes. Confirm new database/data/keys and immutable images appear in its inventory before relying on the new service.
+1. Check PR #51 and its main-branch deployment run before repeating a rollout. Publication and database bootstrap are complete; do not regenerate keys or rerun bootstrap against an active database.
+2. Preserve current/previous images, manager roles and the isolated rootless engine. Move only the bridge assets and `BASE_PATH` to `/computer/` for this release; restore its previous unit/source if rolling back to the old root-path pilot.
+3. Verify live owner MFA, workspace controls, dashboard/logout navigation and the actual desktop route. Disposable identity-provider tests do not replace these checks.
+4. Run the private backup toolkit after production state changes. Confirm database/data/keys and immutable images appear in its inventory before relying on the new service for durable notes.
 
 ## Open on another laptop
 
@@ -64,13 +64,13 @@ Use this as a backlog, not a statement that every listed service needs redeploym
 
 | Area | Next work | Boundary / dependency |
 | --- | --- | --- |
-| Rakazo workspace | ARM image, API entrypoint, browser and encrypted restore checks passed; prepare immutable publication and real Authelia/pilot-route validation before an authorized release | Highest priority; full app remains undeployed, owner-only and execution-disabled |
+| Rakazo workspace | Immutable ARM image published; API/browser/restore tests and database bootstrap passed; inspect PR #51 for live rollout evidence | Keep owner-only admission and execution disabled |
 | Shared model gateway | Finish private provider setup; select free-only models and ordered fallbacks; test streaming/tools, quotas, revocation and application isolation | Owner supplies providers/routing choices; keep all consumers disconnected |
 | Family identity | Rehearse two-user onboarding, grants, offboarding and downstream session revocation; record results | Use disposable identities; live account changes require authorization under the current boundary |
 | Outline notes | Rehearse private/shared documents, search, attachments, revocation, exports and restore | Existing owner login is recorded; do not equate it with two-user isolation or restore evidence |
 | Vaultwarden | Rehearse two-user isolation, encrypted export/import and recovery with disposable items | Do not request or export real vault secrets to Git |
 | Monitoring | Confirm outage/recovery alert behavior and an external monitor with independent delivery | ntfy and ingress share a failure domain; selecting an external provider is a separate decision |
-| Recovery | Refresh the private backup after any future live state change; restore new Rakazo state and matching keys in isolation | Toolkit stays outside Git; latest packaged complete snapshot is from 10 November |
+| Recovery | Refresh the private backup after any future live state change; restore new Rakazo state and matching keys in isolation | Toolkit stays outside Git; use the private latest-successful pointers |
 | Deployment foundations | Confirm digest-based deployment and previous-release recovery evidence for the next authorized release | Use the authorized release pipeline; retain rollback evidence |
 | Trading app | Audit `docs/oracle-authelia-decisions.md` in the separate repo, then implement a synthetic-data Oracle/OIDC vertical slice | Last phase; do not mix its code into this repository |
 | Optional / deferred | Gemini Web paid-model exception, developer secrets platform, data failover, multi-user agent execution | Not enabled or approved by resuming local work |
