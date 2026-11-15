@@ -163,6 +163,18 @@ def model_admin_allowed(directory, email):
         return False
 
 
+def rakazo_owner_allowed(directory, email):
+    """Require the current unique, enabled owner/admin after edge OIDC validation."""
+    if not model_admin_allowed(directory, email):
+        return False
+    try:
+        owner = json.loads(directory.read_text(encoding='utf-8'))["users"][OWNER]
+        return (owner.get("email", "").casefold() == email.casefold()
+                and not owner.get("disabled", False) and "admins" in owner.get("groups", []))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -187,8 +199,10 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get("Remote-User") == OWNER and "admins" in self.headers.get("Remote-Groups","").split(",")
 
     def do_GET(self):
-        if self.path == "/internal/authorize-models":
-            allowed = model_admin_allowed(DIRECTORY, self.headers.get("X-Models-Email", ""))
+        if self.path in ("/internal/authorize-models", "/internal/authorize-rakazo"):
+            allowed = (rakazo_owner_allowed(DIRECTORY, self.headers.get("X-Rakazo-Email", ""))
+                       if self.path == "/internal/authorize-rakazo" else
+                       model_admin_allowed(DIRECTORY, self.headers.get("X-Models-Email", "")))
             self.send_response(204 if allowed else 403)
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", "0")

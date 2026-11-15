@@ -219,39 +219,54 @@ models.144.24.135.201.sslip.io {
     }
 }
 
-# Keep the full workspace and offline desktop behind the same owner-only MFA gate.
+# Reuse dashboard MFA through central OIDC; keep a host-only Rakazo ticket.
 rakazo.144.24.135.201.sslip.io {
     import private_identity
-    @identity path /auth /auth/*
-    handle @identity {
-        reverse_proxy auth:9091
+    @privateDiagnostics path /healthz /health /ready /internal/* /ping
+    handle @privateDiagnostics {
+        respond 404
     }
-    @privateDiagnostics path /healthz /health /ready /internal/*
-    respond @privateDiagnostics 404
+    handle /oauth2/* {
+        reverse_proxy rakazo_sso:4180
+    }
     handle {
         route {
-            forward_auth auth:9091 {
-                uri /api/authz/forward-auth?authelia_url=https://rakazo.144.24.135.201.sslip.io/auth/
-                copy_headers Remote-User Remote-Groups
-            }
-            @owner {
-                header Remote-User rithvik
-                header_regexp Remote-Groups (^|,\s*)admins(\s*,|$)
-            }
-            handle @owner {
-                redir /dashboard-exit https://rithvik.ddns.net/admin/ 302
-                redir /computer /computer/ 302
-                handle_path /computer/* {
-                    reverse_proxy rakazo_pilot:8080
+            request_header -X-Rakazo-Email
+            reverse_proxy rakazo_sso:4180 {
+                method GET
+                rewrite /oauth2/auth?
+                @authenticated status 2xx
+                handle_response @authenticated {
+                    route {
+                        copy_response_headers {
+                            include Set-Cookie
+                        }
+                        request_header X-Rakazo-Email {rp.header.X-Auth-Request-Email}
+                        forward_auth access_console:8080 {
+                            uri /internal/authorize-rakazo?
+                        }
+                        request_header -X-Rakazo-Email
+                        redir /dashboard-exit https://rithvik.ddns.net/admin/ 302
+                        redir / /app 302
+                        redir /computer /computer/ 302
+                        handle_path /computer/* {
+                            reverse_proxy rakazo_pilot:8080
+                        }
+                        handle /api/* {
+                            reverse_proxy rakazo_api:3100
+                        }
+                        handle {
+                            reverse_proxy rakazo_web:5173
+                        }
+                    }
                 }
-                handle /api/* {
-                    reverse_proxy rakazo_api:3100
-                }
-                handle {
-                    reverse_proxy rakazo_web:5173
+                @unauthenticated status 401
+                handle_response @unauthenticated {
+                    @browser header Accept *text/html*
+                    redir @browser /oauth2/start?rd=%2F 302
+                    respond "Authentication required" 401
                 }
             }
-            respond "Owner access required" 403
         }
     }
 }
