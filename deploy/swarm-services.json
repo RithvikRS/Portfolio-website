@@ -1074,6 +1074,130 @@
         "start_period": "90s",
         "retries": 5
       }
+    },
+    "rakazo_sso": {
+      "image": "quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048",
+      "command": [
+        "--config=/run/secrets/rakazo_edge_oidc",
+        "--http-address=0.0.0.0:4180",
+        "--provider=oidc",
+        "--oidc-issuer-url=https://rithvik.ddns.net/auth",
+        "--client-id=portfolio-rakazo-edge",
+        "--redirect-url=https://rakazo.144.24.135.201.sslip.io/oauth2/callback",
+        "--code-challenge-method=S256",
+        "--scope=openid profile email groups offline_access",
+        "--allowed-group=admins",
+        "--upstream=static://202",
+        "--skip-provider-button=true",
+        "--cookie-name=__Host-rakazo_sso",
+        "--cookie-secure=true",
+        "--cookie-httponly=true",
+        "--cookie-samesite=lax",
+        "--cookie-csrf-per-request=true",
+        "--cookie-csrf-per-request-limit=8",
+        "--cookie-expire=30m",
+        "--pass-basic-auth=false",
+        "--pass-user-headers=false",
+        "--reverse-proxy=true",
+        "--request-logging=false",
+        "--cookie-refresh=2m",
+        "--session-store-type=redis",
+        "--redis-connection-url=redis://rakazo_sessions:6379/0",
+        "--set-xauthrequest=true",
+        "--authenticated-emails-file=/run/secrets/rakazo_owner_email"
+      ],
+      "networks": [
+        "swarm_rakazo_app",
+        "swarm_rakazo_sessions"
+      ],
+      "secrets": [
+        "rakazo_edge_oidc",
+        "rakazo_owner_email"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.role == worker",
+            "node.labels.workload.compute == true",
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "96M",
+            "cpus": "0.50"
+          }
+        }
+      }
+    },
+    "rakazo_sessions": {
+      "image": "redis:7-alpine@sha256:c5d34a98396a4775e223c74e929162c35c5a2182901ba26b50ade939941ce14b",
+      "user": "999:999",
+      "networks": [
+        "swarm_rakazo_sessions"
+      ],
+      "command": [
+        "redis-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "32mb",
+        "--maxmemory-policy",
+        "noeviction"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.role == worker",
+            "node.labels.workload.compute == true",
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "96M",
+            "cpus": "0.25"
+          }
+        }
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 3
+      },
+      "volumes": [
+        {
+          "type": "tmpfs",
+          "target": "/data",
+          "tmpfs": {
+            "size": 16777216
+          }
+        }
+      ]
     }
   },
   "networks": {
@@ -1129,6 +1253,11 @@
       "internal": true
     },
     "swarm_rakazo_data": {
+      "driver": "overlay",
+      "attachable": false,
+      "internal": true
+    },
+    "swarm_rakazo_sessions": {
       "driver": "overlay",
       "attachable": false,
       "internal": true
@@ -1205,6 +1334,9 @@
     },
     "rakazo_owner_email": {
       "file": ".secrets/rakazo/owner_email"
+    },
+    "rakazo_edge_oidc": {
+      "file": ".secrets/rakazo-edge/edge.cfg"
     }
   },
   "volumes": {},
@@ -1329,7 +1461,8 @@
     "http://omniroute_sso:4180/ready",
     "http://rakazo_pilot:8080/healthz",
     "http://rakazo_api:3100/ready",
-    "http://rakazo_web:5173/"
+    "http://rakazo_web:5173/",
+    "http://rakazo_sso:4180/ready"
   ],
   "caddy_network_aliases": {
     "swarm_rakazo_app": [

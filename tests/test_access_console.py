@@ -66,3 +66,17 @@ class AccessTests(unittest.TestCase):
         for content in ['{}', 'invalid', '{"users": {}}']:
             self.directory.write_text(content)
             self.assertFalse(console.model_admin_allowed(self.directory, "owner@example.org"))
+
+    def test_rakazo_requires_unique_enabled_owner_not_another_admin(self):
+        self.assertTrue(console.rakazo_owner_allowed(self.directory, 'OWNER@example.org'))
+        self.directory.write_text(json.dumps({'users': {'rithvik': self.owner,
+            'other': {**self.owner, 'email': 'other@example.org'}}}))
+        self.assertFalse(console.rakazo_owner_allowed(self.directory, 'other@example.org'))
+        for changes in [{'groups': []}, {'disabled': True}, {'email': 'changed@example.org'}]:
+            self.directory.write_text(json.dumps({'users': {'rithvik': {**self.owner, **changes}}}))
+            self.assertFalse(console.rakazo_owner_allowed(self.directory, 'owner@example.org'))
+        for users in [{'other': self.owner}, {'rithvik': self.owner, 'duplicate': self.owner}]:
+            self.directory.write_text(json.dumps({'users': users}))
+            self.assertFalse(console.rakazo_owner_allowed(self.directory, 'owner@example.org'))
+        self.directory.write_text('invalid')
+        self.assertFalse(console.rakazo_owner_allowed(self.directory, 'owner@example.org'))

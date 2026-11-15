@@ -203,6 +203,21 @@ identity_providers:
         response_types: ['code']
         grant_types: ['authorization_code']
         token_endpoint_auth_method: 'client_secret_basic'
+      - client_id: 'portfolio-rakazo-edge'
+        lifespan: 'omniroute_edge'
+        claims_policy: 'omniroute_edge_identity'
+        client_name: 'Rakazo-edge'
+        client_secret: '{{ secret "/secrets/rakazo-edge-client-hash" }}'
+        public: false
+        authorization_policy: 'rakazo_owner'
+        consent_mode: 'implicit'
+        require_pkce: true
+        pkce_challenge_method: 'S256'
+        redirect_uris: ['https://rakazo.144.24.135.201.sslip.io/oauth2/callback']
+        scopes: ['openid', 'profile', 'email', 'groups', 'offline_access']
+        response_types: ['code']
+        grant_types: ['authorization_code', 'refresh_token']
+        token_endpoint_auth_method: 'client_secret_basic'
       - client_id: 'portfolio-omniroute-edge'
         lifespan: 'omniroute_edge'
         claims_policy: 'omniroute_edge_identity'
