@@ -46,7 +46,8 @@ def main():
             raise RuntimeError('Archive checksum differs from the tested export.')
         run('docker', 'load', '-i', str(archive))
         image = json.loads(run('docker', 'image', 'inspect', manifest['local_tag']))[0]
-        if image['Id'] != manifest['image_id']:
+        # Classic Docker reports the configuration ID; containerd reports the OCI manifest ID.
+        if image['Id'] not in (manifest['image_id'], manifest['configuration_id']):
             raise RuntimeError('Loaded image differs from the tested configuration.')
         spec = importlib.util.spec_from_file_location('builder', ROOT / 'scripts/build-rakazo-app.py')
         builder = importlib.util.module_from_spec(spec)

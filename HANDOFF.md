@@ -42,7 +42,7 @@ Local Python discovery ran 136 tests: 122 passed and 14 skipped. The crypto-depe
 ## Next release steps
 
 1. Review the local diff and secrets scan. Keep all test keys, screenshots, private backups and generated state outside Git. Batch this authorized release into one PR.
-2. Publish the tested ARM candidate to an approved registry and verify its immutable registry digest and replace both pending catalog image references. The local `sha256:6424...` value is an image configuration ID, not the digest to paste into a registry reference.
+2. Publish the tested ARM candidate to an approved registry and verify its immutable registry digest and replace both pending catalog image references. The local `sha256:6424...` value is the cached OCI manifest ID; use the digest returned by registry publication rather than assuming format conversion preserves it.
 3. Recheck live service/disk health and private backup inventory before any production change. Preserve current/previous images, manager roles and the separate rootless desktop engine.
 4. For this authorized deployment, use the existing recovery set to bootstrap the dedicated production database, apply the candidate Caddy/Authelia configuration, and move only the pilot bridge assets to `/computer/`. Do not enable inference or agents.
 5. Validate actual Authelia MFA and exact-owner admission, workspace browser controls, current-account checks, real dashboard/logout navigation and the existing desktop screen/reconnect path. The disposable IdP/browser tests do not replace this step.
