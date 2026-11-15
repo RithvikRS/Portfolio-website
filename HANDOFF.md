@@ -2,11 +2,11 @@
 
 Updated: 15 November 2026. Branch: `codex/rakazo-workspace-integration`.
 
-The owner authorized this release, including publication, a conventional commit, one PR, merge and deployment. Use [PR #51](https://github.com/RithvikRS/Portfolio-website/pull/51) for the latest rollout and production-login evidence. The previous no-merge/no-deploy checkpoint boundary no longer applies.
+The owner authorized this release, including publication, a conventional commit, one PR, merge and deployment. Use [PR #52](https://github.com/RithvikRS/Portfolio-website/pull/52) for the corrective rollout and production-login evidence. PR #51 rolled back after the web scratch mount inherited restrictive upstream permissions. The previous no-merge/no-deploy checkpoint boundary no longer applies.
 
 ## Release configuration
 
-Both API and web use `ghcr.io/rithvikrs/portfolio-website@sha256:000c96b19063f891a26f1148e90b81b806a3452a9762aa9863c1fc324794f67a`. [Publication](https://github.com/RithvikRS/Portfolio-website/actions/runs/43742500343) passed checksum, image identity, ARM64, provenance and runtime checks. Temporary transfer assets and Actions credentials were removed.
+Both API and web use `ghcr.io/rithvikrs/portfolio-website@sha256:bb0de4ba6ce886bbd7993cf5521ce44a82c5fb64e6d76dd4c10f6efe17ca3f3f`. [Publication](https://github.com/RithvikRS/Portfolio-website/actions/runs/43747163988) passed checksum, image identity, ARM64, provenance and runtime checks. Temporary transfer assets and Actions credentials were removed.
 
 Use the owner-only workspace at `/rakazo` and its separate offline desktop at `/computer/` on the Rakazo hostname. Keep Authelia MFA, the exact-owner API allowlist and disabled model connections. The dedicated production database bootstrap passed with the existing private recovery set and a restricted runtime role. Follow [the service guide](deploy/RAKAZO.md) and [verification runbook](deploy/RAKAZO-WORKSPACE-VERIFY.md).
 

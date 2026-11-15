@@ -76,10 +76,9 @@ def container_args(name):
     return ['create', '--name', name, '--network', 'none', '--memory', '3g',
             '--memory-swap', '3g', '--cpus', '2', '--pids-limit', '512',
             '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--user', '0:0',
-            '--tmpfs', '/app/apps/web/node_modules/.vite-temp:rw,noexec,nosuid,nodev,size=67108864,mode=0700,uid=0,gid=0',
             '--env', 'NODE_OPTIONS=--max-old-space-size=2048',
             '--env', 'RAYON_NUM_THREADS=2', '--env', 'CI=true',
-            BASE_IMAGE, 'sh', '-ec', BUILD_COMMAND]
+            BASE_IMAGE, 'sleep', 'infinity']
 
 
 def commit_args(name, tag, fingerprint):
@@ -191,10 +190,17 @@ def main():
         for filename in PATCH_NAMES:
             dc('cp', str(context/filename), name+':/tmp/'+filename)
         print('Compiling and testing in a networkless container limited to 3 GiB and two CPUs.', flush=True)
-        dc('start', '--attach', name, timeout=1200, capture=False)
+        dc('start', name)
+        # The upstream scratch directories belong to node. Normalize them as that
+        # user, without granting the compiler DAC/FOWNER capabilities. Swarm's
+        # zero-mode tmpfs mounts inherit these persisted image permissions.
+        dc('exec', '--user', '1000:1000', name, 'chmod', '1777',
+           '/app/apps/web/node_modules/.vite-temp', '/app/apps/web/asset-archive')
+        dc('exec', '--user', '0:0', name, 'sh', '-ec', BUILD_COMMAND, timeout=1200, capture=False)
+        dc('stop', '--time', '10', name)
         container = json.loads(dc('inspect', '--size', name))[0]
         result = container['State']
-        if result['ExitCode'] != 0 or result.get('OOMKilled'):
+        if result.get('OOMKilled'):
             raise RuntimeError('Bounded application build failed; no image was promoted.')
         for target, source in ARTIFACTS.items():
             directory = context/target; directory.mkdir()

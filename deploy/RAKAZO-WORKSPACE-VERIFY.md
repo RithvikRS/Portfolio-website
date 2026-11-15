@@ -125,3 +125,17 @@ Read `PUBLISHED_IMAGE` from the successful job and pin that registry digest for 
 Bootstrap the new database with `scripts/setup-rakazo-app.py worker --image <registry-reference>` on Ampere, passing the manager's existing private recovery JSON through stdin. Never place it in a command argument or Git. Run this only before the production Rakazo database/API exists. After deployment, use a separately reviewed migration for schema updates.
 
 Move the existing pilot bridge to `BASE_PATH=/computer` and restart only `rakazo-bridge`. Preserve the isolated engine and controller. Restore its previous unit/source if rolling back to the earlier root-path pilot. Complete live owner MFA and desktop screen checks separately from the disposable identity-provider tests.
+
+## Check the actual Swarm scratch mounts
+
+Before promotion, run this on the approved manager with the candidate already cached on Ampere:
+
+```sh
+python3 scripts/verify-rakazo-swarm.py --ampere-pilot --image sha256:<cached-image-id>
+```
+
+The probe uses the service catalog's exact long-form tmpfs mounts, an isolated internal overlay, UID 1000, a read-only root and a 512 MiB / 0.5 CPU limit. It publishes no ports, mounts no host data, and uses only a synthetic screen secret with an unreachable API target. Repeated health checks write and remove a test file in both scratch directories and fetch the web page. The probe removes its service and overlay afterward.
+
+The installed legacy `docker stack` parser drops long-form tmpfs `mode` and ignores service-level short-form `tmpfs`. With its zero-mode mount option, Docker inherits the image directory permissions. The upstream Vite scratch and asset archive directories are owned by UID 1000 with mode 0750; the resulting root-owned tmpfs blocks the non-root web process. Normalize those image directories to 01777 as UID 1000 before compilation. Keep them in the committed image rather than mounting temporary compiler storage over them. Production still runs without capabilities and with a read-only root.
+
+Standalone `docker run --tmpfs ...mode=1777` checks do not cover this Swarm translation. Keep this additional probe in the release gates.
