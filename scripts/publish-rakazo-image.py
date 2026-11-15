@@ -9,8 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from urllib.error import HTTPError
-from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
+from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,10 +17,6 @@ ROOT = Path(__file__).resolve().parents[1]
 def run(*args, data=None):
     return subprocess.check_output(args, input=data, text=True).strip()
 
-
-class NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
 
 
 def main():
@@ -31,19 +26,14 @@ def main():
     tag = manifest['registry_tag']
     if not re.fullmatch(r'ghcr.io/rithvikrs/portfolio-website:rakazo-workspace-[a-f0-9]{16}', tag):
         raise RuntimeError('Unexpected target tag.')
-    request = Request('https://api.github.com/repos/RithvikRS/Portfolio-website/releases/assets/' + str(int(manifest['asset_id'])), headers={
-        'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/octet-stream',
-        'X-GitHub-Api-Version': '2022-11-28'})
-    try:
-        response = build_opener(NoRedirect).open(request, timeout=90)
-    except HTTPError as error:
-        if error.code != 302:
-            raise
-        location = error.headers['Location']
-        if not location.startswith('https://'):
-            raise RuntimeError('Insecure asset redirect.')
-        # The signed asset URL needs no GitHub credential.
-        response = urlopen(location, timeout=90)
+    # A short-lived signed URL is supplied as a temporary Actions secret.
+    # No repository write permission or production credential enters this job.
+    location = os.environ['RAKAZO_IMAGE_DOWNLOAD_URL']
+    from urllib.parse import urlsplit
+    parsed = urlsplit(location)
+    if parsed.scheme != 'https' or parsed.hostname != 'release-assets.githubusercontent.com':
+        raise RuntimeError('Unexpected artifact download host.')
+    response = urlopen(location, timeout=90)
     with tempfile.TemporaryDirectory() as folder:
         archive = Path(folder) / 'image.tar.gz'
         with response, archive.open('wb') as output:
