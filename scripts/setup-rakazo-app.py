@@ -111,7 +111,7 @@ def worker(image):
                '-e', 'POSTGRES_USER=rakazo', '-e', 'POSTGRES_DB=rakazo', '-e', 'POSTGRES_PASSWORD_FILE=/run/secrets/password', POSTGRES)
         started_db = True
         for _ in range(60):
-            r = subprocess.run(['sudo', '-n', 'docker', 'exec', db_name, 'pg_isready', '-U', 'rakazo', '-d', 'rakazo'], capture_output=True)
+            r = subprocess.run(['sudo', '-n', 'docker', 'exec', db_name, 'pg_isready', '-h', '127.0.0.1', '-U', 'rakazo', '-d', 'rakazo'], capture_output=True)
             if r.returncode == 0:
                 break
             time.sleep(2)

@@ -100,6 +100,27 @@ def commit_args(name, tag, fingerprint):
     return result+[name, tag]
 
 
+def verify_image(image, fingerprint):
+    """Apply the same checks to a fresh image and a cached checkpoint image."""
+    config = image.get('Config') or {}
+    env = dict(value.split('=', 1) for value in config.get('Env', []) if '=' in value)
+    expected = {
+        'WORKSPACE_ONLY': 'true', 'NODE_ENV': 'production',
+        'SANDBOX_PROVIDER': 'none', 'CLOUD_AGENT_PROVIDER': 'none',
+        'AUTH_PASSWORD_ENABLED': 'false', 'USER_DEVICES_ENABLED': 'false',
+    }
+    labels = config.get('Labels') or {}
+    if (image.get('Architecture') != 'arm64' or image.get('Os') != 'linux'
+            or labels.get('portfolio.rakazo.inputs') != fingerprint
+            or labels.get('portfolio.rakazo.upstream') != UPSTREAM_SHA
+            or config.get('User') != 'node' or config.get('WorkingDir') != '/app'
+            or config.get('Entrypoint') != ['docker-entrypoint.sh']
+            or config.get('Cmd') != ['pnpm', '--filter', '@rakazo/api', 'start']
+            or any(env.get(key) != value for key, value in expected.items())
+            or env.get('NODE_OPTIONS') or env.get('CI')):
+        raise RuntimeError('Derived image verification failed; do not reuse or promote it.')
+
+
 def artifact_manifest(context):
     files = {}
     for name in ARTIFACTS:
@@ -136,8 +157,7 @@ def main():
     existing = subprocess.run(docker+['image', 'inspect', tag], capture_output=True, text=True)
     if existing.returncode == 0:
         image = json.loads(existing.stdout)[0]
-        if image.get('Config', {}).get('Labels', {}).get('portfolio.rakazo.inputs') != fingerprint:
-            raise RuntimeError('Existing build tag has different provenance.')
+        verify_image(image, fingerprint)
         print(json.dumps({'image': tag, 'image_id': image['Id'], 'inputs': fingerprint, 'reused': True}))
         return
     base = subprocess.run(docker+['image', 'inspect', BASE_IMAGE], capture_output=True, text=True)
@@ -190,11 +210,7 @@ def main():
             raise RuntimeError('Insufficient headroom for the incremental image; no image was promoted.')
         dc(*commit_args(name, tag, fingerprint), timeout=600, capture=False)
         built = json.loads(dc('image', 'inspect', tag))[0]
-        env = dict(value.split('=', 1) for value in built['Config']['Env'] if '=' in value)
-        if (built['Architecture'] != 'arm64' or built['Config']['Labels']['portfolio.rakazo.inputs'] != fingerprint
-                or built['Config']['User'] != 'node' or env.get('WORKSPACE_ONLY') != 'true'
-                or env.get('NODE_ENV') != 'production' or env.get('NODE_OPTIONS') or env.get('CI')):
-            raise RuntimeError('Derived image verification failed.')
+        verify_image(built, fingerprint)
         print(json.dumps({'image': tag, 'image_id': built['Id'], 'inputs': fingerprint, 'reused': False}))
     finally:
         if created:

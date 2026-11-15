@@ -4,6 +4,8 @@ Decision date: 5 November 2026.
 
 Use this plan to extend the existing Oracle Cloud Swarm. Implement one phase at a time through local changes, review, and the V2-to-main deployment workflow. This document records direction; it does not deploy services or authorize every future production operation.
 
+For the current checkpoint and outstanding acceptance checks across services, read [the handoff backlog](../HANDOFF.md#pending-work-across-the-project). Resume local preparation without treating this roadmap as permission to deploy.
+
 ## Agreed direction
 
 - Keep AMD node 1 as manager, ingress, and host for the existing portfolio data.

@@ -1,6 +1,12 @@
 # Rakazo workspace integration checkpoint
 
-Stop date: 10 November 2026. This checkpoint branch may be pushed for transfer. Follow [the laptop handoff](../HANDOFF.md); keep it unmerged and undeployed until the remaining gates pass and deployment is authorized. Do not merge or deploy the placeholder application image in the service catalog.
+Historical checkpoint record. The owner authorized publication, merge and deployment on 15 November after the isolated gates passed. Follow [the current handoff](../HANDOFF.md) for release status; the earlier stop restrictions and production descriptions below describe the checkpoint, not the new authorization.
+
+Original stop date: 10 November 2026. Update: the owner-authorized Ampere build and disposable database/OIDC tests passed on 15 November; see the evidence below. This checkpoint branch may be pushed for transfer. Follow [the laptop handoff](../HANDOFF.md); keep it unmerged and undeployed until the remaining gates pass and deployment is authorized. Do not merge or deploy the placeholder application image in the service catalog.
+
+## Latest continuation: 15 November
+
+The compiled secret-entrypoint, real browser UI and encrypted restore gates now pass as well. Follow [the current handoff](../HANDOFF.md), which supersedes the older pending-check lists below. Real Authelia MFA and production promotion remain pending. No model connection or deployment was enabled.
 
 ## Current production
 
@@ -39,3 +45,13 @@ The updated build helper commits only the stopped, bounded compiler's filesystem
 8. After promotion, update only the pilot bridge to its prefixed assets and `BASE_PATH=/computer`; avoid restarting the isolated engine or production Docker. Check all release services, owner-only access, network/model denial and the desktop connection. Ask the owner to complete real Authelia browser sign-in when available; the staged OIDC fixture does not replace that final browser check.
 
 Keep provider credentials, model connections, agent runs and native per-workspace computers disabled throughout these steps.
+
+## Local test runner added on 15 November
+
+Follow [disposable workspace verification](RAKAZO-WORKSPACE-VERIFY.md) for the new runner and its prerequisites. The helper tests cover refusal of production/remote engines and cleanup on failure. The real database/OIDC fixture is still pending. The build helper now validates reused images as strictly as new images; its input fingerprint has changed. Rebuild before testing. Follow the current local-only boundary in [HANDOFF.md](../HANDOFF.md), not the future production commands above.
+
+## Ampere gates completed on 15 November
+
+The revised bounded ARM build completed, all 56 API/UI tests passed, and the local image passed provenance/runtime checks. The disposable PostgreSQL migration and OIDC/persistence/denial fixture passed, followed by networkless read-only web startup. Read [HANDOFF.md](../HANDOFF.md#current-result) for the exact candidate image ID, fixture corrections, safety checks and remaining gates. Earlier statements about these checks being pending describe the original checkpoint.
+
+All temporary test/build containers and networks were removed. Existing Ampere tasks stayed unchanged, all three nodes were Ready, and all 19 services had their expected replicas. No model connection, agent execution, publication or deployment was enabled. Continue with disposable API entrypoint, browser and restore checks before preparing a release.

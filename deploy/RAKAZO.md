@@ -118,3 +118,9 @@ The private pre-change host archive is under `Documents/Portfolio-private-backup
 - [gVisor ARM64 installation](https://gvisor.dev/docs/user_guide/install/)
 - [gVisor systrap platform](https://gvisor.dev/docs/architecture_guide/platforms/)
 - [gVisor rootless execution](https://gvisor.dev/docs/user_guide/rootless/)
+
+## Full-app checkpoint and recovery checks
+
+The owner authorized the full-app release on 15 November after the isolated verification gates passed. The isolated ARM build, compiled API/web secret entrypoints, browser workspace controls and encrypted backup/restore rehearsal passed on 15 November 2026. Use [the handoff](../HANDOFF.md) for the candidate image and remaining gates, and [the verification runbook](RAKAZO-WORKSPACE-VERIFY.md) to reproduce the checks. Real Authelia MFA, the production dashboard/desktop routes and a post-deployment cluster backup remain separate gates.
+
+Treat scratchpad notes and profile instructions as database plaintext. The pinned upstream content-encryption setting does not cover those fields. Encrypt complete backups and keep their recovery keys outside Git; do not describe workspace notes as end-to-end encrypted. The existing desktop home remains disposable and is not made durable by the application database restore test.

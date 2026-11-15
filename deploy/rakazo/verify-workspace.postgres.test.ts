@@ -8,7 +8,9 @@ import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto"
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Pool } from "pg";
+import { createRequire } from "node:module";
+// Resolve the existing driver from the workspace that declares it; do not install dependencies.
+const { Pool } = createRequire(new URL("../../../packages/db/package.json", import.meta.url))("pg");
 import { expect, it, vi } from "vitest";
 import { createApp, type AppHandles } from "./app.js";
 
@@ -20,7 +22,17 @@ it("admits only verified owner OIDC and persists inert workspaces without any ex
     if (!url || !/^\/rakazo_workspace_verify_[a-z0-9_]+$/.test(new URL(url).pathname))
       throw new Error("Use a newly migrated rakazo_workspace_verify_* database");
   }
-  if (runtimeUrl === ownerUrl) throw new Error("Separate runtime and migration roles required");
+  const runtimeAddress = new URL(runtimeUrl);
+  const ownerAddress = new URL(ownerUrl);
+  if (runtimeAddress.username === ownerAddress.username)
+    throw new Error("Separate runtime and migration roles required");
+  if (runtimeAddress.host !== ownerAddress.host || runtimeAddress.pathname !== ownerAddress.pathname)
+    throw new Error("Both roles must target the same disposable database");
+  const runtimeDb = new Pool({ connectionString: runtimeUrl, max: 1 });
+  try {
+    const role = await runtimeDb.query("SELECT rolsuper, rolbypassrls, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname=current_user");
+    expect(role.rows).toEqual([{ rolsuper:false, rolbypassrls:false, rolcreatedb:false, rolcreaterole:false }]);
+  } finally { await runtimeDb.end(); }
   const ownerDb = new Pool({ connectionString: ownerUrl, max: 1 });
   const users = await ownerDb.query('SELECT count(*)::int AS count FROM "user"');
   if (users.rows[0].count !== 0) { await ownerDb.end(); throw new Error("Refusing nonempty user database"); }
@@ -57,7 +69,7 @@ it("admits only verified owner OIDC and persists inert workspaces without any ex
     }
     throw new Error("Unexpected OIDC endpoint");
   });
-  for (const [key,value] of Object.entries({ WORKSPACE_ONLY:"true", SIGNUP_ALLOWLIST:email, SIGNUPS_ENABLED:"true", AUTH_PASSWORD_ENABLED:"false", OIDC_ISSUER:issuer, OIDC_CLIENT_ID:"disposable-client", OIDC_CLIENT_SECRET:secret, OIDC_ALLOW_SIGNUP_BYPASS:"false", BETTER_AUTH_URL:origin, WEB_ORIGIN:origin, API_URL:origin, BETTER_AUTH_SECRET:secret, ENCRYPTION_KEY:secret, SCREEN_PROXY_SECRET:secret, SECRET_STORE:"encrypted", CONTENT_ENCRYPTION:"on", MASTER_KEY_PROVIDER:"local", EMAIL_PROVIDER:"none", SANDBOX_PROVIDER:"none", CLOUD_AGENT_PROVIDER:"none", USER_DEVICES_ENABLED:"false", WAKEUP_DRIVER:"graphile", NODE_ENV:"test" })) vi.stubEnv(key,value);
+  for (const [key,value] of Object.entries({ WORKSPACE_ONLY:"true", SIGNUP_ALLOWLIST:email, SIGNUPS_ENABLED:"true", AUTH_PASSWORD_ENABLED:"false", OIDC_ISSUER:issuer, OIDC_CLIENT_ID:"disposable-client", OIDC_CLIENT_SECRET:secret, OIDC_ALLOW_SIGNUP_BYPASS:"false", BETTER_AUTH_URL:origin, WEB_ORIGIN:origin, API_URL:origin, BETTER_AUTH_SECRET:randomBytes(32).toString("hex"), ENCRYPTION_KEY:randomBytes(32).toString("hex"), SCREEN_PROXY_SECRET:randomBytes(32).toString("hex"), SECRET_STORE:"encrypted", CONTENT_ENCRYPTION:"on", MASTER_KEY_PROVIDER:"local", EMAIL_PROVIDER:"none", SANDBOX_PROVIDER:"none", CLOUD_AGENT_PROVIDER:"none", USER_DEVICES_ENABLED:"false", WAKEUP_DRIVER:"graphile", NODE_ENV:"test" })) vi.stubEnv(key,value);
   try {
     handles = await createApp({ dataDir });
     expect((await handles.app.request("/ready")).status).toBe(200);
@@ -82,7 +94,7 @@ it("admits only verified owner OIDC and persists inert workspaces without any ex
     expect((await rpc("me",new Map())).status).toBe(401);
     const outsider=await login("outsider@example.test",true);
     expect((await rpc("me",outsider)).status).toBe(401);
-    const unverified=await login("unverified@example.test",false);
+    const unverified=await login(email,false);
     expect((await rpc("me",unverified)).status).toBe(401);
     const jar=await login(email,true);
     expect(await value(await rpc("me",jar))).toMatchObject({workspaceOnly:true,needsModel:false});

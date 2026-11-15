@@ -1,0 +1,8 @@
+{
+  "asset_id": 751775869,
+  "archive_sha256": "1d770996f2e9beb715b5af10ead0923b397bed8571d8198a6b5d7cf70ae8092b",
+  "image_id": "sha256:6424db1aa85a72863979517a9ba284739bad544d10e92abae8ae552699dda029",
+  "local_tag": "portfolio-rakazo:workspace-03536e98fda038d5",
+  "registry_tag": "ghcr.io/rithvikrs/portfolio-website:rakazo-workspace-03536e98fda038d5",
+  "inputs": "03536e98fda038d52953e9edd9c241fbd67547aafb572eeb42bed3408c9c0451"
+}

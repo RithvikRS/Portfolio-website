@@ -90,3 +90,11 @@ The worker helper checks the node's storage marker, staging ownership and permis
 Run `Backup-Cluster.ps1 -CheckOnly` before a refresh. After downloading and validating a worker snapshot, the helper removes only that job's temporary files. Keep incomplete jobs for the documented resume flow. Do not delete current or previous release images to make room for a backup, and do not count temporary archives as an independent backup copy.
 
 This staging change does not make the pilot desktop durable: its home remains inside the excluded Rakazo cache. Add workspace snapshots and rehearse their restore before storing important files there.
+
+## Rakazo workspace restore rehearsal
+
+Use [the isolated verification runbook](RAKAZO-WORKSPACE-VERIFY.md#compiled-api-browser-and-encrypted-restore-rehearsal) for the disposable database, application-file and matching-key restore procedure. The 15 November 2026 rehearsal encrypted the coordinated archive with AES-256-GCM, rejected wrong-key/tampered archives, removed the original test database/volumes, restored new ones and recovered the synthetic notes through a fresh browser login.
+
+The private PC copy is under `Portfolio-private-backups/rakazo-workspace/rehearsal-2026-11-15-2ca629b2ea6a/`. Keep its `archive.aesgcm` and separate `recovery/backup.key` outside Git. This contains synthetic test data and does not replace a complete production cluster snapshot. Extend/confirm the live inventory and refresh it after an authorized full-app deployment.
+
+Rakazo's current content encryption does not cover scratchpad note text or profile instructions. Protect database snapshots and exports as sensitive plaintext unless you encrypt the complete archive. The pilot desktop home remains excluded disposable storage.
