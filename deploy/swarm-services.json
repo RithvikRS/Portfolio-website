@@ -839,6 +839,8 @@
         "test": [
           "CMD",
           "pg_isready",
+          "-h",
+          "127.0.0.1",
           "-U",
           "rakazo",
           "-d",
@@ -851,7 +853,7 @@
       }
     },
     "rakazo_api": {
-      "image": "ghcr.io/rithvikrs/portfolio-website:rakazo-workspace-pending@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:000c96b19063f891a26f1148e90b81b806a3452a9762aa9863c1fc324794f67a",
       "user": "1000:1000",
       "networks": [
         "swarm_rakazo_app",
@@ -972,7 +974,7 @@
       }
     },
     "rakazo_web": {
-      "image": "ghcr.io/rithvikrs/portfolio-website:rakazo-workspace-pending@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:000c96b19063f891a26f1148e90b81b806a3452a9762aa9863c1fc324794f67a",
       "user": "1000:1000",
       "networks": [
         "swarm_rakazo_app"

@@ -4,6 +4,10 @@ Updated: 15 November 2026. Branch: `codex/rakazo-workspace-integration`.
 
 The owner authorized image publication, conventional commits, one PR, merge and production deployment on 15 November. The isolated verification gates passed. Publish the tested image, replace the catalog placeholders with its registry manifest digest, reuse the existing private recovery set, and verify live login/routing. Keep exact-owner Authelia MFA, workspace-only mode and disabled model connections throughout the release. The earlier no-merge/no-deploy checkpoint restriction is superseded by this authorization.
 
+## Published image
+
+Use `ghcr.io/rithvikrs/portfolio-website@sha256:000c96b19063f891a26f1148e90b81b806a3452a9762aa9863c1fc324794f67a` for both API and web. [Publication run](https://github.com/RithvikRS/Portfolio-website/actions/runs/43742500343) passed archive checksum, Docker identity, ARM64 platform, provenance and disabled-runtime checks. PR: [#51](https://github.com/RithvikRS/Portfolio-website/pull/51). Production promotion is the next gate.
+
 ## Current result
 
 - Build candidate `portfolio-rakazo:workspace-03536e98fda038d5` remains cached on Ampere. Its local image ID is `sha256:6424db1aa85a72863979517a9ba284739bad544d10e92abae8ae552699dda029`. All 56 API/UI policy tests, API/web compilation, incremental image assembly and image provenance/runtime checks passed.

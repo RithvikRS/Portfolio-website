@@ -113,3 +113,15 @@ Confirm no resources with `portfolio.rakazo.release-test` remain, compare produc
 ## Encryption scope
 
 The pinned upstream `ENCRYPTED_MODELS` set covers selected message, event and memory fields. Scratchpad notes and profile instructions remain database plaintext even with `CONTENT_ENCRYPTION=on`. Keep database files, exports and backups private; the rehearsal encrypts the complete archive. Authelia access control and server-side encryption do not make content end-to-end encrypted against the server operator.
+
+## Publish a verified image
+
+Build and verify the ARM image on the approved worker first. Export that exact cached image to the worker data disk; do not rebuild on the AMD manager. Record the archive SHA-256, containerd OCI manifest ID, configuration ID, input fingerprint and local tag in `deploy/rakazo/publication.json`.
+
+Transfer the secret-free archive through a temporary unpublished release asset. Supply its short-lived HTTPS download URL as the encrypted Actions secret `RAKAZO_IMAGE_DOWNLOAD_URL`, then manually run **Publish tested Rakazo image**. The job has repository read and package write permissions; it cannot connect to production. It checks the archive, image identities, ARM64 platform, provenance and disabled-runtime settings before publishing with its job token.
+
+Read `PUBLISHED_IMAGE` from the successful job and pin that registry digest for both Rakazo services. Docker's classic image store and containerd expose different image IDs; do not substitute either local ID for the published registry result. Remove the temporary Actions secret, draft asset and worker export after successful publication. The recorded transfer asset is historical and cannot be reused once removed; create a fresh transfer for another release.
+
+Bootstrap the new database with `scripts/setup-rakazo-app.py worker --image <registry-reference>` on Ampere, passing the manager's existing private recovery JSON through stdin. Never place it in a command argument or Git. Run this only before the production Rakazo database/API exists. After deployment, use a separately reviewed migration for schema updates.
+
+Move the existing pilot bridge to `BASE_PATH=/computer` and restart only `rakazo-bridge`. Preserve the isolated engine and controller. Restore its previous unit/source if rolling back to the earlier root-path pilot. Complete live owner MFA and desktop screen checks separately from the disposable identity-provider tests.

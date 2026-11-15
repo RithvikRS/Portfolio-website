@@ -1,11 +1,6 @@
 name: Publish tested Rakazo image
 on:
-  push:
-    branches: [codex/rakazo-workspace-integration]
-    paths:
-      - .github/workflows/rakazo-image.yml
-      - deploy/rakazo/publication.json
-      - scripts/publish-rakazo-image.py
+  workflow_dispatch:
 permissions:
   contents: read
   packages: write
