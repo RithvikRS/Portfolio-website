@@ -15,8 +15,8 @@ class RakazoBuildTests(unittest.TestCase):
                            "--security-opt":"no-new-privileges"}.items():
             self.assertEqual(args[args.index(key)+1], value)
         self.assertFalse({"--privileged", "--volume", "-v", "--mount", "--env-file"} & set(args))
-        self.assertEqual(args[args.index("--tmpfs")+1],
-                         "/app/apps/web/node_modules/.vite-temp:rw,noexec,nosuid,nodev,size=67108864,mode=0700,uid=0,gid=0")
+        # Scratch directory metadata must survive commit so Swarm inherits it.
+        self.assertNotIn("--tmpfs", args)
         self.assertIn(build.BASE_IMAGE, args)
 
     def test_patch_is_limited_to_compiled_application_sources(self):
