@@ -39,3 +39,15 @@ class RakazoSSOTests(unittest.TestCase):
         self.assertIn('respond "Authentication required" 401', caddy)
         self.assertIn('redir / /app 302', caddy)
         self.assertNotIn('authelia_url=https://rakazo.', caddy)
+
+    def test_desktop_receives_identity_only_after_current_owner_check(self):
+        caddy = (ROOT / 'deploy/Caddyfile.swarm').read_text()
+        gate = caddy.split('rakazo.144.24.135.201.sslip.io {', 1)[1]
+        self.assertIn('import private_identity', gate)
+        self.assertIn('request_header -Remote-User', caddy)
+        self.assertIn('request_header -Remote-Groups', caddy)
+        desktop = gate.split('handle_path /computer/* {', 1)[1].split('}', 1)[0]
+        for header in ['request_header Remote-User rithvik', 'request_header Remote-Groups admins']:
+            self.assertIn(header, desktop)
+            self.assertLess(gate.index('uri /internal/authorize-rakazo?'), gate.index(header))
+        self.assertLess(desktop.index('request_header Remote-Groups admins'), desktop.index('reverse_proxy rakazo_pilot:8080'))
