@@ -250,6 +250,10 @@ rakazo.144.24.135.201.sslip.io {
                         redir / /app 302
                         redir /computer /computer/ 302
                         handle_path /computer/* {
+                            # The directory check above admitted this exact owner/admin.
+                            # Browser-supplied identity headers were stripped at ingress.
+                            request_header Remote-User rithvik
+                            request_header Remote-Groups admins
                             reverse_proxy rakazo_pilot:8080
                         }
                         handle /api/* {
