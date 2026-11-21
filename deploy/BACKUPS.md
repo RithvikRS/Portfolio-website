@@ -103,3 +103,7 @@ Rakazo's current content encryption does not cover scratchpad note text or profi
 ## Native Rakazo assistant state
 
 Include `/srv/swarm/rakazo_api/native-assistant.sqlite` with the API data and native PostgreSQL backup. Stop their writers before archiving; the normal worker inventory discovers the API bind. Retain the matching model-key secret, OmniRoute state and pinned image. The retired `/srv/swarm/rakazo_agent` ledger remains private and has no writer. Keep it for recovery outside Git. The gVisor home is still disposable and excluded from durable workspace backups.
+
+## Personal assistant state
+
+Include `/srv/swarm/rakazo_assistant` in the coordinated Ampere snapshot. Pause `portfolio_rakazo_assistant` alongside other writers so its SQLite memories, documents, approvals and reminders form a consistent snapshot. Preserve the manager's `.secrets/rakazo/assistant_config` and `assistant_token` with the encrypted recovery material. After restore, interrupted notifications remain paused and executing approvals remain uncertain; review them in chat instead of replaying writes. See [personal assistant limits and recovery](RAKAZO-PERSONAL-ASSISTANT.md).
