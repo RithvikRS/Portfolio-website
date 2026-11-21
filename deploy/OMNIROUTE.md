@@ -48,7 +48,7 @@ The private **rakazo-pilot-disabled** key starts inactive; enable it only for th
 
 - Access to `agent-free`, plus the two exact canonical/resolved identifiers for its zero-priced OpenRouter target. Rakazo itself always requests `agent-free`; arbitrary direct models and automatic combos stay denied.
 - Access to the five selected provider connections only; no management scope.
-- Limits of 4 requests per minute, 40 requests per day and 500,000 tokens per day.
+- Limits of 4 requests per minute, 600 requests per day and 500,000 tokens per day.
 - Request-body logging disabled.
 
 The disposable test key received 403 for direct-model, automatic-routing and management requests, 429 for request/token exhaustion, and 401 after revocation. The inactive Rakazo key also received 401. Temporary test routes and credentials are removed or revoked. SQLite stores token-limit definitions and counters; restart-resistant enforcement has not been exercised. Treat the daily token ceiling as a usage guard, not an exact per-request output reservation. Test overshoot and parallel requests before relying on it for shared users.

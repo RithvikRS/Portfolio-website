@@ -150,7 +150,7 @@ new file mode 100644
 +import { PiAgentRuntime, InMemoryJobQueue } from "@rakazo/adapters";
 +
 +export const nativeAssistant = () => process.env.NATIVE_ASSISTANT === "true";
-+export const nativeLimits = { seconds: 120, calls: 3, tools: 8, tokens: 1024, dailyRuns: 20, dailyCalls: 40, minuteCalls: 4 };
++export const nativeLimits = { seconds: 120, calls: 3, tools: 8, tokens: 1024, dailyRuns: 200, dailyCalls: 600, minuteCalls: 4 };
 +const shell = { name: "sandbox_shell", description: "Run a shell command in your isolated, offline Linux computer. Use Python for calculations and file work. No internet or production filesystem access. Files are disposable. Commands have a 20-second deadline; background processes are stopped when this run ends.", inputSchema: { type: "object", properties: { command: { type: "string" } }, required: ["command"], additionalProperties: false }, route: { connectorId: "isolated", toolName: "sandbox_shell" } };
 +
 +
@@ -345,7 +345,7 @@ new file mode 100644
 + it('interrupts active work on restart and enforces daily admission',()=>{
 +  const dir=mkdtempSync(join(tmpdir(),'native-restart-')),file=join(dir,'limits.sqlite');let ledger=new NativeLedger(file);
 +  try{ledger.start('first','owner','space');ledger.close();ledger=new NativeLedger(file);expect(()=>ledger.start('first','owner','space')).toThrow('replay');
-+   for(let i=1;i<20;i++){ledger.start('job'+i,'owner','space');ledger.finish('job'+i,'completed');}
++   for(let i=1;i<200;i++){ledger.start('job'+i,'owner','space');ledger.finish('job'+i,'completed');}
 +   expect(()=>ledger.start('last','owner','space')).toThrow('Daily');
 +  }finally{ledger.close();rmSync(dir,{recursive:true});}
 + });
