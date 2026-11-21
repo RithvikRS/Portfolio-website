@@ -35,3 +35,6 @@
 
 !deploy/rakazo/native-agent-bridge.mjs
 !deploy/rakazo/native-executor-proxy.mjs
+!deploy/rakazo/assistant-web.mjs
+!deploy/rakazo/assistant-store.mjs
+!deploy/rakazo/assistant-services.mjs
