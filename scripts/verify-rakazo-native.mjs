@@ -22,6 +22,8 @@ try{
  await page.waitForTimeout(32000);assert.equal(await stop.count(),0);await page.reload();await page.getByText('STOP_REHEARSAL: wait while I test Stop.',{exact:true}).last().waitFor();
  await page.getByText('Model: fixture-primary · model-a',{exact:true}).waitFor();
  await page.getByText('Models used: fixture-primary · model-a; fixture-fallback · model-b',{exact:true}).waitFor();
+ await send('LONG_REHEARSAL: perform the six-step isolated task and summarize it.');
+ const longStarted=Date.now();await page.getByText('Long task completed after six tools and seven model calls.',{exact:true}).waitFor({timeout:240000});assert.ok(Date.now()-longStarted>120000);await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});
  const protectedMethods=await page.evaluate(async()=>{const result={};for(const name of ['models/connect','routines/create','userDevices/list']){const r=await fetch('/rpc/'+name,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"json":{}}'});result[name]=r.status;}return result;});assert.ok(Object.values(protectedMethods).every(s=>s===403));
  await page.screenshot({path:join(artifacts,'native-chat-desktop.png'),fullPage:true});await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(artifacts,'native-chat-mobile.png'),fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
  assert.deepEqual(errors,[]);writeFileSync(join(artifacts,'native-result.json'),JSON.stringify({passed:true,nativeUI:true,syntheticModel:true,productionData:false,stop:true,toolResult:true}));console.log('Native chat, tool-result rendering, Stop, reload, restricted routes and mobile layout passed with synthetic inference.');

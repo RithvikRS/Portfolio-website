@@ -945,6 +945,7 @@
         "LOG_LEVEL": "warn",
         "NATIVE_ASSISTANT": "true",
         "MODEL_STREAM_MAX_RETRIES": "0",
+        "MODEL_CONNECT_TIMEOUT_MS": "120000",
         "PERSONAL_ASSISTANT": "true"
       },
       "secrets": [
