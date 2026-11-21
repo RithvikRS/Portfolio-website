@@ -14,9 +14,9 @@ http.createServer(async(req,res)=>{
   const count=input.messages.filter(m=>m.role==='tool').length;
   await new Promise(r=>setTimeout(r,22000));
   if(res.destroyed)return;
-  const delta=count<6?{role:'assistant',tool_calls:[{index:0,id:'long-'+count,type:'function',function:{name:'sandbox_shell',arguments:JSON.stringify({command:'echo '+count})}}]}:{role:'assistant',content:'Long task completed after six tools and seven model calls.'};
+  const delta=count<9?{role:'assistant',tool_calls:[{index:0,id:'long-'+count,type:'function',function:{name:'sandbox_shell',arguments:JSON.stringify({command:'echo '+count})}}]}:{role:'assistant',content:'Long task completed after nine tools and ten model calls.'};
   res.writeHead(200,{'Content-Type':'text/event-stream'});
-  res.end('data: '+JSON.stringify({id:'long',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta,finish_reason:null}]})+'\n\ndata: '+JSON.stringify({id:'long',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta:{},finish_reason:count<6?'tool_calls':'stop'}]})+'\n\ndata: [DONE]\n\n');return;
+  res.end('data: '+JSON.stringify({id:'long',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta,finish_reason:null}]})+'\n\ndata: '+JSON.stringify({id:'long',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta:{},finish_reason:count<9?'tool_calls':'stop'}]})+'\n\ndata: [DONE]\n\n');return;
  }
  const wait=prompt.includes('STOP_REHEARSAL');
  if(wait)await new Promise(r=>setTimeout(r,30000));
