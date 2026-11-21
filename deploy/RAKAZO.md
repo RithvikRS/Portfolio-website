@@ -144,6 +144,30 @@ Before the first deployment, run `python3 scripts/setup-rakazo-sso.py` on the ma
 
 Verify a fresh session prompts for MFA once, an existing dashboard session reaches Rakazo without another credential prompt, and logout returns to `/admin/`. Anonymous or forged identity headers must never reach workspace or desktop data. Recheck navigation after more than five minutes to exercise ticket renewal.
 
-## Next: controlled model pilot
+## Bounded agent pilot
 
-Use the tested [OmniRoute agent pool](OMNIROUTE.md#initial-agent-pool-2026-11-21) as the starting point. The `agent-free` combo is saved, but the dedicated Rakazo key remains inactive and no model connection is installed in Rakazo. Keep owner-only Authelia MFA, the existing model/execution blocks and sandbox isolation in place while preparing the integration. Before enabling a pilot, add explicit context/output and job limits, test parallel-request and quota behavior, and prove that stopping the job or revoking its key ends further inference. Keep the desktop off the gateway network and upstream provider credentials inside OmniRoute.
+Open [the agent pilot](https://rakazo.144.24.135.201.sslip.io/agent-pilot/) after signing in through the existing owner-only Authelia MFA gate. Choose **Run sample task** to let Rakazo's pinned native `PiAgentRuntime` read a synthetic inventory and report its total. Choose **Stop run** to cancel it. This is an acceptance pilot, not general workspace chat or desktop automation.
+
+The separate `rakazo_agent` service has no workspace database, production data mounts, Docker socket, desktop bridge or upstream provider keys. It uses the existing immutable Rakazo image and mounts the reviewed pilot scripts as Swarm configs. Its two non-attachable internal overlays connect only to Caddy and OmniRoute respectively. Only OmniRoute retains external provider access. Leave the workspace API's `WORKSPACE_ONLY=true` and offline desktop networking unchanged.
+
+| Limit | Enforcement |
+| --- | --- |
+| Active runs | One per service; stop-first updates and one replica |
+| Whole run | 60 seconds, followed by at most 1 second to terminate an unresponsive worker |
+| Model calls | At most 3 requests to `agent-free`; no caller-selected model, URL or headers |
+| Output tokens | Force `max_tokens=256` on every gateway request; do not accept worker overrides |
+| Tool calls | At most 2 calls to the synthetic `lookup_fixture` tool; no shell, files, browsing, schedules or delegation |
+| Context/body | Fixed task, at most 12 messages and 24 KiB serialized request before forwarding |
+| Response/output | At most 64 KiB per SSE response and 4 KiB retained visible output |
+| Service resources | 768 MiB RAM, 0.5 CPU, read-only root and bounded temporary storage |
+| Gateway quota | 4 requests/minute, 40/day, 12,000 tokens/day; combo/connection restrictions remain in place |
+
+Each gateway request can try two approved providers through the ordered free-only pool. Therefore three gateway calls can attempt up to six provider calls; the token parameter applies separately to each attempt. Provider-side accounting and cancellation are not exact reservations: a provider may finish a request it already accepted. Stop aborts the controller's request, rejects new calls, asks the native runtime to abort, then kills the child if needed. Keep admission locked until the worker exits and pending requests settle. Closing the browser does not stop a run; use Stop or let the deadline expire.
+
+The controller injects the private inference key into gateway requests. It does not send the key to the model or put it in browser responses, process arguments or logs. Store its manager source at `.secrets/rakazo-agent/model_key`; the normal private backup covers this directory. Keep the matching OmniRoute database/encryption environment in worker backups. Results are memory-only, disappear on restart, and are not durable workspace records.
+
+Use `node --test tests/rakazo-agent-pilot.test.mjs` for owner/origin rejection, input rejection, concurrency, output/call limits, cancellation, hard termination and deadline tests. Run `deploy/rakazo/verify-agent.mjs` alongside the three pilot modules in a disposable networkless container using the pinned Rakazo image, UID 1000, a read-only root, no capabilities, 768 MiB RAM and 0.5 CPU. It exercises the real native runtime with synthetic gateway responses: tool round trip, oversized-output termination and in-flight stop. It requires no provider key or production data.
+
+After deployment, test one real sample through `agent-free`, stop another while its request is active, and confirm the call count stays fixed after stop. Check anonymous/forged identity denial at the public hostname and all release service health. In an emergency, disable the dedicated inference key in OmniRoute, then stop the pilot service. Revocation blocks new requests; use Stop to abort an active one. A release rollback removes the pilot route/service; disable its key separately.
+
+Before extending this pilot, add narrowly reviewed real tools and durable per-run budgets. Do not enable ordinary workspace agent jobs, native computers, provider configuration or schedules as a shortcut.

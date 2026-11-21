@@ -41,7 +41,7 @@ Both candidates passed a synthetic function call with exact integer arguments, c
 
 Leave Gemini 2.5 Flash out: the account returned HTTP 404 because that model is no longer available to new users. Leave the tested OpenRouter Nemotron free target out: the pre-dispatch filters skipped it. Test other candidates individually without relaxing the free-only policy.
 
-The private **rakazo-pilot-disabled** key is inactive and has:
+The private **rakazo-pilot-disabled** key starts inactive; enable it only for the separately bounded [Rakazo pilot](RAKAZO.md#bounded-agent-pilot). Its historical name does not indicate its live active state. It has:
 
 - Access to `agent-free` only, with direct models and automatic combos denied.
 - Access to the two selected provider connections only; no management scope.
@@ -50,7 +50,7 @@ The private **rakazo-pilot-disabled** key is inactive and has:
 
 The disposable test key received 403 for direct-model, automatic-routing and management requests, 429 for request/token exhaustion, and 401 after revocation. The inactive Rakazo key also received 401. Temporary test routes and credentials are removed or revoked. SQLite stores token-limit definitions and counters; restart-resistant enforcement has not been exercised. Treat the daily token ceiling as a usage guard, not an exact per-request output reservation. Test overshoot and parallel requests before relying on it for shared users.
 
-Keep Rakazo model connections and agent execution disabled. The next phase must implement the narrowly scoped app connection, output/context limits and a single bounded owner-run job, then verify stop/revocation and network denial. Do not attach the sandbox desktop to the model network or give it provider keys. Do not remove the existing execution blocks just to test the gateway.
+Keep ordinary Rakazo workspace model connections and jobs disabled. Only the separate bounded pilot may use this key and pool. Its controller enforces the output/context/call/deadline limits independently of gateway usage counters. Do not attach the sandbox desktop to the model network or give it provider keys.
 
 Provider credentials, combo state and inference keys live in OmniRoute's private database; this repository records the operating policy, not a secret-bearing configuration export. On the PC, keep `Documents/Portfolio-private-backups/omniroute-routing-2026-11-21` alongside the full cluster backup. It contains integrity-checked before/after SQLite snapshots, matching encryption environment, the disabled pilot key, checksums and restore instructions. Use the full cluster backup for the service definitions and SSO recovery material. Never commit either backup.
 

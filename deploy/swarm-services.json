@@ -559,7 +559,8 @@
       "image": "ghcr.io/cheaper-inference/omniroute:3.8.53@sha256:b52a17661a1aff42ffb78f349f423e986dfc55b57274f28559f8387622ef8ee4",
       "user": "1000:1000",
       "networks": [
-        "swarm_models_app"
+        "swarm_models_app",
+        "swarm_rakazo_models"
       ],
       "environment": {
         "DATA_DIR": "/app/data",
@@ -1198,6 +1199,97 @@
           }
         }
       ]
+    },
+    "rakazo_agent": {
+      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:bb0de4ba6ce886bbd7993cf5521ce44a82c5fb64e6d76dd4c10f6efe17ca3f3f",
+      "user": "1000:1000",
+      "networks": [
+        "swarm_rakazo_agent",
+        "swarm_rakazo_models"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "stop_grace_period": "10s",
+      "command": [
+        "node",
+        "/pilot/agent-pilot.mjs"
+      ],
+      "environment": {
+        "NODE_ENV": "production",
+        "NODE_OPTIONS": "--max-old-space-size=128"
+      },
+      "configs": [
+        {
+          "source": "rakazo_agent_pilot",
+          "target": "/pilot/agent-pilot.mjs"
+        },
+        {
+          "source": "rakazo_agent_policy",
+          "target": "/pilot/agent-policy.mjs"
+        },
+        {
+          "source": "rakazo_agent_worker",
+          "target": "/pilot/agent-worker.mjs"
+        }
+      ],
+      "secrets": [
+        "rakazo_pilot_model_key"
+      ],
+      "volumes": [
+        {
+          "type": "tmpfs",
+          "target": "/tmp",
+          "tmpfs": {
+            "size": 33554432
+          }
+        }
+      ],
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "2m",
+          "max-file": "2"
+        }
+      },
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "768M",
+            "cpus": "0.5"
+          }
+        },
+        "update_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "failure_action": "pause",
+          "monitor": "30s"
+        },
+        "rollback_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "monitor": "30s"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ],
+        "interval": "20s",
+        "timeout": "5s",
+        "start_period": "20s",
+        "retries": 3
+      }
     }
   },
   "networks": {
@@ -1261,6 +1353,16 @@
       "driver": "overlay",
       "attachable": false,
       "internal": true
+    },
+    "swarm_rakazo_agent": {
+      "driver": "overlay",
+      "attachable": false,
+      "internal": true
+    },
+    "swarm_rakazo_models": {
+      "driver": "overlay",
+      "attachable": false,
+      "internal": true
     }
   },
   "caddy_networks": [
@@ -1270,7 +1372,8 @@
     "swarm_vault_edge",
     "swarm_models_edge",
     "swarm_rakazo_edge",
-    "swarm_rakazo_app"
+    "swarm_rakazo_app",
+    "swarm_rakazo_agent"
   ],
   "configs": {
     "access_console": {
@@ -1281,6 +1384,15 @@
     },
     "rakazo_entrypoint": {
       "file": "deploy/rakazo/entrypoint.mjs"
+    },
+    "rakazo_agent_pilot": {
+      "file": "deploy/rakazo/agent-pilot.mjs"
+    },
+    "rakazo_agent_policy": {
+      "file": "deploy/rakazo/agent-policy.mjs"
+    },
+    "rakazo_agent_worker": {
+      "file": "deploy/rakazo/agent-worker.mjs"
     }
   },
   "secrets": {
@@ -1337,6 +1449,9 @@
     },
     "rakazo_edge_oidc": {
       "file": ".secrets/rakazo-edge/edge.cfg"
+    },
+    "rakazo_pilot_model_key": {
+      "file": ".secrets/rakazo-agent/model_key"
     }
   },
   "volumes": {},
@@ -1450,6 +1565,14 @@
         303,
         401
       ]
+    },
+    {
+      "url": "https://rakazo.144.24.135.201.sslip.io/agent-pilot/",
+      "statuses": [
+        302,
+        303,
+        401
+      ]
     }
   ],
   "internal_checks": [
@@ -1462,7 +1585,8 @@
     "http://rakazo_pilot:8080/healthz",
     "http://rakazo_api:3100/ready",
     "http://rakazo_web:5173/",
-    "http://rakazo_sso:4180/ready"
+    "http://rakazo_sso:4180/ready",
+    "http://rakazo_agent:8080/healthz"
   ],
   "caddy_network_aliases": {
     "swarm_rakazo_app": [
