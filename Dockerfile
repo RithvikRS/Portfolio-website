@@ -12,7 +12,7 @@ COPY scripts/ ./scripts/
 COPY server/ ./server/
 COPY tests/ ./tests/
 # Rakazo authorization and browser-path tests import these public helpers only in the build stage.
-COPY deploy/rakazo/edge.mjs deploy/rakazo/bridge.mjs ./deploy/rakazo/
+COPY deploy/rakazo/edge.mjs deploy/rakazo/bridge.mjs deploy/rakazo/agent-policy.mjs deploy/rakazo/agent-pilot.mjs ./deploy/rakazo/
 COPY data/ ./data/
 COPY css/ ./css/
 COPY js/ ./js/
