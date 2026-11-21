@@ -10,7 +10,7 @@ http.createServer(async(req,res)=>{
  const prompt=JSON.stringify(input.messages.filter(m=>m.role==='user').at(-1)?.content);
  const wait=prompt.includes('STOP_REHEARSAL');
  if(wait)await new Promise(r=>setTimeout(r,30000));
- res.writeHead(200,{'Content-Type':'text/event-stream'});
+ res.writeHead(200,{'Content-Type':'text/event-stream','x-omniroute-provider':input.messages.some(m=>m.role==='tool')?'fixture-fallback':'fixture-primary','x-omniroute-model':input.messages.some(m=>m.role==='tool')?'model-b':'model-a'});
  const hasResult=input.messages.some(m=>m.role==='tool');
  const tool=prompt.includes('TOOL_REHEARSAL')&&!hasResult;
  const delta=tool?{role:'assistant',tool_calls:[{index:0,id:'test-call',type:'function',function:{name:'sandbox_shell',arguments:'{"command":"python3 -c \\\"print(17+25)\\\""}'}}]}:{role:'assistant',content:hasResult?'The isolated calculation returned 42.':'Hello! I can help you plan, think through questions and work in the isolated computer.'};

@@ -83,7 +83,7 @@ diff --git a/apps/api/src/routes/models.ts b/apps/api/src/routes/models.ts
    return {
      models: {
 -      list: authed.models.list.handler(async ({ context }) => deps.env.workspaceOnly ? [] : chatCatalog(context.actor)),
-+      list: authed.models.list.handler(async ({ context }) => nativeAssistant() ? [{provider:"local",providerName:"Free-only pool",id:"agent-free",label:"Free-only agent pool",billing:"free",managed:true}] : deps.env.workspaceOnly ? [] : chatCatalog(context.actor)),
++      list: authed.models.list.handler(async ({ context }) => nativeAssistant() ? [{provider:"local",providerName:"Auto",id:"agent-free",label:"Auto",billing:"free",managed:true}] : deps.env.workspaceOnly ? [] : chatCatalog(context.actor)),
        credentials: authed.models.credentials.handler(async ({ context }) => {
          if (deps.env.workspaceOnly) return [];
          const [rows, main] = await Promise.all([
@@ -108,7 +108,7 @@ diff --git a/apps/api/src/native-assistant.ts b/apps/api/src/native-assistant.ts
 new file mode 100644
 --- /dev/null
 +++ b/apps/api/src/native-assistant.ts
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,131 @@
 +import { DatabaseSync } from "node:sqlite";
 +import { chmodSync, readFileSync } from "node:fs";
 +import http from "node:http";
@@ -167,6 +167,17 @@ new file mode 100644
 +  });
 +}
 +
++export function routedModel(headers: Headers): string {
++  const safe=(value: string | null) => value && value.length<=160 && /^[a-zA-Z0-9][a-zA-Z0-9._:/@+ -]*$/.test(value) ? value : undefined;
++  const provider=safe(headers.get('x-omniroute-provider'));
++  const model=safe(headers.get('x-omniroute-model'));
++  return provider && model ? `${provider} · ${model}` : 'Provider/model not reported';
++}
++export function routeFooter(routes: string[]): string {
++  const unique=[...new Set(routes)];
++  return '\n\n---\n*'+(unique.length>1?'Models used: ':'Model: ')+(unique.length?unique.join('; '):'Provider/model not reported')+'*';
++}
++
 +export class NativeAssistantRuntime implements AgentRuntime {
 +  private ledger: NativeLedger;
 +  private active?: { id: string; abort: AbortController; runtime: PiAgentRuntime };
@@ -189,7 +200,7 @@ new file mode 100644
 +    if (!user || !space) throw Error('Missing authenticated run scope');
 +    if (Buffer.byteLength(JSON.stringify([request.prompt,request.instructions,request.history]))>65536) throw Error('Conversation exceeds the bounded context limit; start a new chat');
 +    this.ledger.start(request.runId,user,space);
-+    const abort=new AbortController(); let tools=0, output=0, failed=true, pending=false;
++    const abort=new AbortController(); let tools=0, output=0, failed=true, pending=false; const routes: string[]=[];
 +    const signal=context.signal ? AbortSignal.any([context.signal,abort.signal]) : abort.signal;
 +    const runtime=new PiAgentRuntime({ modelFetch: async (url,options) => {
 +      signal.throwIfAborted();
@@ -202,13 +213,14 @@ new file mode 100644
 +        if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream')) { await response.body?.cancel(); throw Error('Free-only pool unavailable or quota exhausted'); }
 +        const reader=response.body!.getReader(); const chunks: Uint8Array[]=[]; let size=0;
 +        try { while(true) { signal.throwIfAborted(); const {done,value}=await reader.read(); if(done)break; if((size+=value.length)>131072)throw Error('Model response limit reached'); chunks.push(value); } } finally { await reader.cancel().catch(()=>{}); }
++        routes.push(routedModel(response.headers));
 +        return new Response(Buffer.concat(chunks),{headers:{'content-type':'text/event-stream'}});
 +      } finally { pending=false; }
 +    }});
 +    this.active={id:request.runId,abort,runtime};
 +    const timer=setTimeout(()=>void this.abort(request.runId),nativeLimits.seconds*1000);
 +    try {
-+      yield {type:'progress',text:'Free-only pool · 120 seconds · 3 model calls · isolated offline computer',activity:true};
++      yield {type:'progress',text:'Auto',activity:true};
 +      const safe: AgentRunRequest={runId:request.runId,threadId:request.threadId,botId:request.botId,prompt:request.prompt,history:request.history.map(x=>({role:x.role,content:x.content})),instructions:request.instructions+'\nYou are the user’s personal assistant in Rakazo. Converse naturally and use sandbox_shell only when useful. The computer is offline and disposable. Never claim to browse, send messages, save workspace notes or change external services; these tools are unavailable. Explain tool restrictions plainly. Do not request credentials.',tools:[shell],model:{provider:'openai-compatible',id:'agent-free',baseUrl:'http://127.0.0.1:1/v1',apiKey:'ipc-placeholder',allowPrivateEndpoint:true,maxTokens:nativeLimits.tokens,contextWindow:32768},onUsage:request.onUsage,executeTool:async(name,args)=>{
 +        signal.throwIfAborted();
 +        if (++tools>nativeLimits.tools || name!==shell.name || typeof args.command!=='string' || args.command.length>8192 || Object.keys(args).some(k=>k!=='command')) throw Error('Computer tool limit reached');
@@ -217,6 +229,7 @@ new file mode 100644
 +      for await (const event of runtime.run(safe,{...context,signal})) {
 +        signal.throwIfAborted();
 +        if(event.type==='text' && (output+=Buffer.byteLength(event.text))>16384)throw Error('Output limit reached');
++        if(event.type==='done' && output>0) yield {type:'text',text:routeFooter(routes)};
 +        yield event;
 +      }
 +      failed=false;
@@ -231,12 +244,12 @@ diff --git a/apps/api/src/native-assistant.test.ts b/apps/api/src/native-assista
 new file mode 100644
 --- /dev/null
 +++ b/apps/api/src/native-assistant.test.ts
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,43 @@
 +import {describe,it,expect} from 'vitest';
 +import {mkdtempSync,rmSync} from 'node:fs';
 +import {tmpdir} from 'node:os';
 +import {join} from 'node:path';
-+import {NativeLedger,nativeJobs} from './native-assistant.js';
++import {NativeLedger,nativeJobs,routedModel,routeFooter} from './native-assistant.js';
 +describe('native assistant boundaries',()=>{
 + it('preserves charged calls, stops, and replay denial across restart',()=>{
 +  const dir=mkdtempSync(join(tmpdir(),'native-ledger-')),file=join(dir,'limits.sqlite');let clock=100000000;
@@ -262,4 +275,16 @@ new file mode 100644
 +  await expect(jobs.enqueue({name:'run.continue',payload:{runId:'a'},availableAt:new Date(Date.now()+10000)})).rejects.toThrow('disabled');
 +  await jobs.enqueue({name:'run.continue',payload:{runId:'a'},maxAttempts:10});expect(received).toEqual([{name:'run.continue',payload:{runId:'a'},maxAttempts:1}]);
 + });
++});
++
++describe('actual routed model display',()=>{
++  it('uses the successful response headers, including fallback selections',()=>{
++    const first=routedModel(new Headers({'x-omniroute-provider':'groq','x-omniroute-model':'openai/gpt-oss-120b'}));
++    const fallback=routedModel(new Headers({'x-omniroute-provider':'nvidia','x-omniroute-model':'qwen/qwen3'}));
++    expect(routeFooter([first,fallback,first])).toBe('\n\n---\n*Models used: groq · openai/gpt-oss-120b; nvidia · qwen/qwen3*');
++  });
++  it('does not infer a provider or expose arbitrary header content',()=>{
++    for(const h of [{},{'x-omniroute-model':'agent-free'},{'x-omniroute-provider':'groq','x-omniroute-model':'[click](https://bad)'},{'x-omniroute-provider':'groq','x-omniroute-model':'x'.repeat(161)}]) expect(routedModel(new Headers(h))).toBe('Provider/model not reported');
++    expect(routeFooter([])).toContain('Provider/model not reported');
++  });
 +});
