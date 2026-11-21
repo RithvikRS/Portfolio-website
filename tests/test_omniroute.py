@@ -19,7 +19,7 @@ class GatewayBoundaryTests(unittest.TestCase):
         self.assertNotIn("swarm_rakazo_models", catalog["caddy_networks"])
         peers = {name for name, service in catalog["services"].items()
                  if "swarm_rakazo_models" in service.get("networks", [])}
-        self.assertEqual(peers, {"omniroute", "rakazo_agent"})
+        self.assertEqual(peers, {"omniroute", "rakazo_api"})
         self.assertIn("--allowed-group=admins", edge["command"])
         self.assertIn("--cookie-csrf-per-request=true", edge["command"])
         self.assertIn("--cookie-csrf-per-request-limit=8", edge["command"])

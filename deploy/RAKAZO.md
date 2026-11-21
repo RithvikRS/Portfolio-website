@@ -1,18 +1,20 @@
-# Rakazo owner workspace and offline desktop
+# Rakazo personal assistant
 
 Open **Rakazo** from your admin dashboard, or use `/rakazo` on the portfolio domain. Sign in through Authelia with your owner account and authenticator, then use Rakazo's Authelia sign-in button if shown. Other users, including other administrators, cannot access this service.
 
-Create workspaces, profiles and scratchpad notes in the workspace app. General workspace chat, provider configuration, schedules and integrations stay disabled. Use the separate note assistant for summaries that you review before saving. The app does not connect profiles to the offline computer. Use **Your dashboard** to return without signing out; **Log out** ends the Rakazo session and returns to your dashboard.
+Use Rakazo's normal chat UI to ask questions, plan work and run bounded shell tasks in the isolated offline computer. Conversations and profiles stay in the native workspace. The separate note assistant is retired; its old links redirect to `/app`. Existing scratchpad notes stay in the database. Sign out through Rakazo to return to your dashboard.
+
+The shared model connection is the free-only `agent-free` OmniRoute pool. Provider selection and keys stay on the server. The computer has no internet or access to production files. External integrations, schedules, delegation, uploads and model-configuration writes remain disabled in this release.
 
 API, web and PostgreSQL run on the approved Ampere worker with private internal networks, read-only container roots, explicit resource limits and file-backed secrets. The runtime database account cannot bypass row-level security. Keep database/data directories and their matching private recovery keys in your backups. Scratchpad notes and profile instructions are database plaintext, so protect database access and encrypt complete backup archives.
 
 The immutable image lives in `deploy/swarm-services.json`. Follow [the verification and publication runbook](RAKAZO-WORKSPACE-VERIFY.md) for updates, and [PR #51](https://github.com/RithvikRS/Portfolio-website/pull/51) for the initial rollout's execution results. The [checkpoint](RAKAZO-WORKSPACE-CHECKPOINT.md) records the earlier development gates.
 
-## Owner-only offline desktop
+## Isolated computer
 
-Use the pinned Rakazo v0.8.0 supervisor with a separate rootless Docker engine and gVisor on Ampere. The controller can start/resume/stop the real desktop, execute its internal commands and establish a noVNC framebuffer connection. Keep model connections and agent jobs disabled.
+Use the pinned Rakazo v0.8.0 supervisor with a separate rootless Docker engine and gVisor on Ampere. The controller can start/resume/stop the real desktop, execute its internal commands and establish a noVNC framebuffer connection. Keep provider keys and network access out of the computer.
 
-Choose **Offline desktop pilot** inside Rakazo to open `/computer/`. The dedicated engine, controller and bridge run on Ampere under their own bounded user services. The browser edge runs in Swarm. Keep the existing production Docker engine and its services separate from the pilot.
+Native chat starts the computer when it needs a shell tool. The existing `/computer/` endpoint remains available for owner maintenance; normal chat requires no separate screen. The dedicated engine, controller and bridge run on Ampere under their own bounded user services. The browser edge runs in Swarm. Keep the existing production Docker engine and its services separate from the pilot.
 
 The desktop-control page wraps Rakazo's supervisor and stays separate from the workspace API/database. The page exposes only the fixed owner's start, stop, view and control actions. Model/provider endpoints and agent-run endpoints return 404. No provider keys are installed.
 
@@ -34,7 +36,7 @@ The desktop-control page wraps Rakazo's supervisor and stays separate from the w
 
 The pinned runtime cannot use the rootless user manager's systemd connection. `runtime_launcher.py` validates the OCI limits and home mounts, joins an enforced cgroup **before** starting gVisor, and refuses unbounded computers. It handles the cgroup itself instead of granting access to host ancestors. Whole-cgroup OOM termination prevents a partially killed desktop from lingering.
 
-Keep the controller trusted and its Docker socket private. A default Docker runtime alone cannot constrain arbitrary Docker API callers. The browser bridge exposes no Docker API or arbitrary command endpoint. Do not mount either Docker socket into a computer or the browser edge.
+Keep the controller trusted and its Docker socket private. A default Docker runtime alone cannot constrain arbitrary Docker API callers. The public browser edge exposes no Docker API or command endpoint. The separate internal executor exposes only bounded commands in the fixed gVisor guest. Do not mount either Docker socket into a computer or the browser edge.
 
 The upstream supervisor uses `SANDBOX_COMPUTER_EGRESS=open` because its firewall helper does not support this rootless topology. Actual egress remains blocked by the enclosing network namespace. Do not copy that setting to a normal networked engine. Keep host SELinux Enforcing and leave production Docker/firewalld configuration unchanged.
 
@@ -57,20 +59,18 @@ The earlier standalone runtime probe remains available as `scripts/verify-rakazo
 
 ## Browser access
 
-The entry point is `/rakazo` from the admin dashboard, redirecting to `https://rakazo.144.24.135.201.sslip.io/`. Keep the desktop on its own browser origin, separate from the public portfolio and password vault.
+Open `/rakazo` from your dashboard. The outer OIDC gate reuses central Authelia MFA, checks the exact owner identity, and checks current account/group access through the access console. Native OIDC separately validates the owner allowlist. Anonymous requests and forged identity headers cannot reach chat or computer tools.
 
-Caddy clears supplied identity headers and asks Authelia for MFA authorization. The dedicated Authelia rule admits only `rithvik`; the edge additionally requires that exact username and the `admins` group. State-changing requests and WebSocket upgrades require the expected browser Origin. The edge lives on a private, non-attachable, internal Swarm overlay with Caddy, has no published ports, and mounts only the bridge socket directory read-only.
-
-This pilot uses Authelia's login directly on the dedicated hostname, with its own cookie. Expect a separate MFA sign-in there; it has no additional native application password. Screen connections expire after four minutes and the pilot page reconnects through authorization. After each release, check browser login, reconnect and non-owner denial before enabling further capabilities.
+The private executor has no published port and shares an internal, non-attachable network only with the native API. Caddy cannot route to it. The model key is available only to the API; the computer and executor have no provider credentials. See [sign-in behavior](#sign-in-through-your-dashboard) for session renewal and consent.
 
 ## Install or update
 
 1. Review the changes and the private recovery checkpoint on the PC under `Documents/Portfolio-private-backups/rakazo-pilot/`.
 2. Copy the current `deploy/rakazo/` files and `scripts/install-rakazo-controller.py` to the staged source tree on Ampere. Run the installer there as root. It checks the node ID, dedicated identity, existing 8 GiB mounted cache and staged prerequisites. It installs/enables only the dedicated pilot user services.
-3. Start the fixed desktop through the local Unix bridge, then run `verify-rakazo-controller.py`. Rerun negative admission tests after changing runtime policy. Keep model and worker services absent.
+3. Start the fixed desktop through the local Unix bridge, then run `verify-rakazo-controller.py`. Rerun negative admission tests after changing runtime policy. Keep production Docker unchanged and verify the native executor separately.
 4. Validate the candidate Caddy/Authelia configuration, backup inventory and edge service. Review the separate-origin screen and reconnect behavior. The dedicated user-manager restart test recreates the cgroups and recovers the controller without restarting production Docker. A whole-host reboot remains outside that rehearsal.
 5. Batch the change into one PR and merge through the existing deployment pipeline. Confirm all existing services and the new edge converge, anonymous requests redirect to Authelia, non-owners fail, and the owner can view/control/stop the desktop.
-6. Keep the full Rakazo application, model connections, scheduled runs and multi-user admission for a later phase.
+6. Verify native chat and Stop through the free-only pool. Keep scheduled runs, external integrations and multi-user admission disabled.
 
 For maintenance, run the user service commands as `rakazo-pilot` with `XDG_RUNTIME_DIR=/run/user/986` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/986/bus`. The units are `rakazo-engine`, `rakazo-controller` and `rakazo-bridge`. Stop the desktop first, then stop bridge/controller/engine. Never restart production Docker to operate this pilot.
 
@@ -86,7 +86,7 @@ Keep the private checkpoint archive and verification reports on the PC outside G
 
 ## Previous Incus attempt
 
-Keep Rakazo agent execution and model connections disabled. Do not expose the application until the isolation checks below pass.
+This earlier rejected attempt did not enable agent execution or model access. The current deployment uses gVisor instead.
 
 The Ampere preflight on 8 November 2026 found a confinement blocker with the available Oracle Linux packages:
 
@@ -136,7 +136,7 @@ Treat scratchpad notes and profile instructions as database plaintext. The pinne
 
 Open `/rakazo` from your admin dashboard. The outer OIDC gate and Rakazo's native login both use `https://rithvik.ddns.net/auth`, so they reuse your existing central Authelia MFA session. If Rakazo shows its Authelia sign-in button, click it; you should not need to enter your password and authenticator again while that central session remains valid. With no central session, complete MFA once. On first use, Authelia may ask you to approve Rakazo-edge access to your identity, email, groups and offline session renewal. This consent is separate from entering your password and authenticator; it does not enable model access. The root URL opens `/app` instead of the upstream marketing page.
 
-Keep the edge cookie scoped to the Rakazo host. Do not share cookies across `sslip.io` tenants or disable the outer gate. The gate requires the owner email and `admins` claim; Caddy also checks the current directory on every app and desktop request, rejecting a disabled owner, removed admin membership, duplicate email, or another admin. Native workspace login retains its own owner allowlist. Model connections and agent jobs remain disabled.
+Keep the edge cookie scoped to the Rakazo host. Do not share cookies across `sslip.io` tenants or disable the outer gate. The gate requires the owner email and `admins` claim; Caddy also checks the current directory on every app and desktop request, rejecting a disabled owner, removed admin membership, duplicate email, or another admin. Native workspace login retains its own owner allowlist. Only the restricted native assistant runtime is enabled; provider configuration, schedules and external integrations remain disabled.
 
 The two-minute edge refresh renews the secure browser ticket during requests. Store OIDC tokens in the isolated, memory-only `rakazo_sessions` service; restarting it signs the edge session out without deleting workspace data. Both session services run on Ampere with limits and no published ports. The five-minute ID-token lifetime uses the existing `omniroute_edge` Authelia lifespan policy; it does not reuse OmniRoute credentials or session storage.
 
@@ -144,34 +144,31 @@ Before the first deployment, run `python3 scripts/setup-rakazo-sso.py` on the ma
 
 Verify a fresh session prompts for MFA once, an existing dashboard session reaches Rakazo without another credential prompt, and logout returns to `/admin/`. Anonymous or forged identity headers must never reach workspace or desktop data. Recheck navigation after more than five minutes to exercise ticket renewal.
 
-## Note assistant with approval
+## Native chat, limits and Stop
 
-Open **Note assistant** in your admin dashboard, or visit [the note assistant](https://rakazo.144.24.135.201.sslip.io/agent-pilot/). Sign in to the Rakazo workspace first if the assistant asks for a native session. It reuses your owner-only Authelia gate and native Rakazo session; no provider key belongs in the browser.
+Open **Rakazo** from the dashboard and send a message in the existing composer. Use its **Stop** button while a response is running. No additional task screen or model sign-in is required.
 
-1. Choose a workspace, profile and source note. The assistant remembers the workspace selected in Rakazo.
-2. Choose **Draft summary**. Only the selected note is sent to the free-only `agent-free` pool. Its contents are untrusted data, not instructions to execute.
-3. Review the exact title and draft. Choose **Approve and save as a new note**, then confirm. The source stays unchanged. The model has no write tool.
-4. Choose **Stop task** during generation or **Discard draft** before approval to prevent saving that result.
+The native thread/job machinery stores messages and run states. A restricted Pi runtime adapter uses only the free-only pool and exposes `sandbox_shell`. Shell commands go through a private executor service and the existing Unix bridge into the networkless gVisor computer. Neither the API nor the executor receives a Docker socket. The executor has no model key or workspace database credentials. The API has no host shell interface.
 
-The API rechecks your native session and selected workspace before model calls and before approval. It rejects expired approval, a changed/deleted source note, a mismatched draft version and repeated submissions. Once a save is submitted, Stop cannot undo that write. If its outcome is uncertain, check your workspace: the assistant will not retry that save automatically. Drafts expire after 24 hours.
+- One active model run across the deployment.
+- Per authenticated user: 20 run admissions per UTC day, 40 gateway calls per UTC day and four calls per rolling minute.
+- Per run: 120 seconds, three gateway calls, eight tools, 1,024 completion tokens per call and 16 KiB visible text.
+- Each shell command has a 20-second deadline and bounded output. Stop and run completion stop the computer, terminating lingering background processes.
+- Gateway request/response envelopes are capped at 96/128 KiB. Oversized conversation context is rejected with a request to start a new chat.
+- OmniRoute's restricted key still enforces its free-only connection pool and 12,000-total-token daily allowance. Limits may end a run earlier; requests already accepted by a provider may finish after cancellation.
 
-### Durable limits and recovery
+The private ledger `/srv/swarm/rakazo_api/native-assistant.sqlite` charges admissions and calls before dispatch. Counts survive restarts; interrupted IDs cannot replay. Native chat history remains in PostgreSQL. The ledger requires one exact-node replica and stop-first updates. Keep both database and API data in coordinated private backups. A bridge recovery marker prevents an abandoned command from being silently reused after restart; investigate a recovery failure before admitting another run.
 
-The private SQLite ledger at `/srv/swarm/rakazo_agent/notes.sqlite` stores task states, draft versions, approval outcomes and charged calls. It uses synchronous commits and an exclusive database lock; a second controller sharing that file fails closed. Keep one replica, exact Ampere placement and stop-first updates. Separate copies of the file are not a distributed quota system.
+The historical `/srv/swarm/rakazo_agent/notes.sqlite` remains private for recovery but has no running service or UI. Do not delete it or its backups merely to retire the feature.
 
-- At most one active run, 10 new tasks per UTC day, 4 model requests in a rolling minute and 40 per UTC day. Each dispatch is charged before it is sent; cancellation or failure does not refund it.
-- Each run lasts at most 60 seconds and sends at most 3 gateway requests, with 256 output tokens per request and at most 2 selected-note tool calls.
-- Accept notes up to 4,000 characters / 8 KiB, requests up to 24 KiB, gateway responses up to 64 KiB and visible output up to 4 KiB.
-- The existing gateway additionally restricts the key to the selected combo/connections and applies its 12,000-total-token daily quota. The assistant's persistent counters count requests and tasks, not exact provider tokens. Fallback can attempt two providers per gateway request; token limits apply per attempt.
+## Adding other people later
 
-After a restart, running jobs become interrupted and never resume automatically. Completed drafts survive for review. An approval interrupted during saving becomes uncertain and cannot silently replay. Stop persists the stopped state, aborts requests, prevents further calls and kills an unresponsive worker after one second. An upstream provider may still finish a request it already accepted. Stop remains available through the owner gate even if the native Rakazo session expires.
+Owner-only Authelia MFA, current-directory authorization and the native signup allowlist remain enforced. Do not widen those gates yet. The ledger already keys usage to the authenticated user ID and native workspace access keeps its row-level checks, but the computer currently uses one fixed owner home.
 
-The separate service has a read-only root, 768 MiB memory and 0.5 CPU limits. Its internal, non-attachable overlays connect to Caddy, OmniRoute and the native Rakazo API. It has no database credentials, production data mounts other than its own ledger, Docker socket, desktop bridge, upstream provider keys or direct internet route. The gateway key remains a file-backed Swarm secret. General workspace execution, schedules, delegation and desktop model access remain disabled.
+Before allowing family or friends, allocate separate computer identities and homes per user/workspace, enforce ownership on every command and screen request, add per-user pool budgets and concurrent-resource limits, and test cross-user data denial, revocation, restart recovery and backup/restore. Connect service permissions to the existing access console. Sharing the present owner computer is not multi-user isolation.
 
-### Backup and verification
+## Release verification
 
-Draft text and note titles are sensitive plaintext in the private ledger, like native scratchpad notes. The normal worker backup must include `/srv/swarm/rakazo_agent` and stop its writer before archiving. Keep manager `.secrets/rakazo-agent/model_key`, the matching OmniRoute data/encryption environment, native Rakazo database/keys and service image with that backup. Never copy a live SQLite file while this service is writing. Stop the assistant before restoring; retain the current state first. On startup, restored active/approving jobs become interrupted/uncertain, not executable work.
+Build the image from all three pinned patches with `scripts/build-rakazo-app.py`. Keep the default image workspace-only; production enables the restricted adapter with `NATIVE_ASSISTANT=true`. The entrypoint fixes the pool identity, disabled native sandbox/provider configuration and retry settings. Never enable the unrestricted upstream runtime with an environment override.
 
-Run the Node note tests for approval, source-change rejection, quota persistence, restart recovery and uncertain-save duplicate prevention. `deploy/rakazo/verify-agent.mjs` exercises the actual native runtime in a bounded networkless container with synthetic gateway responses. `scripts/verify-rakazo-notes.mjs` uses the disposable PostgreSQL/OIDC fixture and a loopback SSH tunnel to check the real note API, browser preview, approval after restart, one new note and an unchanged source. Its model response is synthetic; it never uses production data or keys. Keep screenshots and generated fixture state outside Git.
-
-After deployment, verify public anonymous/forged-owner denial, workspace execution denial, private gateway/API connectivity, blocked metadata/internet access and all service health. Use a synthetic note for the final live workflow; never approve saving into an existing personal note merely to test a release.
+Run the repository tests, native ledger/job-policy tests, disposable compiled API/browser tests and real gVisor bridge checks. Confirm native conversation replies, tool result rendering, Stop without subsequent model calls, durable quotas, owner denial and unchanged health of other services. The disposable model fixture uses synthetic responses and cannot establish provider quality or production login success. Keep its generated credentials, screenshots and restore evidence outside Git.

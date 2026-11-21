@@ -32,11 +32,6 @@
 !deploy/rakazo/edge.mjs
 !deploy/rakazo/bridge.mjs
 
-!deploy/rakazo/agent-policy.mjs
-!deploy/rakazo/agent-pilot.mjs
 
-!deploy/rakazo/note-store.mjs
-!deploy/rakazo/note-api.mjs
-!deploy/rakazo/note-server.mjs
-!deploy/rakazo/note-ui.mjs
-!deploy/rakazo/note-page.html
+!deploy/rakazo/native-agent-bridge.mjs
+!deploy/rakazo/native-executor-proxy.mjs

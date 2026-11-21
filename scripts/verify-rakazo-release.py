@@ -107,6 +107,12 @@ def seed(state,source=None,archives=None):
 
 
 def start_apps(state):
+    if 'native-fixture' not in state['containers']:
+        cid=create(state,'native-fixture',['create','--name',state['prefix']+'-native-fixture','--network',state['network'],
+            '--network-alias','omniroute','--network-alias','rakazo_executor',*v.limits('128m','0.25'),'--user','1000:1000','--read-only',
+            '--mount','type=volume,src='+state['volumes']['secrets']+',dst=/run/secrets,readonly',
+            '-e','VERIFY_RAKAZO_DISPOSABLE=1','--entrypoint','node',state['image'],'/run/secrets/verify-native-model.mjs'])
+        docker.call('start',cid)
     catalog=json.loads((ROOT/'deploy/swarm-services.json').read_text())
     for mode in ['api','web']:
         source=catalog['services']['rakazo_'+mode]
@@ -210,10 +216,10 @@ def start(image):
         check_missing_secrets(state)
         volume(state,'secrets','secrets');volume(state,'data','data')
         bundle=directory/'bundle';bundle.mkdir(mode=0o700)
-        values={name:secrets.token_hex(32) for name in ['rakazo_encryption_key','rakazo_auth_secret','rakazo_screen_secret','rakazo_oidc_secret']}
+        values={name:secrets.token_hex(32) for name in ['rakazo_encryption_key','rakazo_auth_secret','rakazo_screen_secret','rakazo_oidc_secret','rakazo_pilot_model_key']}
         values.update(rakazo_database_url=state['database_url'],rakazo_owner_email='owner@example.test')
         for name,value in values.items():(bundle/name).write_text(value)
-        for name in ['entrypoint.mjs','verify-edge.mjs']:(bundle/name).write_bytes((ROOT/'deploy/rakazo'/name).read_bytes())
+        for name in ['entrypoint.mjs','verify-edge.mjs','verify-native-model.mjs']:(bundle/name).write_bytes((ROOT/'deploy/rakazo'/name).read_bytes())
         r=subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(bundle/'test-key.pem'),'-out',str(bundle/'test-ca.pem'),'-days','2','-subj','/CN=rakazo.verify.test','-addext','subjectAltName=DNS:rakazo.verify.test'],capture_output=True,timeout=30)
         if r.returncode:raise RuntimeError('Could not create disposable TLS certificate.')
         for path in bundle.iterdir():path.chmod(0o444)
@@ -273,7 +279,7 @@ def restore(state):
     backup=Path(state['directory'])/'backup'
     backup.mkdir(mode=0o700)
     # Stop writers before coordinated database, encryption-material and file snapshots.
-    for key in ['edge','web','api']:remove(state,key)
+    for key in ['edge','web','api','native-fixture']:remove(state,key)
     binary(['exec',state['containers']['db'],'pg_dump','-U','verify_owner','-d',state['database'],'-Fc'],output_file=backup/'database.dump')
     for key in ['secrets','data']:
         helper=create(state,'archive',['create','--name',state['prefix']+'-archive','--network','none',*v.limits('256m','0.25'),'--user','1000:1000','--read-only',

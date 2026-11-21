@@ -11,8 +11,8 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 COPY scripts/ ./scripts/
 COPY server/ ./server/
 COPY tests/ ./tests/
+COPY deploy/rakazo/edge.mjs deploy/rakazo/bridge.mjs deploy/rakazo/native-agent-bridge.mjs deploy/rakazo/native-executor-proxy.mjs ./deploy/rakazo/
 # Rakazo authorization and browser-path tests import these public helpers only in the build stage.
-COPY deploy/rakazo/edge.mjs deploy/rakazo/bridge.mjs deploy/rakazo/agent-policy.mjs deploy/rakazo/agent-pilot.mjs deploy/rakazo/note-store.mjs deploy/rakazo/note-api.mjs deploy/rakazo/note-server.mjs deploy/rakazo/note-ui.mjs deploy/rakazo/note-page.html ./deploy/rakazo/
 COPY data/ ./data/
 COPY css/ ./css/
 COPY js/ ./js/

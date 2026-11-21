@@ -854,12 +854,13 @@
       }
     },
     "rakazo_api": {
-      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:bb0de4ba6ce886bbd7993cf5521ce44a82c5fb64e6d76dd4c10f6efe17ca3f3f",
+      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:82733fcafba7b0d27db487d0e27a0bf93182183386346b69ce5534c5093ac9da",
       "user": "1000:1000",
       "networks": [
         "swarm_rakazo_app",
         "swarm_rakazo_data",
-        "swarm_rakazo_notes"
+        "swarm_rakazo_models",
+        "swarm_rakazo_execution"
       ],
       "read_only": true,
       "cap_drop": [
@@ -938,7 +939,8 @@
         "MEDIA_GENERATION_PROVIDER": "disabled",
         "NODE_OPTIONS": "--max-old-space-size=768",
         "DB_POOL_MAX": "5",
-        "LOG_LEVEL": "warn"
+        "LOG_LEVEL": "warn",
+        "NATIVE_ASSISTANT": "true"
       },
       "secrets": [
         "rakazo_database_url",
@@ -946,7 +948,8 @@
         "rakazo_auth_secret",
         "rakazo_screen_secret",
         "rakazo_oidc_secret",
-        "rakazo_owner_email"
+        "rakazo_owner_email",
+        "rakazo_pilot_model_key"
       ],
       "volumes": [
         {
@@ -976,7 +979,7 @@
       }
     },
     "rakazo_web": {
-      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:bb0de4ba6ce886bbd7993cf5521ce44a82c5fb64e6d76dd4c10f6efe17ca3f3f",
+      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:82733fcafba7b0d27db487d0e27a0bf93182183386346b69ce5534c5093ac9da",
       "user": "1000:1000",
       "networks": [
         "swarm_rakazo_app"
@@ -1201,13 +1204,11 @@
         }
       ]
     },
-    "rakazo_agent": {
-      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:bb0de4ba6ce886bbd7993cf5521ce44a82c5fb64e6d76dd4c10f6efe17ca3f3f",
-      "user": "1000:1000",
+    "rakazo_executor": {
+      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:82733fcafba7b0d27db487d0e27a0bf93182183386346b69ce5534c5093ac9da",
+      "user": "986:984",
       "networks": [
-        "swarm_rakazo_agent",
-        "swarm_rakazo_models",
-        "swarm_rakazo_notes"
+        "swarm_rakazo_execution"
       ],
       "read_only": true,
       "cap_drop": [
@@ -1216,61 +1217,25 @@
       "stop_grace_period": "10s",
       "command": [
         "node",
-        "/pilot/note-server.mjs"
+        "/pilot/native-executor-proxy.mjs"
       ],
       "environment": {
         "NODE_ENV": "production",
-        "NODE_OPTIONS": "--max-old-space-size=128"
+        "NODE_OPTIONS": "--max-old-space-size=64"
       },
       "configs": [
         {
-          "source": "rakazo_agent_pilot",
-          "target": "/pilot/agent-pilot.mjs"
-        },
-        {
-          "source": "rakazo_agent_policy",
-          "target": "/pilot/agent-policy.mjs"
-        },
-        {
-          "source": "rakazo_agent_worker",
-          "target": "/pilot/agent-worker.mjs"
-        },
-        {
-          "source": "rakazo_note_store_mjs",
-          "target": "/pilot/note-store.mjs"
-        },
-        {
-          "source": "rakazo_note_api_mjs",
-          "target": "/pilot/note-api.mjs"
-        },
-        {
-          "source": "rakazo_note_server_mjs",
-          "target": "/pilot/note-server.mjs"
-        },
-        {
-          "source": "rakazo_note_ui_mjs",
-          "target": "/pilot/note-ui.mjs"
-        },
-        {
-          "source": "rakazo_note_page_html",
-          "target": "/pilot/note-page.html"
+          "source": "rakazo_executor_proxy",
+          "target": "/pilot/native-executor-proxy.mjs"
         }
       ],
-      "secrets": [
-        "rakazo_pilot_model_key"
-      ],
+      "secrets": [],
       "volumes": [
         {
-          "type": "tmpfs",
-          "target": "/tmp",
-          "tmpfs": {
-            "size": 33554432
-          }
-        },
-        {
           "type": "bind",
-          "source": "/srv/swarm/rakazo_agent",
-          "target": "/data"
+          "source": "/var/lib/rakazo-pilot/bridge",
+          "target": "/run/pilot",
+          "read_only": true
         }
       ],
       "logging": {
@@ -1289,8 +1254,8 @@
         },
         "resources": {
           "limits": {
-            "memory": "768M",
-            "cpus": "0.5"
+            "memory": "128M",
+            "cpus": "0.25"
           }
         },
         "update_config": {
@@ -1381,17 +1346,12 @@
       "attachable": false,
       "internal": true
     },
-    "swarm_rakazo_agent": {
-      "driver": "overlay",
-      "attachable": false,
-      "internal": true
-    },
     "swarm_rakazo_models": {
       "driver": "overlay",
       "attachable": false,
       "internal": true
     },
-    "swarm_rakazo_notes": {
+    "swarm_rakazo_execution": {
       "driver": "overlay",
       "attachable": false,
       "internal": true
@@ -1404,8 +1364,7 @@
     "swarm_vault_edge",
     "swarm_models_edge",
     "swarm_rakazo_edge",
-    "swarm_rakazo_app",
-    "swarm_rakazo_agent"
+    "swarm_rakazo_app"
   ],
   "configs": {
     "access_console": {
@@ -1417,29 +1376,8 @@
     "rakazo_entrypoint": {
       "file": "deploy/rakazo/entrypoint.mjs"
     },
-    "rakazo_agent_pilot": {
-      "file": "deploy/rakazo/agent-pilot.mjs"
-    },
-    "rakazo_agent_policy": {
-      "file": "deploy/rakazo/agent-policy.mjs"
-    },
-    "rakazo_agent_worker": {
-      "file": "deploy/rakazo/agent-worker.mjs"
-    },
-    "rakazo_note_store_mjs": {
-      "file": "deploy/rakazo/note-store.mjs"
-    },
-    "rakazo_note_api_mjs": {
-      "file": "deploy/rakazo/note-api.mjs"
-    },
-    "rakazo_note_server_mjs": {
-      "file": "deploy/rakazo/note-server.mjs"
-    },
-    "rakazo_note_ui_mjs": {
-      "file": "deploy/rakazo/note-ui.mjs"
-    },
-    "rakazo_note_page_html": {
-      "file": "deploy/rakazo/note-page.html"
+    "rakazo_executor_proxy": {
+      "file": "deploy/rakazo/native-executor-proxy.mjs"
     }
   },
   "secrets": {
@@ -1614,7 +1552,7 @@
       ]
     },
     {
-      "url": "https://rakazo.144.24.135.201.sslip.io/agent-pilot/",
+      "url": "https://rakazo.144.24.135.201.sslip.io/app",
       "statuses": [
         302,
         303,
@@ -1632,8 +1570,7 @@
     "http://rakazo_pilot:8080/healthz",
     "http://rakazo_api:3100/ready",
     "http://rakazo_web:5173/",
-    "http://rakazo_sso:4180/ready",
-    "http://rakazo_agent:8080/healthz"
+    "http://rakazo_sso:4180/ready"
   ],
   "caddy_network_aliases": {
     "swarm_rakazo_app": [

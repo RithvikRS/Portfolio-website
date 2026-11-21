@@ -50,6 +50,8 @@ class RakazoBuildTests(unittest.TestCase):
         b, _ = build.input_fingerprint({"a":b"two", "z":b"one"})
         c, _ = build.input_fingerprint({"a":b"changed", "z":b"one"})
         self.assertEqual(a,b)
+        self.assertEqual(build.input_fingerprint({"a":b"one\r\ntwo\r\n"})[0],
+                         build.input_fingerprint({"a":b"one\ntwo\n"})[0])
         self.assertNotEqual(a,c)
         self.assertEqual(record["source"],build.UPSTREAM_SHA)
 

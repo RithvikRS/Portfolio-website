@@ -46,25 +46,24 @@ class RakazoDeploymentTests(unittest.TestCase):
         invalid['caddy_network_aliases'] = {'swarm_backend': ['identity.example.test']}
         with self.assertRaises(RuntimeError): render(invalid)
 
-    def test_agent_pilot_has_isolated_networks_and_no_workspace_state(self):
+    def test_native_execution_has_no_public_route_or_provider_key(self):
         catalog = json.loads((ROOT / 'deploy/swarm-services.json').read_text())
-        service = catalog['services']['rakazo_agent']
-        self.assertEqual(service['secrets'], ['rakazo_pilot_model_key'])
-        self.assertTrue(service['read_only'])
-        self.assertEqual(service['deploy']['replicas'], 1)
-        self.assertEqual(service['deploy']['update_config']['order'], 'stop-first')
-        self.assertNotIn('ports', service)
-        self.assertEqual([m for m in service['volumes'] if m['type'] == 'bind'], [{'type': 'bind', 'source': '/srv/swarm/rakazo_agent', 'target': '/data'}])
-        peers = {name for name, item in catalog['services'].items() if 'swarm_rakazo_notes' in item.get('networks', [])}
-        self.assertEqual(peers, {'rakazo_agent', 'rakazo_api'})
-        for network in service['networks']:
-            self.assertTrue(catalog['networks'][network]['internal'])
-            self.assertFalse(catalog['networks'][network]['attachable'])
-        members = [name for name, item in catalog['services'].items()
-                   if 'swarm_rakazo_models' in item.get('networks', [])]
-        self.assertEqual(set(members), {'omniroute', 'rakazo_agent'})
-        caddy = (ROOT / 'deploy/Caddyfile.swarm').read_text()
-        self.assertGreater(caddy.index('handle_path /agent-pilot/*'), caddy.index('uri /internal/authorize-rakazo?'))
+        executor = catalog['services']['rakazo_executor']
+        self.assertEqual(executor['secrets'], [])
+        self.assertTrue(executor['read_only'])
+        self.assertNotIn('ports', executor)
+        self.assertEqual(executor['user'], '986:984')
+        self.assertEqual(executor['networks'], ['swarm_rakazo_execution'])
+        peers = {name for name,item in catalog['services'].items() if 'swarm_rakazo_execution' in item.get('networks', [])}
+        self.assertEqual(peers, {'rakazo_api', 'rakazo_executor'})
+        self.assertNotIn('swarm_rakazo_execution', catalog['caddy_networks'])
+        self.assertTrue(catalog['networks']['swarm_rakazo_execution']['internal'])
+        self.assertFalse(catalog['networks']['swarm_rakazo_execution']['attachable'])
+        self.assertEqual(executor['volumes'], [{'type':'bind','source':'/var/lib/rakazo-pilot/bridge','target':'/run/pilot','read_only':True}])
+        peers = {name for name,item in catalog['services'].items() if 'swarm_rakazo_models' in item.get('networks', [])}
+        self.assertEqual(peers, {'rakazo_api','omniroute'})
+        self.assertEqual(catalog['services']['rakazo_api']['environment']['NATIVE_ASSISTANT'], 'true')
+        self.assertNotIn('rakazo_agent', catalog['services'])
 
     def test_workspace_services_have_no_external_network_or_runtime_socket(self):
         catalog = json.loads((ROOT / 'deploy/swarm-services.json').read_text())

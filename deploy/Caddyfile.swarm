@@ -90,7 +90,7 @@ http://:8081 {
     }
 
     @rakazoNotesEntry path /rakazo-notes /rakazo-notes/
-    redir @rakazoNotesEntry https://rakazo.144.24.135.201.sslip.io/agent-pilot/ 302
+    redir @rakazoNotesEntry https://rakazo.144.24.135.201.sslip.io/app 302
 
     @rakazoEntry path /rakazo /rakazo/
     redir @rakazoEntry https://rakazo.144.24.135.201.sslip.io/ 302
@@ -251,12 +251,8 @@ rakazo.144.24.135.201.sslip.io {
                         request_header -X-Rakazo-Email
                         redir /dashboard-exit https://rithvik.ddns.net/admin/ 302
                         redir / /app 302
-                        redir /agent-pilot /agent-pilot/ 302
-                        handle_path /agent-pilot/* {
-                            request_header Remote-User rithvik
-                            request_header Remote-Groups admins
-                            reverse_proxy rakazo_agent:8080
-                        }
+                        @retiredNoteAssistant path /agent-pilot /agent-pilot/*
+                        redir @retiredNoteAssistant /app 302
                         redir /computer /computer/ 302
                         handle_path /computer/* {
                             # The directory check above admitted this exact owner/admin.

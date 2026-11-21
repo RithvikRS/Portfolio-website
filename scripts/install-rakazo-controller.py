@@ -26,7 +26,7 @@ def main():
         raise SystemExit('Stage and mount the dedicated 8 GiB cache first')
     for path in [BASE/'controller.env',BASE/'controller-src/infra/sandboxes/supervisor/node_modules/tsx/dist/cli.mjs',Path('/opt/rakazo-runtime/node'),Path('/opt/rakazo-runtime/release-20261102.0/runsc')]:
         if not path.is_file():raise SystemExit('Missing staged prerequisite: '+str(path))
-    for name in ['runtime_launcher.py','prepare_cgroups.py','enter_namespace.py','bridge.mjs']:
+    for name in ['runtime_launcher.py','prepare_cgroups.py','enter_namespace.py','bridge.mjs','native-agent-bridge.mjs']:
         write(DEST/name,(ROOT/'deploy/rakazo'/name).read_text(),0o755)
     settings=json.loads((BASE/'engine/daemon.json').read_text())
     if settings['data-root']!=str(cache) or settings.get('iptables') is not False or settings.get('bridge')!='none':

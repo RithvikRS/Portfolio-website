@@ -120,13 +120,13 @@ References: [OmniRoute](https://github.com/cheaper-inference/OmniRoute), [OpenRo
 
 ## Phase 6: Rakazo pilot and shared use
 
-Start with the [restricted runtime pilot and its isolation gates](RAKAZO.md). Rootless gVisor passed the offline ARM64 computer-image checks after the Incus confinement probe failed. Complete the application/controller integration before exposing Rakazo; keep model connections and agent execution disabled.
+Start with the [restricted runtime pilot and its isolation gates](RAKAZO.md). Rootless gVisor passed the offline ARM64 computer-image checks after the Incus confinement probe failed. Use the native owner-only chat integration with the free-only pool, persistent quotas and Stop controls. Keep external integrations and scheduled execution disabled until their separate boundaries are tested.
 
 Run Rakazo application services on Ampere after validating its selected release, ARM images, Swarm adaptation, PostgreSQL persistence, and backup coverage. Its supported PostgreSQL dependency remains separate from the trading app's Oracle decision.
 
 Use native Authelia OIDC and an explicit admitted-user group/registration policy. Test SSO-only login and email/identity claims with the actual versions. Give each family member or friend an individual account and workspace. Start with two users before expanding.
 
-Separate agent execution from production administration. Do not give general-purpose agents the production Docker socket, manager SSH keys, or financial database credentials. Choose a dedicated sandbox host or remote provider after assessing isolation, resource limits, and costs; sharing an overlay network is not a security boundary against host Docker access.
+Separate agent execution from production administration. Do not give general-purpose agents the production Docker socket, manager SSH keys, or financial database credentials. Keep execution in the dedicated rootless gVisor engine on Ampere; sharing an overlay network alone is not a security boundary against host Docker access. Allocate separate computer homes and identities before multi-user admission.
 
 Start with read-only research or repository summaries. Decide who supplies model keys, who pays, and how usage, concurrent agents, disk, and runtime are limited. Verify which limits the selected release actually enforces. Test that users cannot access each other's private agents/files/credentials and that account deactivation stops existing sessions and scheduled work.
 
@@ -169,6 +169,8 @@ Verify current versions, licensing, free quotas, and tenancy availability before
 - [Vaultwarden OIDC](https://github.com/dani-garcia/vaultwarden/wiki/Enabling-SSO-support-using-OpenId-Connect), [Swarm secrets](https://docs.docker.com/engine/swarm/secrets/), and [Infisical SSO licensing](https://infisical.com/docs/documentation/platform/sso/overview).
 
 
-## Rakazo offline controller pilot
+## Rakazo native assistant status
 
-The offline controller, desktop screen and enforced per-computer limits now pass the private integration checks. Use the owner-only Authelia route and dashboard link for the fixed offline desktop. Check browser access and reconnect behavior after deploying the release. Model connections, full Rakazo agent jobs and additional users remain disabled. See [Rakazo pilot](RAKAZO.md) for the exact resume gate and disposable-storage limits.
+Use Rakazo's existing chat UI for general conversation and bounded shell work through the free-only pool. The separate note-assistant service and screen are retired; existing notes remain. Keep the current owner-only Authelia policy. The computer is offline and its home remains disposable.
+
+Next, verify production owner chat and Stop, then add separately tested capabilities such as public web research and durable sandbox storage. Before sharing access, implement per-user computer homes, service grants, pool budgets and cross-user isolation/revocation tests. Native workspace ownership and user-keyed quota records provide part of that foundation; the current fixed owner computer is not ready for multiple people. See [the native assistant runbook](RAKAZO.md#native-chat-limits-and-stop).

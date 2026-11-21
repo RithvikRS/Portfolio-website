@@ -16,13 +16,26 @@ for (const [name, file] of Object.entries(mappings[mode])) {
   if (!value || /[\r\n\0]/.test(value)) throw new Error('Invalid private Rakazo setting: ' + name);
   process.env[name] = value;
 }
-// This release cannot be switched into an inference deployment by a service override.
+// Keep the route/owner policy active. Native chat uses only the restricted adapter.
 if (mode === 'api') {
   process.env.WORKSPACE_ONLY = 'true';
   process.env.SANDBOX_PROVIDER = 'none';
   process.env.CLOUD_AGENT_PROVIDER = 'none';
   process.env.AUTH_PASSWORD_ENABLED = 'false';
   process.env.OIDC_ALLOW_SIGNUP_BYPASS = 'false';
+  if (process.env.NATIVE_ASSISTANT === 'true') {
+    process.env.PI_DEFAULT_PROVIDER = 'local';
+    process.env.PI_DEFAULT_MODEL = 'agent-free';
+    process.env.PI_DEFAULT_CREDENTIALS = 'host';
+    process.env.RAKAZO_LOCAL_MODELS = 'agent-free';
+    process.env.RAKAZO_LOCAL_MODELS_URL = 'http://127.0.0.1:1/v1';
+    process.env.RAKAZO_LOCAL_MAX_TOKENS = '1024';
+    process.env.RAKAZO_LOCAL_CONTEXT_WINDOW = '32768';
+    process.env.MAX_TOOL_CALLS_PER_TURN = '8';
+    process.env.MODEL_STREAM_MAX_RETRIES = '0';
+    process.env.MODEL_STREAM_TIMEOUT_MS = '55000';
+    process.env.MODEL_STREAM_IDLE_TIMEOUT_MS = '55000';
+  }
 }
 const args = mode === 'api'
   ? ['--enable-source-maps', 'dist/index.js']
