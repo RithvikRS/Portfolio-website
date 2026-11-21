@@ -99,6 +99,7 @@ The private PC copy is under `Portfolio-private-backups/rakazo-workspace/rehears
 
 Rakazo's current content encryption does not cover scratchpad note text or profile instructions. Protect database snapshots and exports as sensitive plaintext unless you encrypt the complete archive. The pilot desktop home remains excluded disposable storage.
 
-## Rakazo note assistant
 
-Include `/srv/swarm/rakazo_agent` in the Ampere writer inventory. Stop `portfolio_rakazo_agent` before copying its SQLite ledger; restarting it marks interrupted runs and uncertain approvals without replaying them. Retain the native Rakazo database/keys, OmniRoute database/encryption environment, manager `.secrets/rakazo-agent/model_key` and pinned service image with the ledger. Drafts and titles contain private plaintext; keep and transfer the full recovery kit privately, outside Git.
+## Native Rakazo assistant state
+
+Include `/srv/swarm/rakazo_api/native-assistant.sqlite` with the API data and native PostgreSQL backup. Stop their writers before archiving; the normal worker inventory discovers the API bind. Retain the matching model-key secret, OmniRoute state and pinned image. The retired `/srv/swarm/rakazo_agent` ledger remains private and has no writer. Keep it for recovery outside Git. The gVisor home is still disposable and excluded from durable workspace backups.

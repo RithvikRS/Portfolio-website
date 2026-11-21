@@ -1,8 +1,10 @@
-# Rakazo owner workspace and offline desktop
+# Rakazo personal assistant
 
 Open **Rakazo** from your admin dashboard, or use `/rakazo` on the portfolio domain. Sign in through Authelia with your owner account and authenticator, then use Rakazo's Authelia sign-in button if shown. Other users, including other administrators, cannot access this service.
 
-Create workspaces, profiles and scratchpad notes in the workspace app. General workspace chat, provider configuration, schedules and integrations stay disabled. Use the separate note assistant for summaries that you review before saving. The app does not connect profiles to the offline computer. Use **Your dashboard** to return without signing out; **Log out** ends the Rakazo session and returns to your dashboard.
+Use Rakazo's normal chat UI to ask questions, plan work and run bounded shell tasks in the isolated offline computer. Conversations and profiles stay in the native workspace. The separate note assistant is retired; its old links redirect to `/app`. Existing scratchpad notes stay in the database. Sign out through Rakazo to return to your dashboard.
+
+The shared model connection is the free-only `agent-free` OmniRoute pool. Provider selection and keys stay on the server. The computer has no internet or access to production files. External integrations, schedules, delegation, uploads and model-configuration writes remain disabled in this release.
 
 API, web and PostgreSQL run on the approved Ampere worker with private internal networks, read-only container roots, explicit resource limits and file-backed secrets. The runtime database account cannot bypass row-level security. Keep database/data directories and their matching private recovery keys in your backups. Scratchpad notes and profile instructions are database plaintext, so protect database access and encrypt complete backup archives.
 
@@ -144,34 +146,31 @@ Before the first deployment, run `python3 scripts/setup-rakazo-sso.py` on the ma
 
 Verify a fresh session prompts for MFA once, an existing dashboard session reaches Rakazo without another credential prompt, and logout returns to `/admin/`. Anonymous or forged identity headers must never reach workspace or desktop data. Recheck navigation after more than five minutes to exercise ticket renewal.
 
-## Note assistant with approval
+## Native chat, limits and Stop
 
-Open **Note assistant** in your admin dashboard, or visit [the note assistant](https://rakazo.144.24.135.201.sslip.io/agent-pilot/). Sign in to the Rakazo workspace first if the assistant asks for a native session. It reuses your owner-only Authelia gate and native Rakazo session; no provider key belongs in the browser.
+Open **Rakazo** from the dashboard and send a message in the existing composer. Use its **Stop** button while a response is running. No additional task screen or model sign-in is required.
 
-1. Choose a workspace, profile and source note. The assistant remembers the workspace selected in Rakazo.
-2. Choose **Draft summary**. Only the selected note is sent to the free-only `agent-free` pool. Its contents are untrusted data, not instructions to execute.
-3. Review the exact title and draft. Choose **Approve and save as a new note**, then confirm. The source stays unchanged. The model has no write tool.
-4. Choose **Stop task** during generation or **Discard draft** before approval to prevent saving that result.
+The native thread/job machinery stores messages and run states. A restricted Pi runtime adapter uses only the free-only pool and exposes `sandbox_shell`. Shell commands go through a private executor service and the existing Unix bridge into the networkless gVisor computer. Neither the API nor the executor receives a Docker socket. The executor has no model key or workspace database credentials. The API has no host shell interface.
 
-The API rechecks your native session and selected workspace before model calls and before approval. It rejects expired approval, a changed/deleted source note, a mismatched draft version and repeated submissions. Once a save is submitted, Stop cannot undo that write. If its outcome is uncertain, check your workspace: the assistant will not retry that save automatically. Drafts expire after 24 hours.
+- One active model run across the deployment.
+- Per authenticated user: 20 run admissions per UTC day, 40 gateway calls per UTC day and four calls per rolling minute.
+- Per run: 120 seconds, three gateway calls, eight tools, 1,024 completion tokens per call and 16 KiB visible text.
+- Each shell command has a 20-second deadline and bounded output. Stop and run completion stop the computer, terminating lingering background processes.
+- Gateway request/response envelopes are capped at 96/128 KiB. Oversized conversation context is rejected with a request to start a new chat.
+- OmniRoute's restricted key still enforces its free-only connection pool and 12,000-total-token daily allowance. Limits may end a run earlier; requests already accepted by a provider may finish after cancellation.
 
-### Durable limits and recovery
+The private ledger `/srv/swarm/rakazo_api/native-assistant.sqlite` charges admissions and calls before dispatch. Counts survive restarts; interrupted IDs cannot replay. Native chat history remains in PostgreSQL. The ledger requires one exact-node replica and stop-first updates. Keep both database and API data in coordinated private backups. A bridge recovery marker prevents an abandoned command from being silently reused after restart; investigate a recovery failure before admitting another run.
 
-The private SQLite ledger at `/srv/swarm/rakazo_agent/notes.sqlite` stores task states, draft versions, approval outcomes and charged calls. It uses synchronous commits and an exclusive database lock; a second controller sharing that file fails closed. Keep one replica, exact Ampere placement and stop-first updates. Separate copies of the file are not a distributed quota system.
+The historical `/srv/swarm/rakazo_agent/notes.sqlite` remains private for recovery but has no running service or UI. Do not delete it or its backups merely to retire the feature.
 
-- At most one active run, 10 new tasks per UTC day, 4 model requests in a rolling minute and 40 per UTC day. Each dispatch is charged before it is sent; cancellation or failure does not refund it.
-- Each run lasts at most 60 seconds and sends at most 3 gateway requests, with 256 output tokens per request and at most 2 selected-note tool calls.
-- Accept notes up to 4,000 characters / 8 KiB, requests up to 24 KiB, gateway responses up to 64 KiB and visible output up to 4 KiB.
-- The existing gateway additionally restricts the key to the selected combo/connections and applies its 12,000-total-token daily quota. The assistant's persistent counters count requests and tasks, not exact provider tokens. Fallback can attempt two providers per gateway request; token limits apply per attempt.
+## Adding other people later
 
-After a restart, running jobs become interrupted and never resume automatically. Completed drafts survive for review. An approval interrupted during saving becomes uncertain and cannot silently replay. Stop persists the stopped state, aborts requests, prevents further calls and kills an unresponsive worker after one second. An upstream provider may still finish a request it already accepted. Stop remains available through the owner gate even if the native Rakazo session expires.
+Owner-only Authelia MFA, current-directory authorization and the native signup allowlist remain enforced. Do not widen those gates yet. The ledger already keys usage to the authenticated user ID and native workspace access keeps its row-level checks, but the computer currently uses one fixed owner home.
 
-The separate service has a read-only root, 768 MiB memory and 0.5 CPU limits. Its internal, non-attachable overlays connect to Caddy, OmniRoute and the native Rakazo API. It has no database credentials, production data mounts other than its own ledger, Docker socket, desktop bridge, upstream provider keys or direct internet route. The gateway key remains a file-backed Swarm secret. General workspace execution, schedules, delegation and desktop model access remain disabled.
+Before allowing family or friends, allocate separate computer identities and homes per user/workspace, enforce ownership on every command and screen request, add per-user pool budgets and concurrent-resource limits, and test cross-user data denial, revocation, restart recovery and backup/restore. Connect service permissions to the existing access console. Sharing the present owner computer is not multi-user isolation.
 
-### Backup and verification
+## Release verification
 
-Draft text and note titles are sensitive plaintext in the private ledger, like native scratchpad notes. The normal worker backup must include `/srv/swarm/rakazo_agent` and stop its writer before archiving. Keep manager `.secrets/rakazo-agent/model_key`, the matching OmniRoute data/encryption environment, native Rakazo database/keys and service image with that backup. Never copy a live SQLite file while this service is writing. Stop the assistant before restoring; retain the current state first. On startup, restored active/approving jobs become interrupted/uncertain, not executable work.
+Build the image from all three pinned patches with `scripts/build-rakazo-app.py`. Keep the default image workspace-only; production enables the restricted adapter with `NATIVE_ASSISTANT=true`. The entrypoint fixes the pool identity, disabled native sandbox/provider configuration and retry settings. Never enable the unrestricted upstream runtime with an environment override.
 
-Run the Node note tests for approval, source-change rejection, quota persistence, restart recovery and uncertain-save duplicate prevention. `deploy/rakazo/verify-agent.mjs` exercises the actual native runtime in a bounded networkless container with synthetic gateway responses. `scripts/verify-rakazo-notes.mjs` uses the disposable PostgreSQL/OIDC fixture and a loopback SSH tunnel to check the real note API, browser preview, approval after restart, one new note and an unchanged source. Its model response is synthetic; it never uses production data or keys. Keep screenshots and generated fixture state outside Git.
-
-After deployment, verify public anonymous/forged-owner denial, workspace execution denial, private gateway/API connectivity, blocked metadata/internet access and all service health. Use a synthetic note for the final live workflow; never approve saving into an existing personal note merely to test a release.
+Run the repository tests, native ledger/job-policy tests, disposable compiled API/browser tests and real gVisor bridge checks. Confirm native conversation replies, tool result rendering, Stop without subsequent model calls, durable quotas, owner denial and unchanged health of other services. The disposable model fixture uses synthetic responses and cannot establish provider quality or production login success. Keep its generated credentials, screenshots and restore evidence outside Git.

@@ -1,3 +1,4 @@
+import {agentBridge} from './native-agent-bridge.mjs';
 // Fixed owner desktop only. No model API, provider configuration, shell API or jobs.
 import http from 'node:http';
 import {readFileSync,writeFileSync,unlinkSync,chmodSync} from 'node:fs';
@@ -28,7 +29,10 @@ function proxy(req,res,socket,head){let u;try{u=target(req.url.split('?')[0]);}c
  const out=http.request(u,{method:'GET',headers:h,timeout:30000});out.on('error',()=>{if(socket)socket.destroy();else{if(!res.headersSent)res.writeHead(502);res.end();}});out.on('timeout',()=>out.destroy());
  if(socket){out.on('upgrade',(r,peer,buffered)=>{socket.write('HTTP/1.1 101 Switching Protocols\r\n'+Object.entries(r.headers).map(([k,v])=>`${k}: ${v}\r\n`).join('')+'\r\n');if(buffered.length)socket.write(buffered);if(head.length)peer.write(head);peer.pipe(socket);socket.pipe(peer);socket.on('close',()=>peer.destroy());socket.on('error',()=>peer.destroy());peer.on('error',()=>socket.destroy());});out.on('response',()=>socket.destroy());}
  else out.on('response',r=>{res.writeHead(r.statusCode,{'content-type':r.headers['content-type']||'application/octet-stream','cache-control':'no-store','content-security-policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; form-action 'none'; base-uri 'none'"});r.pipe(res);});out.end();}
+const agent=agentBridge({base,headers,api,getId:()=>id,setId:value=>{id=value;writeFileSync(base+'/controller-create-result.json',JSON.stringify({id}),{mode:0o600});}});
 const server=http.createServer(async(req,res)=>{try{
+ if(await agent.handle(req,res))return;
+ if(agent.active()&&req.method==='POST'){json(res,409,{error:'Use Stop in Rakazo chat before controlling this computer'});return;}
  if(req.method==='GET'&&req.url==='/'){res.writeHead(200,{'content-type':'text/html','cache-control':'no-store'});res.end(page);return;}
  if(req.method==='GET'&&req.url==='/pilot.js'){res.writeHead(200,{'content-type':'text/javascript'});res.end(js);return;}
  if(req.method==='GET'&&req.url==='/api/status'){json(res,200,id?await api('/computers/'+id):{running:false});return;}

@@ -1,0 +1,265 @@
+diff --git a/apps/api/src/app.ts b/apps/api/src/app.ts
+--- a/apps/api/src/app.ts
++++ b/apps/api/src/app.ts
+@@ -1,3 +1,4 @@
++import { nativeAssistant, nativeJobs, NativeAssistantRuntime } from "./native-assistant.js";
+ import { hostname } from "node:os";
+ import { ORPCError, onError } from "@orpc/server";
+ import { RPCHandler } from "@orpc/server/fetch";
+@@ -359,7 +360,7 @@
+     },
+   });
+ 
+-  const jobKind = env.workspaceOnly ? "disabled" : env.wakeupDriver;
++  const jobKind = nativeAssistant() ? "memory" : env.workspaceOnly ? "disabled" : env.wakeupDriver;
+   const inMemoryJobs = jobKind === "memory" ? new InMemoryJobQueue() : undefined;
+   // prismaOverride skips createDb, so there is no shared pool; keep a bounded one for jobs.
+   let ownedJobPool: Pool | undefined;
+@@ -373,7 +374,7 @@
+   const shutdown = new AbortController();
+   // Chat starts in the process that receives it; the worker only takes what this one can't.
+   const runs = env.workspaceOnly || inMemoryJobs ? undefined : new RunStarter(realtime, { signal: shutdown.signal });
+-  const jobs = env.workspaceOnly ? disabledWorkspaceJobs() :
++  const jobs = nativeAssistant() ? nativeJobs(inMemoryJobs!) : env.workspaceOnly ? disabledWorkspaceJobs() :
+     inMemoryJobs ??
+     new RunJobPublisher(
+       prisma,
+@@ -516,7 +517,7 @@
+     ...connectorOverrides,
+   ]);
+   if (!env.workspaceOnly) integrationSettings.warmDirectories();
+-  const runtime = env.workspaceOnly ? disabledWorkspaceRuntime() :
++  const runtime = nativeAssistant() ? new NativeAssistantRuntime() : env.workspaceOnly ? disabledWorkspaceRuntime() :
+     runtimeOverride ??
+     (env.agentRuntime === "scripted"
+       ? new ScriptedAgentRuntime()
+@@ -720,7 +721,7 @@
+     await inMemoryJobs.start(jobHandlers);
+   }
+   runs?.attach(jobHandlers);
+-  const reconciler = inMemoryJobs
++  const reconciler = inMemoryJobs && !nativeAssistant()
+     ? createJobReconciler({
+         prisma,
+         jobs,
+@@ -901,7 +902,7 @@
+       sso: env.oidc
+         ? { name: env.oidc.name, availability: auth.ssoAvailability() ?? "checking" }
+         : null,
+-      ...(env.workspaceOnly ? { workspaceOnly: true } : {}),
++      ...(env.workspaceOnly && !nativeAssistant() ? { workspaceOnly: true } : {}),
+       passwordAuth: env.passwordAuth !== false,
+       passwordReset: env.passwordAuth !== false && Boolean(email),
+       resetUrl:
+diff --git a/apps/api/src/workspace-only.ts b/apps/api/src/workspace-only.ts
+--- a/apps/api/src/workspace-only.ts
++++ b/apps/api/src/workspace-only.ts
+@@ -1,3 +1,4 @@
++import { nativeAssistant } from "./native-assistant.js";
+ import type { AgentRuntime, JobPublisher } from "@rakazo/adapter-kit";
+ 
+ export const WORKSPACE_ONLY_MESSAGE = "Model connections and agent execution are disabled on this deployment.";
+@@ -34,8 +35,9 @@
+   if (path.includes("%") || path.includes("\\") || path.includes("//")) return false;
+   if (method === "GET" && ["/health", "/ready", "/internal/health"].includes(path)) return true;
+   if (method === "GET" && AUTH_GET.has(path)) return true;
++  if (nativeAssistant() && method === "GET" && path === "/api/monitoring/config") return true;
+   if (method === "POST" && AUTH_POST.has(path)) return true;
+-  return ["GET", "POST"].includes(method) && path.startsWith("/rpc/") && RPC.has(path.slice(5));
++  return ["GET", "POST"].includes(method) && path.startsWith("/rpc/") && (RPC.has(path.slice(5)) || (nativeAssistant() && new Set(["bootstrap", "trustedLinkSites/list", "skills/list", "memory/providerConfig", "voice/status", "messaging/status", "computer/updates", "connections/list", "threads/send", "threads/stop", "threads/clear", "threads/react", "threads/answer", "models/roles", "models/main", "onboarding/status"]).has(path.slice(5))));
+ }
+ 
+ export function workspaceOwnerEmail(enabled: boolean, allowlist: string | undefined): string | undefined {
+diff --git a/apps/api/src/routes/models.ts b/apps/api/src/routes/models.ts
+--- a/apps/api/src/routes/models.ts
++++ b/apps/api/src/routes/models.ts
+@@ -1,3 +1,4 @@
++import { nativeAssistant } from "../native-assistant.js";
+ import { ORPCError } from "@orpc/server";
+ import { SecretStoreUnavailableError } from "@rakazo/adapter-kit";
+ import {
+@@ -68,7 +69,7 @@
+   } = ctx;
+   return {
+     models: {
+-      list: authed.models.list.handler(async ({ context }) => deps.env.workspaceOnly ? [] : chatCatalog(context.actor)),
++      list: authed.models.list.handler(async ({ context }) => nativeAssistant() ? [{provider:"local",providerName:"Free-only pool",id:"agent-free",label:"Free-only agent pool",billing:"free",managed:true}] : deps.env.workspaceOnly ? [] : chatCatalog(context.actor)),
+       credentials: authed.models.credentials.handler(async ({ context }) => {
+         if (deps.env.workspaceOnly) return [];
+         const [rows, main] = await Promise.all([
+diff --git a/apps/api/src/routes/shared.ts b/apps/api/src/routes/shared.ts
+--- a/apps/api/src/routes/shared.ts
++++ b/apps/api/src/routes/shared.ts
+@@ -1,3 +1,4 @@
++import { nativeAssistant } from "../native-assistant.js";
+ import {
+   deploymentModelRole,
+   findConnectedModelCredential,
+@@ -56,7 +57,7 @@
+     spaceId: actor.spaceId,
+     isDeploymentOwner: false,
+     isAdmin: admin,
+-    ...(deps.env.workspaceOnly ? { workspaceOnly: true } : {}),
++    ...(deps.env.workspaceOnly && !nativeAssistant() ? { workspaceOnly: true } : {}),
+     needsModel: !deps.env.workspaceOnly && setup.needsModel,
+     defaultProvider: canonicalPiProviderId(setup.model?.provider ?? deps.env.defaultProvider),
+     defaultModel: setup.model?.modelId ?? deps.env.defaultModel,
+diff --git a/apps/api/src/native-assistant.ts b/apps/api/src/native-assistant.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/api/src/native-assistant.ts
+@@ -0,0 +1,118 @@
++import { DatabaseSync } from "node:sqlite";
++import { chmodSync, readFileSync } from "node:fs";
++import http from "node:http";
++import type { AgentRuntime, AgentRunRequest, AdapterContext, AgentRuntimeEvent, JobPublisher } from "@rakazo/adapter-kit";
++import { PiAgentRuntime, InMemoryJobQueue } from "@rakazo/adapters";
++
++export const nativeAssistant = () => process.env.NATIVE_ASSISTANT === "true";
++export const nativeLimits = { seconds: 120, calls: 3, tools: 8, tokens: 1024, dailyRuns: 20, dailyCalls: 40, minuteCalls: 4 };
++const shell = { name: "sandbox_shell", description: "Run a shell command in your isolated, offline Linux computer. Use Python for calculations and file work. No internet or production filesystem access. Files are disposable. Commands have a 20-second deadline; background processes are stopped when this run ends.", inputSchema: { type: "object", properties: { command: { type: "string" } }, required: ["command"], additionalProperties: false }, route: { connectorId: "isolated", toolName: "sandbox_shell" } };
++
++// Only explicit foreground chat jobs. Never persist automatic retries or schedules.
++export function nativeJobs(queue: InMemoryJobQueue): JobPublisher {
++  return { enqueue: async job => {
++    if (job.name !== "run.continue") throw Error("Background automation is disabled");
++    if (job.availableAt && job.availableAt.getTime() > Date.now() + 1000) throw Error("Deferred runs are disabled");
++    return queue.enqueue({ ...job, maxAttempts: 1 });
++  }, cancel: key => queue.cancel(key), close: () => queue.close() };
++}
++
++export class NativeLedger {
++  db: DatabaseSync;
++  constructor(file: string, private now = () => Date.now()) {
++    this.db = new DatabaseSync(file);
++    this.db.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA locking_mode=EXCLUSIVE; BEGIN EXCLUSIVE; COMMIT;");
++    this.db.exec("CREATE TABLE IF NOT EXISTS native_runs(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,space_id TEXT NOT NULL,state TEXT NOT NULL,created INTEGER NOT NULL,calls INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS native_calls(run_id TEXT NOT NULL,user_id TEXT NOT NULL,at INTEGER NOT NULL); UPDATE native_runs SET state='interrupted' WHERE state='running';");
++    if (file !== ':memory:') chmodSync(file, 0o600);
++  }
++  transaction<T>(fn: () => T): T { this.db.exec('BEGIN IMMEDIATE'); try { const value = fn(); this.db.exec('COMMIT'); return value; } catch (e) { this.db.exec('ROLLBACK'); throw e; } }
++  start(id: string, user: string, space: string) { this.transaction(() => {
++    if (!user || !space || !id) throw Error('Missing authenticated run scope');
++    if (this.db.prepare("SELECT 1 FROM native_runs WHERE state='running'").get()) throw Error('Another assistant run is active');
++    if (this.db.prepare('SELECT 1 FROM native_runs WHERE id=?').get(id)) throw Error('Interrupted runs must not replay');
++    const count = this.db.prepare('SELECT count(*) AS n FROM native_runs WHERE user_id=? AND created>=?').get(user, Math.floor(this.now()/86400000)*86400000)!;
++    if (Number(count.n) >= nativeLimits.dailyRuns) throw Error('Daily assistant task limit reached');
++    this.db.prepare("INSERT INTO native_runs(id,user_id,space_id,state,created) VALUES(?,?,?,'running',?)").run(id,user,space,this.now());
++  }); }
++  call(id: string, user: string) { this.transaction(() => {
++    const run = this.db.prepare("SELECT calls FROM native_runs WHERE id=? AND user_id=? AND state='running'").get(id,user);
++    if (!run || Number(run.calls) >= nativeLimits.calls) throw Error('Run stopped or model-call limit reached');
++    const count = (since: number) => Number(this.db.prepare('SELECT count(*) AS n FROM native_calls WHERE user_id=? AND at>=?').get(user,since)!.n);
++    if (count(this.now()-60000)>=nativeLimits.minuteCalls || count(Math.floor(this.now()/86400000)*86400000)>=nativeLimits.dailyCalls) throw Error('Assistant request quota reached');
++    this.db.prepare('INSERT INTO native_calls VALUES(?,?,?)').run(id,user,this.now());
++    this.db.prepare('UPDATE native_runs SET calls=calls+1 WHERE id=?').run(id);
++  }); }
++  finish(id: string, state: string) { this.db.prepare("UPDATE native_runs SET state=? WHERE id=? AND state='running'").run(state,id); }
++  close() { this.db.close(); }
++}
++
++export function bridgeCall(path: string, body: object, signal?: AbortSignal): Promise<unknown> {
++  return new Promise((resolve,reject) => {
++    const req = http.request({ hostname: 'rakazo_executor', port: 8080, path, method:'POST', signal,
++      headers: { 'Content-Type':'application/json' }, timeout: 30000 }, res => {
++      let text = ''; res.on('data', chunk => { text += chunk; if (Buffer.byteLength(text)>32768) req.destroy(Error('Computer output limit reached')); });
++      res.on('end', () => { if (res.statusCode!==200) return reject(Error('Isolated computer unavailable')); try { resolve(JSON.parse(text)); } catch { reject(Error('Invalid computer reply')); } });
++    }); req.on('error',reject); req.on('timeout',()=>req.destroy(Error('Computer deadline reached'))); req.end(JSON.stringify(body));
++  });
++}
++
++export class NativeAssistantRuntime implements AgentRuntime {
++  private ledger: NativeLedger;
++  private active?: { id: string; abort: AbortController; runtime: PiAgentRuntime };
++  private key: string;
++  constructor() {
++    this.key=readFileSync('/run/secrets/rakazo_pilot_model_key','utf8').trim();
++    if (!this.key || /[\r\n\0]/.test(this.key)) throw Error('Missing restricted model key');
++    this.ledger=new NativeLedger('/data/native-assistant.sqlite');
++  }
++  describe() { return { id:'native-free-assistant',contractVersion:'1',adapterVersion:'1',capabilities:{streaming:true,tools:true,compaction:false,scripted:false} }; }
++  async abort(id: string) {
++    const active=this.active; if (!active || active.id!==id) return;
++    this.ledger.finish(id,'stopped'); active.abort.abort();
++    await Promise.allSettled([active.runtime.abort(id),bridgeCall('/agent/stop',{runId:id})]);
++  }
++  async *run(request: AgentRunRequest, context: Partial<AdapterContext> = {}): AsyncIterable<AgentRuntimeEvent> {
++    if (this.active) throw Error('Another assistant run is active');
++    if (request.routineId || request.resumeFromCheckpoint || request.turnCheckpoint) throw Error('Automatic or resumed jobs are disabled');
++    const user=context.userId, space=context.spaceId;
++    if (!user || !space) throw Error('Missing authenticated run scope');
++    if (Buffer.byteLength(JSON.stringify([request.prompt,request.instructions,request.history]))>65536) throw Error('Conversation exceeds the bounded context limit; start a new chat');
++    this.ledger.start(request.runId,user,space);
++    const abort=new AbortController(); let tools=0, output=0, failed=true, pending=false;
++    const signal=context.signal ? AbortSignal.any([context.signal,abort.signal]) : abort.signal;
++    const runtime=new PiAgentRuntime({ modelFetch: async (url,options) => {
++      signal.throwIfAborted();
++      if (pending || String(url)!=='http://127.0.0.1:1/v1/chat/completions' || options?.method?.toUpperCase()!=='POST' || typeof options.body!=='string' || Buffer.byteLength(options.body)>98304) throw Error('Model request denied');
++      const body=JSON.parse(options.body);
++      if (body.model!=='agent-free' || !Array.isArray(body.messages) || body.tools?.some((t: any)=>t.type!=='function'||t.function?.name!==shell.name)) throw Error('Model or tool override denied');
++      this.ledger.call(request.runId,user); pending=true;
++      try {
++        const response=await fetch('http://omniroute:20128/v1/chat/completions',{method:'POST',redirect:'error',headers:{Authorization:'Bearer '+this.key,'Content-Type':'application/json'},body:JSON.stringify({model:'agent-free',messages:body.messages,tools:[{type:'function',function:{name:shell.name,description:shell.description,parameters:shell.inputSchema}}],tool_choice:'auto',stream:true,max_tokens:nativeLimits.tokens}),signal:AbortSignal.any([signal,AbortSignal.timeout(55000)])});
++        if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream')) { await response.body?.cancel(); throw Error('Free-only pool unavailable or quota exhausted'); }
++        const reader=response.body!.getReader(); const chunks: Uint8Array[]=[]; let size=0;
++        try { while(true) { signal.throwIfAborted(); const {done,value}=await reader.read(); if(done)break; if((size+=value.length)>131072)throw Error('Model response limit reached'); chunks.push(value); } } finally { await reader.cancel().catch(()=>{}); }
++        return new Response(Buffer.concat(chunks),{headers:{'content-type':'text/event-stream'}});
++      } finally { pending=false; }
++    }});
++    this.active={id:request.runId,abort,runtime};
++    const timer=setTimeout(()=>void this.abort(request.runId),nativeLimits.seconds*1000);
++    try {
++      yield {type:'progress',text:'Free-only pool · 120 seconds · 3 model calls · isolated offline computer',activity:true};
++      const safe: AgentRunRequest={runId:request.runId,threadId:request.threadId,botId:request.botId,prompt:request.prompt,history:request.history.map(x=>({role:x.role,content:x.content})),instructions:request.instructions+'\nYou are the user’s personal assistant in Rakazo. Converse naturally and use sandbox_shell only when useful. The computer is offline and disposable. Never claim to browse, send messages, save workspace notes or change external services; these tools are unavailable. Explain tool restrictions plainly. Do not request credentials.',tools:[shell],model:{provider:'openai-compatible',id:'agent-free',baseUrl:'http://127.0.0.1:1/v1',apiKey:'ipc-placeholder',allowPrivateEndpoint:true,maxTokens:nativeLimits.tokens,contextWindow:32768},onUsage:request.onUsage,executeTool:async(name,args)=>{
++        signal.throwIfAborted();
++        if (++tools>nativeLimits.tools || name!==shell.name || typeof args.command!=='string' || args.command.length>8192 || Object.keys(args).some(k=>k!=='command')) throw Error('Computer tool limit reached');
++        return bridgeCall('/agent/exec',{runId:request.runId,userId:user,spaceId:space,command:args.command},signal);
++      }};
++      for await (const event of runtime.run(safe,{...context,signal})) {
++        signal.throwIfAborted();
++        if(event.type==='text' && (output+=Buffer.byteLength(event.text))>16384)throw Error('Output limit reached');
++        yield event;
++      }
++      failed=false;
++    } finally {
++      clearTimeout(timer); abort.abort();
++      await Promise.allSettled([runtime.abort(request.runId),bridgeCall('/agent/stop',{runId:request.runId})]);
++      this.ledger.finish(request.runId,failed?'stopped':'completed'); this.active=undefined;
++    }
++  }
++}
+diff --git a/apps/api/src/native-assistant.test.ts b/apps/api/src/native-assistant.test.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/api/src/native-assistant.test.ts
+@@ -0,0 +1,31 @@
++import {describe,it,expect} from 'vitest';
++import {mkdtempSync,rmSync} from 'node:fs';
++import {tmpdir} from 'node:os';
++import {join} from 'node:path';
++import {NativeLedger,nativeJobs} from './native-assistant.js';
++describe('native assistant boundaries',()=>{
++ it('preserves charged calls, stops, and replay denial across restart',()=>{
++  const dir=mkdtempSync(join(tmpdir(),'native-ledger-')),file=join(dir,'limits.sqlite');let clock=100000000;
++  let ledger=new NativeLedger(file,()=>clock);
++  try{ledger.start('a','owner','space');ledger.call('a','owner');ledger.finish('a','stopped');ledger.close();ledger=new NativeLedger(file,()=>clock);
++   expect(()=>ledger.start('a','owner','space')).toThrow('replay');expect(()=>ledger.call('a','owner')).toThrow();
++   ledger.start('b','owner','space');for(let i=0;i<3;i++)ledger.call('b','owner');expect(()=>ledger.call('b','owner')).toThrow();ledger.finish('b','completed');
++   ledger.start('c','owner','space');expect(()=>ledger.call('c','owner')).toThrow('quota');clock+=60001;ledger.call('c','owner');
++   expect(()=>ledger.call('c','outsider')).toThrow();expect(()=>ledger.start('d','other','elsewhere')).toThrow('active');
++  }finally{ledger.close();rmSync(dir,{recursive:true});}
++ });
++ it('interrupts active work on restart and enforces daily admission',()=>{
++  const dir=mkdtempSync(join(tmpdir(),'native-restart-')),file=join(dir,'limits.sqlite');let ledger=new NativeLedger(file);
++  try{ledger.start('first','owner','space');ledger.close();ledger=new NativeLedger(file);expect(()=>ledger.start('first','owner','space')).toThrow('replay');
++   for(let i=1;i<20;i++){ledger.start('job'+i,'owner','space');ledger.finish('job'+i,'completed');}
++   expect(()=>ledger.start('last','owner','space')).toThrow('Daily');
++  }finally{ledger.close();rmSync(dir,{recursive:true});}
++ });
++ it('does not admit schedules or deferred automatic retries',async()=>{
++  const received:unknown[]=[];const queue={enqueue:async(x:unknown)=>{received.push(x);},cancel:async()=>{},close:async()=>{}};
++  const jobs=nativeJobs(queue as never);
++  await expect(jobs.enqueue({name:'routine.wakeup',payload:{routineId:'a',scheduledFor:'now'}})).rejects.toThrow('disabled');
++  await expect(jobs.enqueue({name:'run.continue',payload:{runId:'a'},availableAt:new Date(Date.now()+10000)})).rejects.toThrow('disabled');
++  await jobs.enqueue({name:'run.continue',payload:{runId:'a'},maxAttempts:10});expect(received).toEqual([{name:'run.continue',payload:{runId:'a'},maxAttempts:1}]);
++ });
++});

@@ -16,7 +16,7 @@ BASE_IMAGE = 'ghcr.io/elie222/rakazo/app@sha256:908045c3b393f4d948ea6bed9cd86ab7
 UPSTREAM_SHA = '747ece9641dcc60c95467ffae8ab2311fb1f3f81'
 AMPERE_NODE = 'tzqsl1t88r3l1i8zcqvcmredo'
 GIB = 1024**3
-PATCH_NAMES = ('workspace-only.patch', 'workspace-ui.patch')
+PATCH_NAMES = ('workspace-only.patch', 'workspace-ui.patch', 'native-assistant.patch')
 ARTIFACTS = {
     'api-src': '/app/apps/api/src', 'api-dist': '/app/apps/api/dist',
     'web-src': '/app/apps/web/src', 'web-dist': '/app/apps/web/dist',
@@ -31,7 +31,9 @@ git apply --check /tmp/workspace-only.patch
 git apply /tmp/workspace-only.patch
 git apply --check /tmp/workspace-ui.patch
 git apply /tmp/workspace-ui.patch
-NODE_ENV=test pnpm exec vitest run apps/api/src/workspace-only.test.ts apps/web/src/pages/WorkspaceOnly.test.tsx --maxWorkers=2
+git apply --check /tmp/native-assistant.patch
+git apply /tmp/native-assistant.patch
+NODE_ENV=test pnpm exec vitest run apps/api/src/workspace-only.test.ts apps/api/src/native-assistant.test.ts apps/web/src/pages/WorkspaceOnly.test.tsx --maxWorkers=2
 pnpm --filter @rakazo/api build
 RAKAZO_ALLOW_DEV_SECRETS=1 pnpm --filter @rakazo/web build
 '''
