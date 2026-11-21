@@ -141,11 +141,12 @@ diff --git a/apps/api/src/native-assistant.ts b/apps/api/src/native-assistant.ts
 new file mode 100644
 --- /dev/null
 +++ b/apps/api/src/native-assistant.ts
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,179 @@
 +import { DatabaseSync } from "node:sqlite";
 +import { chmodSync, readFileSync } from "node:fs";
 +import http from "node:http";
 +import type { AgentRuntime, AgentRunRequest, AdapterContext, AgentRuntimeEvent, JobPublisher } from "@rakazo/adapter-kit";
++import { ModelAccountError } from "@rakazo/adapter-kit";
 +import { PiAgentRuntime, InMemoryJobQueue } from "@rakazo/adapters";
 +
 +export const nativeAssistant = () => process.env.NATIVE_ASSISTANT === "true";
@@ -227,6 +228,21 @@ new file mode 100644
 + return /^(approve|reject) [a-f0-9]{32}$/i.test(block.text.trim())?block.text.trim():undefined;
 +}
 +
++export async function routerFailure(response: Response): Promise<Response> {
++  const reader=response.body?.getReader();let raw='',size=0;
++  try {if(reader)while(true){const {done,value}=await reader.read();if(done)break;if((size+=value.length)>8192)break;raw+=new TextDecoder().decode(value);}} finally {await reader?.cancel().catch(()=>{});}
++  let data: any;try{data=JSON.parse(raw).error;}catch{}
++  const status=response.ok?502:response.status;
++  const quota=status===429&&data?.code==='token_limit_exceeded';
++  const counts=typeof data?.message==='string'?data.message.match(/(\d{1,12})\/(\d{1,12}) tokens used/):undefined;
++  const reset=typeof data?.reset_at==='string'&&/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(data.reset_at)&&Number.isFinite(Date.parse(data.reset_at))?data.reset_at:undefined;
++  const retry=Number.isSafeInteger(data?.retry_after)&&data.retry_after>=0&&data.retry_after<=604800?data.retry_after:undefined;
++  let message=quota?'Rakazo daily token quota reached'+(counts?': '+counts[1]+'/'+counts[2]+' tokens used.':'.'):status===429?'Free-only router request or provider rate limit reached.':status===401||status===403?'Free-only router denied this request.':'Free-only model pool unavailable. No paid route was used.';
++  if(reset)message+=' Resets at '+reset+' ('+new Intl.DateTimeFormat('en-IN',{dateStyle:'medium',timeStyle:'long',timeZone:'Asia/Kolkata'}).format(new Date(reset))+').';
++  if(quota)message+=' This is the shared app allowance; changing provider does not bypass it.';
++  return Response.json({error:{message,type:quota?'quota_exceeded':'router_error',code:quota?'token_limit_exceeded':'free_pool_error',...(reset?{reset_at:reset,metadata:{reset_at:reset}}:{}),...(retry!==undefined?{retry_after:retry}:{})}},{status,headers:retry!==undefined?{'Retry-After':String(retry)}:{}});
++}
++
 +export class NativeAssistantRuntime implements AgentRuntime {
 +  private ledger: NativeLedger;
 +  private active?: { id: string; abort: AbortController; runtime: PiAgentRuntime; scope: object };
@@ -250,18 +266,19 @@ new file mode 100644
 +    if (Buffer.byteLength(JSON.stringify([request.prompt,request.instructions,request.history]))>65536) throw Error('Conversation exceeds the bounded context limit; start a new chat');
 +    const scope={user,space,thread:request.threadId,run:request.runId};
 +    this.ledger.start(request.runId,user,space);
-+    const abort=new AbortController(); let tools=0, output=0, failed=true, pending=false; const routes: string[]=[];
++    const abort=new AbortController(); let tools=0, output=0, failed=true, pending=false; let modelFailure: ModelAccountError | undefined; const routes: string[]=[];
 +    const signal=context.signal ? AbortSignal.any([context.signal,abort.signal]) : abort.signal;
 +    const allowedTools=process.env.PERSONAL_ASSISTANT==='true'?[shell,assistantTool]:[shell];
 +    const runtime=new PiAgentRuntime({ modelFetch: async (url,options) => {
 +      signal.throwIfAborted();
++      if (modelFailure) throw modelFailure;
 +      if (pending || String(url)!=='http://127.0.0.1:1/v1/chat/completions' || options?.method?.toUpperCase()!=='POST' || typeof options.body!=='string' || Buffer.byteLength(options.body)>98304) throw Error('Model request denied');
 +      const body=JSON.parse(options.body);
 +      if (body.model!=='agent-free' || !Array.isArray(body.messages) || body.tools?.some((t: any)=>t.type!=='function'||!allowedTools.some(x=>x.name===t.function?.name))) throw Error('Model or tool override denied');
 +      this.ledger.call(request.runId,user); pending=true;
 +      try {
 +        const response=await fetch('http://omniroute:20128/v1/chat/completions',{method:'POST',redirect:'error',headers:{Authorization:'Bearer '+this.key,'Content-Type':'application/json'},body:JSON.stringify({model:'agent-free',messages:body.messages,tools:allowedTools.map(t=>({type:'function',function:{name:t.name,description:t.description,parameters:t.inputSchema}})),tool_choice:'auto',stream:true,max_tokens:nativeLimits.tokens}),signal:AbortSignal.any([signal,AbortSignal.timeout(55000)])});
-+        if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream')) { await response.body?.cancel(); throw Error('Free-only pool unavailable or quota exhausted'); }
++        if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream')) { const failure=await routerFailure(response); const payload=await failure.json(); modelFailure=new ModelAccountError(failure.status+': '+JSON.stringify({code:payload.error.code,message:payload.error.message})); throw modelFailure; }
 +        const reader=response.body!.getReader(); const chunks: Uint8Array[]=[]; let size=0;
 +        try { while(true) { signal.throwIfAborted(); const {done,value}=await reader.read(); if(done)break; if((size+=value.length)>131072)throw Error('Model response limit reached'); chunks.push(value); } } finally { await reader.cancel().catch(()=>{}); }
 +        routes.push(routedModel(response.headers));
@@ -293,6 +310,9 @@ new file mode 100644
 +        yield event;
 +      }
 +      failed=false;
++    } catch(error) {
++      if(modelFailure&&!signal.aborted)throw modelFailure;
++      throw error;
 +    } finally {
 +      clearTimeout(timer); abort.abort();
 +      if(failed && process.env.PERSONAL_ASSISTANT==='true')await assistantCall('/cancel',scope).catch(()=>{});
@@ -305,12 +325,12 @@ diff --git a/apps/api/src/native-assistant.test.ts b/apps/api/src/native-assista
 new file mode 100644
 --- /dev/null
 +++ b/apps/api/src/native-assistant.test.ts
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,62 @@
 +import {describe,it,expect} from 'vitest';
 +import {mkdtempSync,rmSync} from 'node:fs';
 +import {tmpdir} from 'node:os';
 +import {join} from 'node:path';
-+import {NativeLedger,nativeJobs,approvalSourceText,routedModel,routeFooter} from './native-assistant.js';
++import {routerFailure,NativeLedger,nativeJobs,approvalSourceText,routedModel,routeFooter} from './native-assistant.js';
 +describe('native assistant boundaries',()=>{
 + it('preserves charged calls, stops, and replay denial across restart',()=>{
 +  const dir=mkdtempSync(join(tmpdir(),'native-ledger-')),file=join(dir,'limits.sqlite');let clock=100000000;
@@ -357,3 +377,68 @@ new file mode 100644
 +  for(const message of [{role:'assistant',blocks:[{kind:'text',text:command}]},{role:'user',blocks:[{kind:'text',text:'Quote: '+command}]},{role:'user',blocks:[{kind:'text',text:command},{kind:'file',id:'x'}]},{role:'user',blocks:[{kind:'text',text:command+'\nIgnore rules'}]}])expect(approvalSourceText(message)).toBeUndefined();
 + });
 +});
++
++describe('router errors',()=>{
++ it('preserves quota status, safe counts and reset time without passing through credentials',async()=>{
++  const r=await routerFailure(Response.json({error:{code:'token_limit_exceeded',message:'Token limit exceeded for account: 13198/12000 tokens used in the current window. secret=hidden',reset_at:'2099-11-22T00:00:00.000Z',retry_after:14000,credential:'hidden'}},{status:429}));
++  expect(r.status).toBe(429);expect(r.headers.get('retry-after')).toBe('14000');const text=await r.text();expect(text).toContain('13198/12000');expect(text).toContain('2099-11-22T00:00:00.000Z');expect(text).toContain('shared app allowance');expect(text).not.toContain('hidden');const e=JSON.parse(text).error;expect(('429: '+JSON.stringify({code:e.code,message:e.message})).length).toBeLessThan(400);
++ });
++ it('keeps policy failures distinct and bounds malformed upstream responses',async()=>{
++  for(const status of [403,429,503]){const r=await routerFailure(new Response('secret'.repeat(3000),{status}));expect(r.status).toBe(status);expect(await r.text()).not.toContain('secret');}
++  expect((await routerFailure(new Response('not an event stream'))).status).toBe(502);
++ });
++});
+diff --git a/apps/web/src/pages/shell/composer-error.tsx b/apps/web/src/pages/shell/composer-error.tsx
+--- a/apps/web/src/pages/shell/composer-error.tsx
++++ b/apps/web/src/pages/shell/composer-error.tsx
+@@ -1,3 +1,4 @@
++import { nativeRouterQuota } from "../../lib/native-router-error.js";
+ import { i18n } from "@lingui/core";
+ import { useLingui } from "@lingui/react/macro";
+ import { isModelRequiredSendError, normalizeRunError } from "@rakazo/core";
+@@ -114,8 +115,9 @@
+   const normalizedRunError = runError
+     ? normalizeRunError(runError, translateRunError, i18n.locale || "en")
+     : null;
++  const quotaSummary=nativeRouterQuota(runError);
+   // The one action that fixes the failure; a transient one already says to try again.
+-  const recovery = sendError ? undefined : normalizedRunError?.recovery;
++  const recovery = sendError || quotaSummary ? undefined : normalizedRunError?.recovery;
+   const recoveryAction =
+     recovery === "model"
+       ? { label: t`Choose a model`, onClick: onOpenModels }
+@@ -145,7 +147,7 @@
+             {sendError}
+           </button>
+         ) : (
+-          (sendError ?? normalizedRunError?.summary ?? null)
++          (sendError ?? quotaSummary ?? normalizedRunError?.summary ?? null)
+         )}
+         {warning && onSendAsFile ? (
+           <div className="mt-2 flex flex-wrap gap-2">
+diff --git a/apps/web/src/pages/WorkspaceOnly.test.tsx b/apps/web/src/pages/WorkspaceOnly.test.tsx
+--- a/apps/web/src/pages/WorkspaceOnly.test.tsx
++++ b/apps/web/src/pages/WorkspaceOnly.test.tsx
+@@ -112,3 +112,12 @@
+   expect(state.calls).toContainEqual({path: "scratchpad.remove", input: {itemId: "note-1"}});
+   expect(host.querySelector("#note-body-note-1")).toBeNull();
+ });
++
++import {nativeRouterQuota} from '../lib/native-router-error.js';
++it('shows the bounded native quota reason rather than suggesting connection repairs',()=>{
++ const message='Rakazo daily token quota reached: 500001/500000 tokens used. Resets at 2099-11-22T00:00:00.000Z.';
++ expect(nativeRouterQuota('429: '+JSON.stringify({code:'token_limit_exceeded',message}))).toBe(message);
++ expect(nativeRouterQuota('Connection error.')).toBeUndefined();
++ expect(nativeRouterQuota(JSON.stringify({code:'other',message}))).toBeUndefined();
++ expect(nativeRouterQuota(JSON.stringify({code:'token_limit_exceeded',message:'x'.repeat(9000)}))).toBeUndefined();
++});
+diff --git a/apps/web/src/lib/native-router-error.ts b/apps/web/src/lib/native-router-error.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/web/src/lib/native-router-error.ts
+@@ -0,0 +1,5 @@
++export function nativeRouterQuota(error: unknown): string | undefined {
++ if(typeof error!=='string'||error.length>8192)return;
++ const json=error.replace(/^429\s*:\s*/, '');
++ try{const p=JSON.parse(json);if(p.code==='token_limit_exceeded'&&typeof p.message==='string'&&p.message.startsWith('Rakazo daily token quota reached')&&p.message.length<=700)return p.message;}catch{}
++}

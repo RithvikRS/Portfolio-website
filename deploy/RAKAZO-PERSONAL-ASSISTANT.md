@@ -38,3 +38,9 @@ Google connections remain disabled at the owner's request. Add them after this r
 5. Test cross-account and cross-user isolation, expired consent, uncertain sends and Stop before enabling writes. Keep Google tokens away from the model and computer.
 
 References: [Outline API scopes](https://docs.getoutline.com/s/guide/doc/api-1rEIXDfLF6), [Google server-side OAuth](https://developers.google.com/identity/protocols/oauth2/web-server).
+
+## Quotas and fallback
+
+The shared router allowance is 500,000 tokens/day across the approved providers. It resets at 05:30 Asia/Kolkata. Keep the existing 20 runs/day, 40 model calls/day, four calls/minute, per-run output limits and Stop controls. Input history and tool results also consume tokens; raising the token allowance does not remove the other caps.
+
+Individual provider quota failures fall through the approved free-only pool. The shared app allowance is a total cap and cannot be bypassed by changing provider. Quota failures show the sanitized token counts and reset time in the native error details. The adapter preserves the router error instead of turning it into a network connection failure; SDK retries are disabled because the router handles bounded fallback. Never display raw upstream credentials or headers.
