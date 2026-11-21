@@ -41,6 +41,6 @@ References: [Outline API scopes](https://docs.getoutline.com/s/guide/doc/api-1rE
 
 ## Quotas and fallback
 
-The shared router allowance is 500,000 tokens/day across the approved providers. It resets at 05:30 Asia/Kolkata. Keep the existing 20 runs/day, 40 model calls/day, four calls/minute, per-run output limits and Stop controls. Input history and tool results also consume tokens; raising the token allowance does not remove the other caps.
+The shared router allowance is 500,000 tokens/day across the approved providers. It resets at 05:30 Asia/Kolkata. Keep the existing 200 runs/day, 600 model calls/day, four calls/minute, per-run output limits and Stop controls. Input history and tool results also consume tokens; raising the token allowance does not remove the other caps.
 
 Individual provider quota failures fall through the approved free-only pool. The shared app allowance is a total cap and cannot be bypassed by changing provider. Quota failures show the sanitized token counts and reset time in the native error details. The adapter preserves the router error instead of turning it into a network connection failure; SDK retries are disabled because the router handles bounded fallback. Never display raw upstream credentials or headers.
