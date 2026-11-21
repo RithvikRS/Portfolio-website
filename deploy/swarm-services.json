@@ -854,7 +854,7 @@
       }
     },
     "rakazo_api": {
-      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:bb0de4ba6ce886bbd7993cf5521ce44a82c5fb64e6d76dd4c10f6efe17ca3f3f",
+      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:82733fcafba7b0d27db487d0e27a0bf93182183386346b69ce5534c5093ac9da",
       "user": "1000:1000",
       "networks": [
         "swarm_rakazo_app",
@@ -979,7 +979,7 @@
       }
     },
     "rakazo_web": {
-      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:bb0de4ba6ce886bbd7993cf5521ce44a82c5fb64e6d76dd4c10f6efe17ca3f3f",
+      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:82733fcafba7b0d27db487d0e27a0bf93182183386346b69ce5534c5093ac9da",
       "user": "1000:1000",
       "networks": [
         "swarm_rakazo_app"
@@ -1205,7 +1205,7 @@
       ]
     },
     "rakazo_executor": {
-      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:bb0de4ba6ce886bbd7993cf5521ce44a82c5fb64e6d76dd4c10f6efe17ca3f3f",
+      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:82733fcafba7b0d27db487d0e27a0bf93182183386346b69ce5534c5093ac9da",
       "user": "986:984",
       "networks": [
         "swarm_rakazo_execution"

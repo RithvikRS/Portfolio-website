@@ -24,7 +24,7 @@ const sections = [
   { title: 'Site administration', apps: [
     { name: 'Service access', path: '/admin/access/', icon: square, description: 'Create accounts and manage each person’s service permissions.' },
     { name: 'Uptime Kuma', path: '/uptime', icon: pulse, description: 'Review availability, outages and alerts.' },
-    { name: 'Rakazo', path: '/rakazo', icon: square, description: 'Manage your private workspaces, bot profiles and notes. Model connections remain disabled.' },
+    { name: 'Rakazo', path: '/rakazo', icon: square, description: 'Chat with your personal assistant using the free-only pool and an isolated offline computer.' },
     { name: 'OmniRoute', path: '/models', icon: stack, description: 'Manage provider keys, model routing and application usage.' },
     { name: 'Portainer', path: '/portainer/', icon: stack, description: 'Inspect Swarm nodes, services and container logs.' },
     { name: 'Fieldnotes', path: '/admin/notes/', icon: book, description: 'Edit and publish your blog and learning notebook.' },

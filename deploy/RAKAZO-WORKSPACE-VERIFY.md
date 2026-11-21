@@ -139,3 +139,11 @@ The probe uses the service catalog's exact long-form tmpfs mounts, an isolated i
 The installed legacy `docker stack` parser drops long-form tmpfs `mode` and ignores service-level short-form `tmpfs`. With its zero-mode mount option, Docker inherits the image directory permissions. The upstream Vite scratch and asset archive directories are owned by UID 1000 with mode 0750; the resulting root-owned tmpfs blocks the non-root web process. Normalize those image directories to 01777 as UID 1000 before compilation. Keep them in the committed image rather than mounting temporary compiler storage over them. Production still runs without capabilities and with a read-only root.
 
 Standalone `docker run --tmpfs ...mode=1777` checks do not cover this Swarm translation. Keep this additional probe in the release gates.
+
+## Native assistant acceptance
+
+The native image adds `native-assistant.patch` after the two workspace patches. Keep the image workspace-only by default; the production entrypoint permits only the restricted runtime when `NATIVE_ASSISTANT=true`. The input fingerprint normalizes text line endings so Windows staging and Linux checkouts produce the same provenance.
+
+The disposable release runner now includes an internal synthetic model/executor fixture and a generated inference-key file. It uses no live provider. Run `scripts/verify-rakazo-native.mjs` with the same private Playwright/artifact environment and loopback tunnel described above. It clears only the disposable chat, then checks fresh conversation replies, tool results, native Stop, reload, prohibited routes and mobile layout. Never point this runner at production.
+
+Rehearse encrypted restore of the native PostgreSQL history and API quota ledger with the existing release helper. Separately check real shell execution, network denial and command cancellation through the bounded gVisor bridge. Stop the computer afterward. After publication, retain the registry digest and remove the temporary download secret and draft transfer asset. Verify all live services, retired-note redirects, native mode and owner denial after deployment; an authenticated production conversation remains a distinct check.
