@@ -38,3 +38,6 @@
 !deploy/rakazo/assistant-web.mjs
 !deploy/rakazo/assistant-store.mjs
 !deploy/rakazo/assistant-services.mjs
+
+!deploy/rakazo/entrypoint.mjs
+!deploy/rakazo/native-assistant.patch
