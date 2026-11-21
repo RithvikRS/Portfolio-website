@@ -141,7 +141,7 @@ diff --git a/apps/api/src/native-assistant.ts b/apps/api/src/native-assistant.ts
 new file mode 100644
 --- /dev/null
 +++ b/apps/api/src/native-assistant.ts
-@@ -0,0 +1,191 @@
+@@ -0,0 +1,200 @@
 +import { DatabaseSync } from "node:sqlite";
 +import { chmodSync, readFileSync } from "node:fs";
 +import http from "node:http";
@@ -173,6 +173,8 @@ new file mode 100644
 +  }, cancel: key => queue.cancel(key), close: () => queue.close() };
 +}
 +
++export function localLimitError(code: string, message: string) { return new ModelAccountError('429: '+JSON.stringify({code,message})); }
++
 +export class NativeLedger {
 +  db: DatabaseSync;
 +  constructor(file: string, private now = () => Date.now()) {
@@ -187,14 +189,21 @@ new file mode 100644
 +    if (this.db.prepare("SELECT 1 FROM native_runs WHERE state='running'").get()) throw Error('Another assistant run is active');
 +    if (this.db.prepare('SELECT 1 FROM native_runs WHERE id=?').get(id)) throw Error('Interrupted runs must not replay');
 +    const count = this.db.prepare('SELECT count(*) AS n FROM native_runs WHERE user_id=? AND created>=?').get(user, Math.floor(this.now()/86400000)*86400000)!;
-+    if (Number(count.n) >= nativeLimits.dailyRuns) throw Error('Daily assistant task limit reached');
++    if (Number(count.n) >= nativeLimits.dailyRuns) throw localLimitError('daily_run_limit',`Daily assistant task limit reached (${nativeLimits.dailyRuns}/${nativeLimits.dailyRuns}). Resets at 05:30 Asia/Kolkata.`);
 +    this.db.prepare("INSERT INTO native_runs(id,user_id,space_id,state,created) VALUES(?,?,?,'running',?)").run(id,user,space,this.now());
 +  }); }
++  checkCall(id: string, user: string) {
++    const run=this.db.prepare("SELECT calls FROM native_runs WHERE id=? AND user_id=? AND state='running'").get(id,user);
++    if(!run)throw Error('Run stopped');
++    if(Number(run.calls)>=nativeLimits.calls)throw localLimitError('run_model_limit',`Run model-call limit reached (${nativeLimits.calls}/${nativeLimits.calls}). Send another message to continue. No extra provider call was sent.`);
++    const day=Math.floor(this.now()/86400000)*86400000;
++    const count=this.db.prepare('SELECT count(*) AS n FROM native_calls WHERE user_id=? AND at>=?').get(user,day)!;
++    if(Number(count.n)>=nativeLimits.dailyCalls)throw localLimitError('daily_call_limit',`Daily model-call quota reached (${nativeLimits.dailyCalls}/${nativeLimits.dailyCalls}). Resets at 05:30 Asia/Kolkata.`);
++  }
 +  call(id: string, user: string) { this.transaction(() => {
-+    const run = this.db.prepare("SELECT calls FROM native_runs WHERE id=? AND user_id=? AND state='running'").get(id,user);
-+    if (!run || Number(run.calls) >= nativeLimits.calls) throw Error('Run stopped or model-call limit reached');
-+    const count = (since: number) => Number(this.db.prepare('SELECT count(*) AS n FROM native_calls WHERE user_id=? AND at>=?').get(user,since)!.n);
-+    if (count(this.now()-60000)>=nativeLimits.minuteCalls || count(Math.floor(this.now()/86400000)*86400000)>=nativeLimits.dailyCalls) throw Error('Assistant request quota reached');
++    this.checkCall(id,user);
++    const count=this.db.prepare('SELECT count(*) AS n FROM native_calls WHERE user_id=? AND at>=?').get(user,this.now()-60000)!;
++    if(Number(count.n)>=nativeLimits.minuteCalls)throw localLimitError('request_rate_limit','Assistant request quota reached. Wait for the next minute window before continuing.');
 +    this.db.prepare('INSERT INTO native_calls VALUES(?,?,?)').run(id,user,this.now());
 +    this.db.prepare('UPDATE native_runs SET calls=calls+1 WHERE id=?').run(id);
 +  }); }
@@ -286,8 +295,8 @@ new file mode 100644
 +      if (body.model!=='agent-free' || !Array.isArray(body.messages) || body.tools?.some((t: any)=>t.type!=='function'||!allowedTools.some(x=>x.name===t.function?.name))) throw Error('Model or tool override denied');
 +      const modelSignal=options.signal?AbortSignal.any([signal,options.signal]):signal;
 +      pending=true;
-+      try { await this.ledger.waitForCall(user,modelSignal); this.ledger.call(request.runId,user); }
-+      catch(error) { pending=false; throw error; }
++      try { this.ledger.checkCall(request.runId,user); await this.ledger.waitForCall(user,modelSignal); this.ledger.call(request.runId,user); }
++      catch(error) { pending=false; if(error instanceof ModelAccountError)modelFailure=error; throw error; }
 +      try {
 +        const response=await fetch('http://omniroute:20128/v1/chat/completions',{method:'POST',redirect:'error',headers:{Authorization:'Bearer '+this.key,'Content-Type':'application/json'},body:JSON.stringify({model:'agent-free',messages:body.messages,tools:allowedTools.map(t=>({type:'function',function:{name:t.name,description:t.description,parameters:t.inputSchema}})),tool_choice:'auto',stream:true,max_tokens:nativeLimits.tokens}),signal:AbortSignal.any([modelSignal,AbortSignal.timeout(55000)])});
 +        if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream')) { const failure=await routerFailure(response); const payload=await failure.json(); modelFailure=new ModelAccountError(failure.status+': '+JSON.stringify({code:payload.error.code,message:payload.error.message})); throw modelFailure; }
@@ -363,7 +372,7 @@ new file mode 100644
 + });
 + it('permits twelve calls across minute windows, then rejects the next call and preserves Stop',async()=>{
 +  let clock=100000000;const ledger=new NativeLedger(':memory:',()=>clock);
-+  try{ledger.start('long','owner','space');for(let i=0;i<12;i++){clock+=16000;ledger.call('long','owner');}expect(()=>ledger.call('long','owner')).toThrow('model-call limit');ledger.finish('long','stopped');clock+=61000;expect(()=>ledger.call('long','owner')).toThrow('stopped');}finally{ledger.close();}
++  try{ledger.start('long','owner','space');for(let i=0;i<12;i++){clock+=16000;ledger.call('long','owner');}expect(()=>ledger.call('long','owner')).toThrow('model-call limit');try{ledger.checkCall('long','owner');throw Error('Expected limit');}catch(e){expect(String(e)).toContain('run_model_limit');expect(String(e)).toContain('(12/12)');expect(String(e)).toContain('Send another message');}expect(ledger.db.prepare('SELECT count(*) n FROM native_calls').get()?.n).toBe(12);ledger.finish('long','stopped');clock+=61000;expect(()=>ledger.call('long','owner')).toThrow('stopped');}finally{ledger.close();}
 + });
 + it('paces a fifth call, retains accounting across restart, and cancels waiting immediately',async()=>{
 +  const dir=mkdtempSync(join(tmpdir(),'native-pace-')),file=join(dir,'limits.sqlite');let clock=100000000,ledger=new NativeLedger(file,()=>clock);
@@ -442,7 +451,7 @@ diff --git a/apps/web/src/pages/shell/composer-error.tsx b/apps/web/src/pages/sh
 diff --git a/apps/web/src/pages/WorkspaceOnly.test.tsx b/apps/web/src/pages/WorkspaceOnly.test.tsx
 --- a/apps/web/src/pages/WorkspaceOnly.test.tsx
 +++ b/apps/web/src/pages/WorkspaceOnly.test.tsx
-@@ -112,3 +112,12 @@
+@@ -112,3 +112,18 @@
    expect(state.calls).toContainEqual({path: "scratchpad.remove", input: {itemId: "note-1"}});
    expect(host.querySelector("#note-body-note-1")).toBeNull();
  });
@@ -455,13 +464,20 @@ diff --git a/apps/web/src/pages/WorkspaceOnly.test.tsx b/apps/web/src/pages/Work
 + expect(nativeRouterQuota(JSON.stringify({code:'other',message}))).toBeUndefined();
 + expect(nativeRouterQuota(JSON.stringify({code:'token_limit_exceeded',message:'x'.repeat(9000)}))).toBeUndefined();
 +});
++
++it('shows local run exhaustion without claiming the provider is unreachable',()=>{
++ const message='Run model-call limit reached (12/12). Send another message to continue. No extra provider call was sent.';
++ expect(nativeRouterQuota('429: '+JSON.stringify({code:'run_model_limit',message}))).toBe(message);
++ expect(nativeRouterQuota('429: '+JSON.stringify({code:'run_model_limit',message:'untrusted upstream content'}))).toBeUndefined();
++});
 diff --git a/apps/web/src/lib/native-router-error.ts b/apps/web/src/lib/native-router-error.ts
 new file mode 100644
 --- /dev/null
 +++ b/apps/web/src/lib/native-router-error.ts
-@@ -0,0 +1,5 @@
+@@ -0,0 +1,6 @@
 +export function nativeRouterQuota(error: unknown): string | undefined {
 + if(typeof error!=='string'||error.length>8192)return;
 + const json=error.replace(/^429\s*:\s*/, '');
-+ try{const p=JSON.parse(json);if(p.code==='token_limit_exceeded'&&typeof p.message==='string'&&p.message.startsWith('Rakazo daily token quota reached')&&p.message.length<=700)return p.message;}catch{}
++ const prefixes:Record<string,string>={token_limit_exceeded:'Rakazo daily token quota reached',run_model_limit:'Run model-call limit reached',daily_run_limit:'Daily assistant task limit reached',daily_call_limit:'Daily model-call quota reached',request_rate_limit:'Assistant request quota reached'};
++ try{const p=JSON.parse(json);if(Object.hasOwn(prefixes,p.code)&&typeof p.message==='string'&&p.message.startsWith(prefixes[p.code])&&p.message.length<=700)return p.message;}catch{}
 +}
