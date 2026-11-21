@@ -944,6 +944,7 @@
         "DB_POOL_MAX": "5",
         "LOG_LEVEL": "warn",
         "NATIVE_ASSISTANT": "true",
+        "MODEL_STREAM_MAX_RETRIES": "0",
         "PERSONAL_ASSISTANT": "true"
       },
       "secrets": [

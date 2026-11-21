@@ -20,13 +20,13 @@ Add more providers through this screen, then test each candidate before adding i
 
 Use named **Combos** for the model pools, for example `chat-free` and `agent-free`. Choose ordered fallback and add only approved provider/model connections. Validate tool calls, streaming, context length and structured output for the agent pool before connecting Rakazo.
 
-The initial policy hides paid models and automatic combos, exposes only configured combos, enables the strict free-access policy and excludes providers marked as incompatible with proxy use. No provider connections, combos or inference keys are created by bootstrap. These controls are an initial guard, not a guarantee that every provider account is unbillable: free-access filtering is route-dependent and can reject a provider whose quota guarantee it cannot verify. Do not weaken it just to make a test pass. Check provider-side billing restrictions and the actual dispatch path before enabling a consumer.
+The initial policy hides paid models and automatic combos, exposes only configured combos, enables the strict free-access policy and enables the catalogue filter for providers marked as incompatible with proxy use. Do not treat that catalogue preference as a universal dispatch denial; the explicit consumer pool defines the admitted connections. No provider connections, combos or inference keys are created by bootstrap. These controls are an initial guard, not a guarantee that every provider account is unbillable: free-access filtering is route-dependent and can reject a provider whose quota guarantee it cannot verify. Do not weaken it just to make a test pass. Check provider-side billing restrictions and the actual dispatch path before enabling a consumer.
 
 Create one inference-only API key per app, restrict its models/combos, and set request/token/concurrency limits. Dollar budgets alone do not constrain free traffic. Test exhaustion, revocation and fallback before distributing a key. This single-replica deployment uses in-memory rate limiting; restarts reset those counters. Add shared durable quota enforcement before promising restart-resistant limits or scaling replicas.
 
 Use the usage dashboard for traffic, model, latency and failure information. Detailed request-body logging and stream capture are disabled. Do not turn on prompt/response capture for shared apps without deciding retention and access first.
 
-## Initial agent pool (2026-11-21)
+## Agent pool (22 November 2026)
 
 Open **Combos > agent-free** to inspect the saved priority order:
 
@@ -34,18 +34,21 @@ Open **Combos > agent-free** to inspect the saved priority order:
 | --- | --- | --- |
 | 1 | Groq | `openai/gpt-oss-120b` |
 | 2 | NVIDIA | `nvidia/nemotron-3.5-super-vl-120b-a12b` |
+| 3 | Gemini | `gemini-3.1-flash-lite` |
+| 4 | Kiro | `claude-haiku-4.5` |
+| 5 | OpenRouter | `inclusionai/ling-3.2-flash:free` (quota-aware standby) |
 
-Each target uses its selected existing provider connection. Keep retries at zero, global attempts at two, target timeout at 25 seconds and total combo timeout at 55 seconds. Limit each model to one concurrent request, with no queued requests or hedging. These are per-model ceilings, not a global one-agent concurrency guarantee. Keep strict free access, paid-model hiding, combo-only exposure, automatic-combo hiding and the proxy-compatibility filter enabled. Your provider accounts have no paid billing or automatic top-up.
+Each target uses its selected existing provider connection. Keep retries at zero, global attempts at five, target timeout at 25 seconds and total combo timeout at 55 seconds. Limit each model to one concurrent request, with no queued requests or hedging. These are per-model ceilings, not a global one-agent concurrency guarantee. Keep strict free access, paid-model hiding, combo-only exposure, automatic-combo hiding and the proxy-compatibility filter enabled. Your provider accounts have no paid billing or automatic top-up.
 
-Both candidates passed a synthetic function call with exact integer arguments, continuation after the tool result, streamed output and schema-constrained JSON. A separate temporary combo fell back from an unavailable model to Groq successfully. These small checks establish basic compatibility; they do not establish long-task reliability or maximum context capacity.
+The original Groq and NVIDIA candidates passed a synthetic function call with exact integer arguments, continuation after the tool result, streamed output and schema-constrained JSON. A separate temporary combo fell back from an unavailable model to Groq successfully. These small checks establish basic compatibility; they do not establish long-task reliability or maximum context capacity.
 
 Leave Gemini 2.5 Flash out: the account returned HTTP 404 because that model is no longer available to new users. Leave the tested OpenRouter Nemotron free target out: the pre-dispatch filters skipped it. Test other candidates individually without relaxing the free-only policy.
 
 The private **rakazo-pilot-disabled** key starts inactive; enable it only for the separately bounded [Rakazo pilot](RAKAZO.md#native-chat-limits-and-stop). Its historical name does not indicate its live active state. It has:
 
-- Access to `agent-free` only, with direct models and automatic combos denied.
-- Access to the two selected provider connections only; no management scope.
-- Limits of 4 requests per minute, 40 requests per day and 12,000 tokens per day.
+- Access to `agent-free`, plus the two exact canonical/resolved identifiers for its zero-priced OpenRouter target. Rakazo itself always requests `agent-free`; arbitrary direct models and automatic combos stay denied.
+- Access to the five selected provider connections only; no management scope.
+- Limits of 4 requests per minute, 40 requests per day and 500,000 tokens per day.
 - Request-body logging disabled.
 
 The disposable test key received 403 for direct-model, automatic-routing and management requests, 429 for request/token exhaustion, and 401 after revocation. The inactive Rakazo key also received 401. Temporary test routes and credentials are removed or revoked. SQLite stores token-limit definitions and counters; restart-resistant enforcement has not been exercised. Treat the daily token ceiling as a usage guard, not an exact per-request output reservation. Test overshoot and parallel requests before relying on it for shared users.
@@ -120,3 +123,25 @@ The edge OIDC client requests `offline_access` and the refresh-token grant. Auth
 Sign out through `/oauth2/sign_out` on the models host to remove the proxy session. Logging out of Authelia alone is not a guarantee that an already-issued application refresh grant is revoked. For emergency offboarding, disable the account/remove its administrator membership and verify denial on the next application request; revoke the grant or clear the affected Redis session if immediate invalidation is required. Current directory changes apply on the next application request, independently of token renewal. A long-running WebSocket is not reauthorized until it reconnects.
 
 When testing, use a disposable MFA-enrolled identity, poll `/api/health/ping` for longer than five minutes with redirects disabled, confirm renewal in proxy logs, then remove its administrator group and confirm access is denied immediately. Also try a forged identity header without a session and confirm rejection. Delete the disposable identity and session afterward. Do not use provider API keys for this check.
+
+The daily token allowance is shared across the approved providers and resets at 00:00 UTC (05:30 Asia/Kolkata). Provider quota/rate-limit failures should fall through the ordered free-only pool; exhausting the shared app allowance stops requests until reset. Never bypass it by rotating keys or using paid models.
+
+## Expanded Rakazo pool (22 November 2026)
+
+Use this order: Groq `openai/gpt-oss-120b`, NVIDIA `nvidia/nemotron-3.5-super-vl-120b-a12b`, Gemini `gemini-3.1-flash-lite`, Kiro `claude-haiku-4.5`, then OpenRouter `inclusionai/ling-3.2-flash:free`. Keep the 55-second total combo deadline, 25-second target deadline, zero retries and five maximum target attempts. Quota failures can fall through immediately; slow targets may consume the total deadline before every target is attempted.
+
+Gemini and Kiro passed tool calls, tool-result continuation and streaming. Groq and NVIDIA retain their earlier successful checks. OpenRouter's current public catalogue reports zero input/output pricing and tool support for the selected `:free` model, but its upstream returned 429 during these checks. Keep it as a quota-aware last fallback; do not claim a successful end-to-end tool test for it yet. Its canonical and resolved identifiers need narrow model grants on the private app key; no wildcard or paid-model grants are allowed.
+
+A temporary route with quota-exhausted OpenCode first and Groq second returned a successful streamed Groq reply. Do not rotate keys to evade a provider's account-wide quota. If every eligible provider is unavailable, report the failure instead of selecting a paid route.
+
+Leave these linked connections out of the active agent pool until a bounded retest passes:
+
+| Provider | Current blocker |
+| --- | --- |
+| SambaNova | Llama 3.3 70B returned unavailable; GPT-OSS 120B required a payment method. |
+| Ollama Cloud | Kimi K2.6 requested usage credits or a subscription. |
+| HuggingChat | The endpoint returned HTML where the connector expected JSON. |
+| OpenCode Zen | Big Pickle reported its free usage quota exhausted. |
+| Vercel AI Gateway | Its public catalogue listed zero-priced models, but the tested Nemotron Lightning free target was skipped by the existing pre-dispatch filters. |
+
+Keep paid-model hiding and strict free access enabled. Do not relax these settings to make a failing test pass. Provider availability and free entitlements can change; recheck them before adding or replacing a target.
