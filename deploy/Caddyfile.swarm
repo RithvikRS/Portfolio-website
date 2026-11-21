@@ -89,6 +89,9 @@ http://:8081 {
         reverse_proxy auth:9091
     }
 
+    @rakazoNotesEntry path /rakazo-notes /rakazo-notes/
+    redir @rakazoNotesEntry https://rakazo.144.24.135.201.sslip.io/agent-pilot/ 302
+
     @rakazoEntry path /rakazo /rakazo/
     redir @rakazoEntry https://rakazo.144.24.135.201.sslip.io/ 302
 

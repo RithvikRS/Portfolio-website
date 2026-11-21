@@ -41,7 +41,7 @@ Both candidates passed a synthetic function call with exact integer arguments, c
 
 Leave Gemini 2.5 Flash out: the account returned HTTP 404 because that model is no longer available to new users. Leave the tested OpenRouter Nemotron free target out: the pre-dispatch filters skipped it. Test other candidates individually without relaxing the free-only policy.
 
-The private **rakazo-pilot-disabled** key starts inactive; enable it only for the separately bounded [Rakazo pilot](RAKAZO.md#bounded-agent-pilot). Its historical name does not indicate its live active state. It has:
+The private **rakazo-pilot-disabled** key starts inactive; enable it only for the separately bounded [Rakazo pilot](RAKAZO.md#note-assistant-with-approval). Its historical name does not indicate its live active state. It has:
 
 - Access to `agent-free` only, with direct models and automatic combos denied.
 - Access to the two selected provider connections only; no management scope.

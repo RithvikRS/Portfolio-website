@@ -98,3 +98,7 @@ Use [the isolated verification runbook](RAKAZO-WORKSPACE-VERIFY.md#compiled-api-
 The private PC copy is under `Portfolio-private-backups/rakazo-workspace/rehearsal-2026-11-15-2ca629b2ea6a/`. Keep its `archive.aesgcm` and separate `recovery/backup.key` outside Git. This contains synthetic test data and does not replace a complete production cluster snapshot. Extend/confirm the live inventory and refresh it after an authorized full-app deployment.
 
 Rakazo's current content encryption does not cover scratchpad note text or profile instructions. Protect database snapshots and exports as sensitive plaintext unless you encrypt the complete archive. The pilot desktop home remains excluded disposable storage.
+
+## Rakazo note assistant
+
+Include `/srv/swarm/rakazo_agent` in the Ampere writer inventory. Stop `portfolio_rakazo_agent` before copying its SQLite ledger; restarting it marks interrupted runs and uncertain approvals without replaying them. Retain the native Rakazo database/keys, OmniRoute database/encryption environment, manager `.secrets/rakazo-agent/model_key` and pinned service image with the ledger. Drafts and titles contain private plaintext; keep and transfer the full recovery kit privately, outside Git.
