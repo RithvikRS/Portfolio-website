@@ -66,6 +66,8 @@ def validate_patch(data):
 
 
 def input_fingerprint(files):
+    # All build inputs are text; Git normalizes these files on Linux checkouts.
+    files = {name: data.replace(b'\r\n', b'\n') for name, data in files.items()}
     record = {'source': UPSTREAM_SHA, 'base_image': BASE_IMAGE,
               'assembly': 'stopped-bounded-compiler-commit',
               'files': {name: digest(data) for name, data in sorted(files.items())}}
