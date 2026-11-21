@@ -17,7 +17,7 @@ Rakazo appends the exact stored proposal to the reply. Send `approve <id>` or `r
 
 A failed or uncertain external write is not retried automatically. Check the target service before proposing another write. Stop can abort an in-flight request but cannot undo an external service's already-accepted change. Pausing a reminder prevents future deliveries; it cannot retract one already sent.
 
-Keep 20 chat runs/day, 40 gateway calls/day, three calls/run, eight tools/run, a two-minute run deadline and one active foreground run. Store at most 100 memories and 100 imported documents per user/space. Memory entries are at most 2 KB and documents 32 KB. List memories in pages of 20. Reminder delivery has a separate limit of ten attempts/user/UTC day, at most ten active schedules, and no automatic catch-up or retries. Restarts pause interrupted deliveries for review.
+Keep 200 chat runs/day, 600 gateway calls/day, 12 calls/run, 32 tools/run, a ten-minute run deadline and one active foreground run. Store at most 100 memories and 100 imported documents per user/space. Memory entries are at most 2 KB and documents 32 KB. List memories in pages of 20. Reminder delivery has a separate limit of ten attempts/user/UTC day, at most ten active schedules, and no automatic catch-up or retries. Restarts pause interrupted deliveries for review.
 
 ## Private configuration and backups
 
@@ -44,3 +44,11 @@ References: [Outline API scopes](https://docs.getoutline.com/s/guide/doc/api-1rE
 The shared router allowance is 500,000 tokens/day across the approved providers. It resets at 05:30 Asia/Kolkata. Keep the existing 200 runs/day, 600 model calls/day, four calls/minute, per-run output limits and Stop controls. Input history and tool results also consume tokens; raising the token allowance does not remove the other caps.
 
 Individual provider quota failures fall through the approved free-only pool. The shared app allowance is a total cap and cannot be bypassed by changing provider. Quota failures show the sanitized token counts and reset time in the native error details. The adapter preserves the router error instead of turning it into a network connection failure; SDK retries are disabled because the router handles bounded fallback. Never display raw upstream credentials or headers.
+
+## Longer tasks
+
+Each run can use up to 12 model calls and 32 tools over ten minutes, with up to 4,096 output tokens per model response and 64 KiB of total displayed model text. The shared 500,000-token daily allowance still applies. Keep one active run, four calls/minute, existing resource limits and the offline computer boundary. Each shell command still has a 20-second deadline.
+
+Rakazo waits for the next minute window before another model call instead of failing a fast multi-step task. The wait counts toward the ten-minute deadline, uses persistent call history and cancels when you press Stop. Stop also cancels model and connector requests and stops the isolated computer. No automatic continuation runs after Stop or a restart. Approvals for persistent changes remain required. Individual router requests retain their 55-second deadline.
+
+The isolated controller bridge also enforces ten minutes and 32 shell tools. Deploy its `native-agent-bridge.mjs` module on Ampere and restart only the owner bridge while no run is active; the image rollout alone does not update this host module. Keep a private copy of the previous module for rollback.

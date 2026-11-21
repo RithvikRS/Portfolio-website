@@ -141,16 +141,17 @@ diff --git a/apps/api/src/native-assistant.ts b/apps/api/src/native-assistant.ts
 new file mode 100644
 --- /dev/null
 +++ b/apps/api/src/native-assistant.ts
-@@ -0,0 +1,179 @@
+@@ -0,0 +1,191 @@
 +import { DatabaseSync } from "node:sqlite";
 +import { chmodSync, readFileSync } from "node:fs";
 +import http from "node:http";
++import { setTimeout as sleep } from "node:timers/promises";
 +import type { AgentRuntime, AgentRunRequest, AdapterContext, AgentRuntimeEvent, JobPublisher } from "@rakazo/adapter-kit";
 +import { ModelAccountError } from "@rakazo/adapter-kit";
 +import { PiAgentRuntime, InMemoryJobQueue } from "@rakazo/adapters";
 +
 +export const nativeAssistant = () => process.env.NATIVE_ASSISTANT === "true";
-+export const nativeLimits = { seconds: 120, calls: 3, tools: 8, tokens: 1024, dailyRuns: 200, dailyCalls: 600, minuteCalls: 4 };
++export const nativeLimits = { seconds: 600, calls: 12, tools: 32, tokens: 4096, dailyRuns: 200, dailyCalls: 600, minuteCalls: 4 };
 +const shell = { name: "sandbox_shell", description: "Run a shell command in your isolated, offline Linux computer. Use Python for calculations and file work. No internet or production filesystem access. Files are disposable. Commands have a 20-second deadline; background processes are stopped when this run ends.", inputSchema: { type: "object", properties: { command: { type: "string" } }, required: ["command"], additionalProperties: false }, route: { connectorId: "isolated", toolName: "sandbox_shell" } };
 +
 +
@@ -197,6 +198,14 @@ new file mode 100644
 +    this.db.prepare('INSERT INTO native_calls VALUES(?,?,?)').run(id,user,this.now());
 +    this.db.prepare('UPDATE native_runs SET calls=calls+1 WHERE id=?').run(id);
 +  }); }
++  callWaitMs(user: string) {
++    const rows=this.db.prepare('SELECT at FROM native_calls WHERE user_id=? AND at>=? ORDER BY at DESC LIMIT ?').all(user,this.now()-60000,nativeLimits.minuteCalls);
++    return rows.length<nativeLimits.minuteCalls?0:Math.max(0,Number(rows[rows.length-1].at)+61000-this.now());
++  }
++  async waitForCall(user: string, signal: AbortSignal) {
++    signal.throwIfAborted();
++    let wait; while((wait=this.callWaitMs(user))>0){await sleep(wait,undefined,{signal});signal.throwIfAborted();}
++  }
 +  finish(id: string, state: string) { this.db.prepare("UPDATE native_runs SET state=? WHERE id=? AND state='running'").run(state,id); }
 +  close() { this.db.close(); }
 +}
@@ -275,12 +284,15 @@ new file mode 100644
 +      if (pending || String(url)!=='http://127.0.0.1:1/v1/chat/completions' || options?.method?.toUpperCase()!=='POST' || typeof options.body!=='string' || Buffer.byteLength(options.body)>98304) throw Error('Model request denied');
 +      const body=JSON.parse(options.body);
 +      if (body.model!=='agent-free' || !Array.isArray(body.messages) || body.tools?.some((t: any)=>t.type!=='function'||!allowedTools.some(x=>x.name===t.function?.name))) throw Error('Model or tool override denied');
-+      this.ledger.call(request.runId,user); pending=true;
++      const modelSignal=options.signal?AbortSignal.any([signal,options.signal]):signal;
++      pending=true;
++      try { await this.ledger.waitForCall(user,modelSignal); this.ledger.call(request.runId,user); }
++      catch(error) { pending=false; throw error; }
 +      try {
-+        const response=await fetch('http://omniroute:20128/v1/chat/completions',{method:'POST',redirect:'error',headers:{Authorization:'Bearer '+this.key,'Content-Type':'application/json'},body:JSON.stringify({model:'agent-free',messages:body.messages,tools:allowedTools.map(t=>({type:'function',function:{name:t.name,description:t.description,parameters:t.inputSchema}})),tool_choice:'auto',stream:true,max_tokens:nativeLimits.tokens}),signal:AbortSignal.any([signal,AbortSignal.timeout(55000)])});
++        const response=await fetch('http://omniroute:20128/v1/chat/completions',{method:'POST',redirect:'error',headers:{Authorization:'Bearer '+this.key,'Content-Type':'application/json'},body:JSON.stringify({model:'agent-free',messages:body.messages,tools:allowedTools.map(t=>({type:'function',function:{name:t.name,description:t.description,parameters:t.inputSchema}})),tool_choice:'auto',stream:true,max_tokens:nativeLimits.tokens}),signal:AbortSignal.any([modelSignal,AbortSignal.timeout(55000)])});
 +        if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream')) { const failure=await routerFailure(response); const payload=await failure.json(); modelFailure=new ModelAccountError(failure.status+': '+JSON.stringify({code:payload.error.code,message:payload.error.message})); throw modelFailure; }
 +        const reader=response.body!.getReader(); const chunks: Uint8Array[]=[]; let size=0;
-+        try { while(true) { signal.throwIfAborted(); const {done,value}=await reader.read(); if(done)break; if((size+=value.length)>131072)throw Error('Model response limit reached'); chunks.push(value); } } finally { await reader.cancel().catch(()=>{}); }
++        try { while(true) { signal.throwIfAborted(); const {done,value}=await reader.read(); if(done)break; if((size+=value.length)>524288)throw Error('Model response limit reached'); chunks.push(value); } } finally { await reader.cancel().catch(()=>{}); }
 +        routes.push(routedModel(response.headers));
 +        return new Response(Buffer.concat(chunks),{headers:{'content-type':'text/event-stream'}});
 +      } finally { pending=false; }
@@ -304,7 +316,7 @@ new file mode 100644
 +      }};
 +      for await (const event of runtime.run(safe,{...context,signal})) {
 +        signal.throwIfAborted();
-+        if(event.type==='text' && (output+=Buffer.byteLength(event.text))>16384)throw Error('Output limit reached');
++        if(event.type==='text' && (output+=Buffer.byteLength(event.text))>65536)throw Error('Output limit reached');
 +        if(event.type==='done' && personal){const proposals=await assistantCall('/pending',scope,{},signal);for(const p of proposals)yield {type:'text',text:'\n\n**Approval required**\n```json\n'+JSON.stringify({action:p.action,changes:p.payload},null,2)+'\n```\nSend `approve '+p.id+'` or `reject '+p.id+'` in this chat within 15 minutes.'};}
 +        if(event.type==='done' && output>0) yield {type:'text',text:routeFooter(routes)};
 +        yield event;
@@ -325,7 +337,7 @@ diff --git a/apps/api/src/native-assistant.test.ts b/apps/api/src/native-assista
 new file mode 100644
 --- /dev/null
 +++ b/apps/api/src/native-assistant.test.ts
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,73 @@
 +import {describe,it,expect} from 'vitest';
 +import {mkdtempSync,rmSync} from 'node:fs';
 +import {tmpdir} from 'node:os';
@@ -337,7 +349,7 @@ new file mode 100644
 +  let ledger=new NativeLedger(file,()=>clock);
 +  try{ledger.start('a','owner','space');ledger.call('a','owner');ledger.finish('a','stopped');ledger.close();ledger=new NativeLedger(file,()=>clock);
 +   expect(()=>ledger.start('a','owner','space')).toThrow('replay');expect(()=>ledger.call('a','owner')).toThrow();
-+   ledger.start('b','owner','space');for(let i=0;i<3;i++)ledger.call('b','owner');expect(()=>ledger.call('b','owner')).toThrow();ledger.finish('b','completed');
++   ledger.start('b','owner','space');for(let i=0;i<3;i++)ledger.call('b','owner');expect(()=>ledger.call('b','owner')).toThrow('quota');ledger.finish('b','completed');
 +   ledger.start('c','owner','space');expect(()=>ledger.call('c','owner')).toThrow('quota');clock+=60001;ledger.call('c','owner');
 +   expect(()=>ledger.call('c','outsider')).toThrow();expect(()=>ledger.start('d','other','elsewhere')).toThrow('active');
 +  }finally{ledger.close();rmSync(dir,{recursive:true});}
@@ -347,6 +359,17 @@ new file mode 100644
 +  try{ledger.start('first','owner','space');ledger.close();ledger=new NativeLedger(file);expect(()=>ledger.start('first','owner','space')).toThrow('replay');
 +   for(let i=1;i<200;i++){ledger.start('job'+i,'owner','space');ledger.finish('job'+i,'completed');}
 +   expect(()=>ledger.start('last','owner','space')).toThrow('Daily');
++  }finally{ledger.close();rmSync(dir,{recursive:true});}
++ });
++ it('permits twelve calls across minute windows, then rejects the next call and preserves Stop',async()=>{
++  let clock=100000000;const ledger=new NativeLedger(':memory:',()=>clock);
++  try{ledger.start('long','owner','space');for(let i=0;i<12;i++){clock+=16000;ledger.call('long','owner');}expect(()=>ledger.call('long','owner')).toThrow('model-call limit');ledger.finish('long','stopped');clock+=61000;expect(()=>ledger.call('long','owner')).toThrow('stopped');}finally{ledger.close();}
++ });
++ it('paces a fifth call, retains accounting across restart, and cancels waiting immediately',async()=>{
++  const dir=mkdtempSync(join(tmpdir(),'native-pace-')),file=join(dir,'limits.sqlite');let clock=100000000,ledger=new NativeLedger(file,()=>clock);
++  try{ledger.start('a','owner','space');for(let i=0;i<4;i++)ledger.call('a','owner');expect(ledger.callWaitMs('owner')).toBe(61000);ledger.close();ledger=new NativeLedger(file,()=>clock);expect(ledger.callWaitMs('owner')).toBe(61000);
++   const abort=new AbortController();const waiting=ledger.waitForCall('owner',abort.signal);abort.abort();await expect(waiting).rejects.toThrow();expect(ledger.db.prepare('SELECT count(*) n FROM native_calls').get()?.n).toBe(4);
++   clock+=61000;await ledger.waitForCall('owner',new AbortController().signal);ledger.start('b','owner','space');ledger.call('b','owner');expect(ledger.callWaitMs('owner')).toBe(0);
 +  }finally{ledger.close();rmSync(dir,{recursive:true});}
 + });
 + it('does not admit schedules or deferred automatic retries',async()=>{

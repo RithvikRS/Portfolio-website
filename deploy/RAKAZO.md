@@ -151,8 +151,8 @@ Open **Rakazo** from the dashboard and send a message in the existing composer. 
 The native thread/job machinery stores messages and run states. A restricted Pi runtime adapter uses only the free-only pool and exposes `sandbox_shell`. Shell commands go through a private executor service and the existing Unix bridge into the networkless gVisor computer. Neither the API nor the executor receives a Docker socket. The executor has no model key or workspace database credentials. The API has no host shell interface.
 
 - One active model run across the deployment.
-- Per authenticated user: 20 run admissions per UTC day, 40 gateway calls per UTC day and four calls per rolling minute.
-- Per run: 120 seconds, three gateway calls, eight tools, 1,024 completion tokens per call and 16 KiB visible text.
+- Per authenticated user: 200 run admissions per UTC day, 600 gateway calls per UTC day and four calls per rolling minute.
+- Per run: 600 seconds, 12 gateway calls, 32 tools, 4,096 completion tokens per call and 64 KiB visible text.
 - Each shell command has a 20-second deadline and bounded output. Stop and run completion stop the computer, terminating lingering background processes.
 - Gateway request/response envelopes are capped at 96/128 KiB. Oversized conversation context is rejected with a request to start a new chat.
 - OmniRoute's restricted key still enforces its free-only connection pool and 12,000-total-token daily allowance. Limits may end a run earlier; requests already accepted by a provider may finish after cancellation.
