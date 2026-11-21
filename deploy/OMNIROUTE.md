@@ -14,7 +14,7 @@ Only the infrastructure administrator can open this gateway. Family service gran
 
 Do not paste keys into chat, GitHub issues, repository `.env` files, screenshots or PRs. Provider connections live in OmniRoute's private data directory. Back up that directory and `server.env` together; losing encryption material can make stored credentials unusable. Treat downloaded configuration exports as secrets.
 
-Start with your four or five providers, then share **only their names and the routing order you want**. Keep app keys and harness connections unconfigured until we test the models and limits. You do not need to send the key values.
+Add more providers through this screen, then test each candidate before adding it to an approved pool. Share provider names and routing preferences only; never send key values. Keep Rakazo disconnected until its controlled pilot.
 
 ## Choose the hierarchy and application limits
 
@@ -25,6 +25,34 @@ The initial policy hides paid models and automatic combos, exposes only configur
 Create one inference-only API key per app, restrict its models/combos, and set request/token/concurrency limits. Dollar budgets alone do not constrain free traffic. Test exhaustion, revocation and fallback before distributing a key. This single-replica deployment uses in-memory rate limiting; restarts reset those counters. Add shared durable quota enforcement before promising restart-resistant limits or scaling replicas.
 
 Use the usage dashboard for traffic, model, latency and failure information. Detailed request-body logging and stream capture are disabled. Do not turn on prompt/response capture for shared apps without deciding retention and access first.
+
+## Initial agent pool (2026-11-21)
+
+Open **Combos > agent-free** to inspect the saved priority order:
+
+| Priority | Provider | Model |
+| --- | --- | --- |
+| 1 | Groq | `openai/gpt-oss-120b` |
+| 2 | NVIDIA | `nvidia/nemotron-3.5-super-vl-120b-a12b` |
+
+Each target uses its selected existing provider connection. Keep retries at zero, global attempts at two, target timeout at 25 seconds and total combo timeout at 55 seconds. Limit each model to one concurrent request, with no queued requests or hedging. These are per-model ceilings, not a global one-agent concurrency guarantee. Keep strict free access, paid-model hiding, combo-only exposure, automatic-combo hiding and the proxy-compatibility filter enabled. Your provider accounts have no paid billing or automatic top-up.
+
+Both candidates passed a synthetic function call with exact integer arguments, continuation after the tool result, streamed output and schema-constrained JSON. A separate temporary combo fell back from an unavailable model to Groq successfully. These small checks establish basic compatibility; they do not establish long-task reliability or maximum context capacity.
+
+Leave Gemini 2.5 Flash out: the account returned HTTP 404 because that model is no longer available to new users. Leave the tested OpenRouter Nemotron free target out: the pre-dispatch filters skipped it. Test other candidates individually without relaxing the free-only policy.
+
+The private **rakazo-pilot-disabled** key is inactive and has:
+
+- Access to `agent-free` only, with direct models and automatic combos denied.
+- Access to the two selected provider connections only; no management scope.
+- Limits of 4 requests per minute, 40 requests per day and 12,000 tokens per day.
+- Request-body logging disabled.
+
+The disposable test key received 403 for direct-model, automatic-routing and management requests, 429 for request/token exhaustion, and 401 after revocation. The inactive Rakazo key also received 401. Temporary test routes and credentials are removed or revoked. SQLite stores token-limit definitions and counters; restart-resistant enforcement has not been exercised. Treat the daily token ceiling as a usage guard, not an exact per-request output reservation. Test overshoot and parallel requests before relying on it for shared users.
+
+Keep Rakazo model connections and agent execution disabled. The next phase must implement the narrowly scoped app connection, output/context limits and a single bounded owner-run job, then verify stop/revocation and network denial. Do not attach the sandbox desktop to the model network or give it provider keys. Do not remove the existing execution blocks just to test the gateway.
+
+Provider credentials, combo state and inference keys live in OmniRoute's private database; this repository records the operating policy, not a secret-bearing configuration export. On the PC, keep `Documents/Portfolio-private-backups/omniroute-routing-2026-11-21` alongside the full cluster backup. It contains integrity-checked before/after SQLite snapshots, matching encryption environment, the disabled pilot key, checksums and restore instructions. Use the full cluster backup for the service definitions and SSO recovery material. Never commit either backup.
 
 ## Deferred option: Gemini Web model-filter exception
 
