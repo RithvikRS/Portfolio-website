@@ -4,7 +4,7 @@ Open **Rakazo** from your admin dashboard, or use `/rakazo` on the portfolio dom
 
 Use Rakazo's normal chat UI to ask questions, plan work and run bounded shell tasks in the isolated offline computer. Conversations and profiles stay in the native workspace. The separate note assistant is retired; its old links redirect to `/app`. Existing scratchpad notes stay in the database. Sign out through Rakazo to return to your dashboard.
 
-The shared model connection is the free-only `agent-free` OmniRoute pool. Provider selection and keys stay on the server. The computer has no internet or access to production files. External integrations, schedules, delegation, uploads and model-configuration writes remain disabled in this release.
+The shared model connection is the free-only `agent-free` OmniRoute pool. Provider selection and keys stay on the server. The computer has no internet or access to production files. The controlled assistant service adds web research, personal memory, text-file imports, Outline and approved ntfy reminders/source digests. Native third-party integrations, autonomous model jobs, delegation and model-configuration writes remain disabled. Google connections are deferred. See [personal assistant usage and approvals](RAKAZO-PERSONAL-ASSISTANT.md).
 
 API, web and PostgreSQL run on the approved Ampere worker with private internal networks, read-only container roots, explicit resource limits and file-backed secrets. The runtime database account cannot bypass row-level security. Keep database/data directories and their matching private recovery keys in your backups. Scratchpad notes and profile instructions are database plaintext, so protect database access and encrypt complete backup archives.
 
@@ -70,7 +70,7 @@ The private executor has no published port and shares an internal, non-attachabl
 3. Start the fixed desktop through the local Unix bridge, then run `verify-rakazo-controller.py`. Rerun negative admission tests after changing runtime policy. Keep production Docker unchanged and verify the native executor separately.
 4. Validate the candidate Caddy/Authelia configuration, backup inventory and edge service. Review the separate-origin screen and reconnect behavior. The dedicated user-manager restart test recreates the cgroups and recovers the controller without restarting production Docker. A whole-host reboot remains outside that rehearsal.
 5. Batch the change into one PR and merge through the existing deployment pipeline. Confirm all existing services and the new edge converge, anonymous requests redirect to Authelia, non-owners fail, and the owner can view/control/stop the desktop.
-6. Verify native chat and Stop through the free-only pool. Keep scheduled runs, external integrations and multi-user admission disabled.
+6. Verify native chat and Stop through the free-only pool. Keep autonomous model runs, Google integrations and multi-user admission disabled. Verify approved reminders separately from foreground chat.
 
 For maintenance, run the user service commands as `rakazo-pilot` with `XDG_RUNTIME_DIR=/run/user/986` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/986/bus`. The units are `rakazo-engine`, `rakazo-controller` and `rakazo-bridge`. Stop the desktop first, then stop bridge/controller/engine. Never restart production Docker to operate this pilot.
 

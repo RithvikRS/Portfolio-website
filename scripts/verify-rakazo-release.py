@@ -109,7 +109,7 @@ def seed(state,source=None,archives=None):
 def start_apps(state):
     if 'native-fixture' not in state['containers']:
         cid=create(state,'native-fixture',['create','--name',state['prefix']+'-native-fixture','--network',state['network'],
-            '--network-alias','omniroute','--network-alias','rakazo_executor',*v.limits('128m','0.25'),'--user','1000:1000','--read-only',
+            '--network-alias','omniroute','--network-alias','rakazo_executor','--network-alias','access_console',*v.limits('128m','0.25'),'--user','1000:1000','--read-only',
             '--mount','type=volume,src='+state['volumes']['secrets']+',dst=/run/secrets,readonly',
             '-e','VERIFY_RAKAZO_DISPOSABLE=1','--entrypoint','node',state['image'],'/run/secrets/verify-native-model.mjs'])
         docker.call('start',cid)
@@ -117,6 +117,7 @@ def start_apps(state):
     for mode in ['api','web']:
         source=catalog['services']['rakazo_'+mode]
         environment=dict(source['environment'])
+        if not state.get('personal_assistant'):environment.pop('PERSONAL_ASSISTANT',None)
         for key in ['API_URL','BETTER_AUTH_URL','WEB_ORIGIN']:
             if key in environment:environment[key]=ORIGIN
         if mode=='api':
@@ -201,13 +202,13 @@ def check_missing_secrets(state):
     print('Missing secret files fail closed even when a fallback environment value is present.')
 
 
-def start(image):
+def start(image, personal=False):
     v.verify(image,True,docker,True)
     prefix='rakazo-release-'+uuid.uuid4().hex[:12]
     directory=BASE/prefix;directory.mkdir(mode=0o700)
     database='rakazo_workspace_verify_'+prefix.removeprefix('rakazo-release-')
     owner_password,app_password=secrets.token_hex(32),secrets.token_hex(32)
-    state={'prefix':prefix,'directory':str(directory),'image':image,'database':database,'owner_password':owner_password,'app_password':app_password,
+    state={'personal_assistant':personal,'prefix':prefix,'directory':str(directory),'image':image,'database':database,'owner_password':owner_password,'app_password':app_password,
            'database_url':f'postgres://rakazo_app:{app_password}@verify-db:5432/{database}',
            'owner_url':f'postgres://verify_owner:{owner_password}@verify-db:5432/{database}', 'containers':{},'volumes':{}}
     save(state)
@@ -216,10 +217,10 @@ def start(image):
         check_missing_secrets(state)
         volume(state,'secrets','secrets');volume(state,'data','data')
         bundle=directory/'bundle';bundle.mkdir(mode=0o700)
-        values={name:secrets.token_hex(32) for name in ['rakazo_encryption_key','rakazo_auth_secret','rakazo_screen_secret','rakazo_oidc_secret','rakazo_pilot_model_key']}
+        values={name:secrets.token_hex(32) for name in ['rakazo_encryption_key','rakazo_auth_secret','rakazo_screen_secret','rakazo_oidc_secret','rakazo_pilot_model_key','rakazo_assistant_token']}
         values.update(rakazo_database_url=state['database_url'],rakazo_owner_email='owner@example.test')
         for name,value in values.items():(bundle/name).write_text(value)
-        for name in ['entrypoint.mjs','verify-edge.mjs','verify-native-model.mjs']:(bundle/name).write_bytes((ROOT/'deploy/rakazo'/name).read_bytes())
+        for name in ['entrypoint.mjs','verify-edge.mjs','verify-native-model.mjs','assistant-services.mjs','assistant-store.mjs','assistant-web.mjs']:(bundle/name).write_bytes((ROOT/'deploy/rakazo'/name).read_bytes())
         r=subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(bundle/'test-key.pem'),'-out',str(bundle/'test-ca.pem'),'-days','2','-subj','/CN=rakazo.verify.test','-addext','subjectAltName=DNS:rakazo.verify.test'],capture_output=True,timeout=30)
         if r.returncode:raise RuntimeError('Could not create disposable TLS certificate.')
         for path in bundle.iterdir():path.chmod(0o444)
@@ -227,6 +228,21 @@ def start(image):
         print('STATE='+str(directory/'state.json'))
     except BaseException:
         logs(state);cleanup(state);raise
+
+
+def start_assistant(state):
+    # Called after disposable OIDC login, before sending a chat. No production identity or secrets.
+    sql='SELECT id FROM "user" WHERE email=\'owner@example.test\';'
+    owner=docker.call('exec',state['containers']['db'],'psql','-U','verify_owner','-d',state['database'],'-tA','-c',sql)
+    if not owner or '\n' in owner:raise RuntimeError('Sign into the disposable fixture first.')
+    config={'ownerUserId':owner,'ownerEmail':'owner@example.test','ntfy':{'authorization':'Bearer fixture','topic':'fixture'},'schedulesEnabled':False}
+    path=Path(state['directory'])/'bundle/rakazo_assistant_config'
+    if path.exists():path.chmod(0o600)
+    path.write_text(json.dumps(config));path.chmod(0o444)
+    seed(state,source=Path(state['directory'])/'bundle')
+    cid=create(state,'assistant',['create','--name',state['prefix']+'-assistant','--network',state['network'],'--network-alias','rakazo_assistant',*v.limits('256m','0.5'),'--user','1000:1000','--read-only','--mount','type=volume,src='+state['volumes']['secrets']+',dst=/run/secrets,readonly','--mount','type=volume,src='+state['volumes']['data']+',dst=/data','--entrypoint','node',state['image'],'/run/secrets/assistant-services.mjs'])
+    docker.call('start',cid)
+    print('Owner-bound disposable assistant started; notifications remain disabled.')
 
 
 def seal_backup(state, backup):
@@ -279,7 +295,7 @@ def restore(state):
     backup=Path(state['directory'])/'backup'
     backup.mkdir(mode=0o700)
     # Stop writers before coordinated database, encryption-material and file snapshots.
-    for key in ['edge','web','api','native-fixture']:remove(state,key)
+    for key in ['edge','web','api','native-fixture','assistant']:remove(state,key)
     binary(['exec',state['containers']['db'],'pg_dump','-U','verify_owner','-d',state['database'],'-Fc'],output_file=backup/'database.dump')
     for key in ['secrets','data']:
         helper=create(state,'archive',['create','--name',state['prefix']+'-archive','--network','none',*v.limits('256m','0.25'),'--user','1000:1000','--read-only',
@@ -296,6 +312,7 @@ def restore(state):
     seed(state,archives=restored);start_db(state);migrate(state)
     binary(['exec','-i',state['containers']['db'],'pg_restore','-U','verify_owner','-d',state['database'],'--clean','--if-exists','--exit-on-error'],input_file=restored/'database.dump')
     start_apps(state)
+    if state.get('personal_assistant'):start_assistant(state)
     for path in restored.iterdir():path.unlink()
     restored.rmdir()
     state['restored']=True;save(state)
@@ -305,15 +322,16 @@ def restore(state):
 if __name__=='__main__':
     os.umask(0o077)
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=['start','restore','stop','logs'])
-    parser.add_argument('--image');parser.add_argument('--state')
+    parser.add_argument('action',choices=['start','assistant','restore','stop','logs'])
+    parser.add_argument('--image');parser.add_argument('--state');parser.add_argument('--personal',action='store_true')
     args=parser.parse_args()
     try:
-        if args.action=='start':start(args.image or '')
+        if args.action=='start':start(args.image or '',args.personal)
         else:
             state=load(args.state or '')
             try:
-                if args.action=='restore':restore(state)
+                if args.action=='assistant':start_assistant(state)
+                elif args.action=='restore':restore(state)
                 elif args.action=='stop':cleanup(state)
                 else:logs(state)
             except BaseException:

@@ -131,7 +131,8 @@
     "access_console": {
       "image": "python:3.13-alpine@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca",
       "networks": [
-        "swarm_access"
+        "swarm_access",
+        "swarm_rakazo_connectors"
       ],
       "deploy": {
         "replicas": 1,
@@ -385,7 +386,8 @@
       "image": "docker.getoutline.com/outlinewiki/outline:1.12.0@sha256:25d6a2ced2f1f0cf03c09abd776d87ba31941ed96d3a99992aa84b3bd0afc074",
       "networks": [
         "swarm_notes_data",
-        "swarm_notes_app"
+        "swarm_notes_app",
+        "swarm_rakazo_connectors"
       ],
       "deploy": {
         "replicas": 1,
@@ -860,7 +862,8 @@
         "swarm_rakazo_app",
         "swarm_rakazo_data",
         "swarm_rakazo_models",
-        "swarm_rakazo_execution"
+        "swarm_rakazo_execution",
+        "swarm_rakazo_tools"
       ],
       "read_only": true,
       "cap_drop": [
@@ -940,7 +943,8 @@
         "NODE_OPTIONS": "--max-old-space-size=768",
         "DB_POOL_MAX": "5",
         "LOG_LEVEL": "warn",
-        "NATIVE_ASSISTANT": "true"
+        "NATIVE_ASSISTANT": "true",
+        "PERSONAL_ASSISTANT": "true"
       },
       "secrets": [
         "rakazo_database_url",
@@ -949,7 +953,8 @@
         "rakazo_screen_secret",
         "rakazo_oidc_secret",
         "rakazo_owner_email",
-        "rakazo_pilot_model_key"
+        "rakazo_pilot_model_key",
+        "rakazo_assistant_token"
       ],
       "volumes": [
         {
@@ -1282,6 +1287,97 @@
         "start_period": "20s",
         "retries": 3
       }
+    },
+    "rakazo_assistant": {
+      "image": "ghcr.io/rithvikrs/portfolio-website@sha256:8afd7fb3228dbdad85b7a0f20978cca9322189210c20472e40f8e233fae503e7",
+      "user": "1000:1000",
+      "networks": [
+        "swarm_rakazo_tools",
+        "swarm_rakazo_connectors",
+        "swarm_rakazo_egress"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "stop_grace_period": "30s",
+      "command": [
+        "node",
+        "/assistant/assistant-services.mjs"
+      ],
+      "environment": {
+        "NODE_ENV": "production",
+        "NODE_OPTIONS": "--max-old-space-size=160"
+      },
+      "configs": [
+        {
+          "source": "rakazo_assistant_web",
+          "target": "/assistant/assistant-web.mjs"
+        },
+        {
+          "source": "rakazo_assistant_store",
+          "target": "/assistant/assistant-store.mjs"
+        },
+        {
+          "source": "rakazo_assistant_services",
+          "target": "/assistant/assistant-services.mjs"
+        }
+      ],
+      "secrets": [
+        "rakazo_assistant_config",
+        "rakazo_assistant_token"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/swarm/rakazo_assistant",
+          "target": "/data"
+        }
+      ],
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "2m",
+          "max-file": "2"
+        }
+      },
+      "deploy": {
+        "replicas": 1,
+        "placement": {
+          "constraints": [
+            "node.id == tzqsl1t88r3l1i8zcqvcmredo"
+          ]
+        },
+        "resources": {
+          "limits": {
+            "memory": "256M",
+            "cpus": "0.5"
+          }
+        },
+        "update_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "failure_action": "pause",
+          "monitor": "30s"
+        },
+        "rollback_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "monitor": "30s"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ],
+        "interval": "20s",
+        "timeout": "5s",
+        "start_period": "20s",
+        "retries": 3
+      }
     }
   },
   "networks": {
@@ -1355,6 +1451,20 @@
       "driver": "overlay",
       "attachable": false,
       "internal": true
+    },
+    "swarm_rakazo_tools": {
+      "driver": "overlay",
+      "attachable": false,
+      "internal": true
+    },
+    "swarm_rakazo_connectors": {
+      "driver": "overlay",
+      "attachable": false,
+      "internal": true
+    },
+    "swarm_rakazo_egress": {
+      "driver": "overlay",
+      "attachable": false
     }
   },
   "caddy_networks": [
@@ -1378,6 +1488,15 @@
     },
     "rakazo_executor_proxy": {
       "file": "deploy/rakazo/native-executor-proxy.mjs"
+    },
+    "rakazo_assistant_web": {
+      "file": "deploy/rakazo/assistant-web.mjs"
+    },
+    "rakazo_assistant_store": {
+      "file": "deploy/rakazo/assistant-store.mjs"
+    },
+    "rakazo_assistant_services": {
+      "file": "deploy/rakazo/assistant-services.mjs"
     }
   },
   "secrets": {
@@ -1437,6 +1556,12 @@
     },
     "rakazo_pilot_model_key": {
       "file": ".secrets/rakazo-agent/model_key"
+    },
+    "rakazo_assistant_config": {
+      "file": ".secrets/rakazo/assistant_config"
+    },
+    "rakazo_assistant_token": {
+      "file": ".secrets/rakazo/assistant_token"
     }
   },
   "volumes": {},
