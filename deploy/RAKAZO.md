@@ -169,6 +169,8 @@ Before allowing family or friends, allocate separate computer identities and hom
 
 ## Release verification
 
+The native chat model selector and working status show **Auto**. Completed replies include a saved model footer from OmniRoute's `x-omniroute-provider` and `x-omniroute-model` response headers. A tool-assisted reply lists each distinct provider/model used across its calls, including successful fallbacks. If the router omits safe metadata, the footer says “Provider/model not reported”; it never guesses from the pool order. Existing replies keep their original content. Auto still uses only the restricted `agent-free` pool.
+
 Build the image from all three pinned patches with `scripts/build-rakazo-app.py`. Keep the default image workspace-only; production enables the restricted adapter with `NATIVE_ASSISTANT=true`. The entrypoint fixes the pool identity, disabled native sandbox/provider configuration and retry settings. Never enable the unrestricted upstream runtime with an environment override.
 
 Run the repository tests, native ledger/job-policy tests, disposable compiled API/browser tests and real gVisor bridge checks. Confirm native conversation replies, tool result rendering, Stop without subsequent model calls, durable quotas, owner denial and unchanged health of other services. The disposable model fixture uses synthetic responses and cannot establish provider quality or production login success. Keep its generated credentials, screenshots and restore evidence outside Git.
