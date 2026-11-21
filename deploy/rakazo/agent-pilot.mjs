@@ -3,28 +3,31 @@ import {fork} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {LIMITS,boundedRequest,boundedResponse,ownerAllowed} from './agent-policy.mjs';
+import {LIMITS,TOOL,NOTE_TOOL,boundedRequest,boundedResponse,ownerAllowed} from './agent-policy.mjs';
 export function createPilot({key,fetchImpl=fetch,spawnWorker=()=>fork(fileURLToPath(new URL('./agent-worker.mjs',import.meta.url)),[],{execArgv:['--import','/app/node_modules/tsx/dist/loader.mjs'],env:{PATH:'/usr/local/bin:/usr/bin:/bin',NODE_ENV:'production',NODE_OPTIONS:'--max-old-space-size=256',MAX_TOOL_CALLS_PER_TURN:'2',MODEL_STREAM_MAX_RETRIES:'0',MODEL_STREAM_TIMEOUT_MS:'25000',MODEL_STREAM_IDLE_TIMEOUT_MS:'25000',LOG_LEVEL:'silent'},stdio:['ignore','ignore','ignore','ipc']})}={}) {
  let active=null, last={status:'idle',calls:0,toolCalls:0,output:''};
  function snapshot(){return {...(active?.view||last),busy:!!active,limits:LIMITS};}
  function stop(reason='Stopped by owner') {
   if(!active)return snapshot();const job=active;
+  if(job.abort.signal.aborted)return snapshot();
+  try{job.hooks?.onStop?.();}catch{reason='Persistence error; run stopped';}
   job.view.status='stopping';job.view.reason=reason;job.abort.abort();
   if(job.child.connected)job.child.send({type:'stop'});
   if(!job.killTimer)job.killTimer=setTimeout(()=>job.child.kill('SIGKILL'),1000);
   return snapshot();
  }
- function start(){
+ function start({id=randomUUID(),task=null,hooks={}}={}){
   if(active)throw Error('A run is already active');
-  const job={view:{id:randomUUID(),status:'running',calls:0,toolCalls:0,output:'',startedAt:new Date().toISOString()},abort:new AbortController(),pending:new Set(),inflight:false};
+  const job={task,hooks,view:{id,status:'running',calls:0,toolCalls:0,output:'',startedAt:new Date().toISOString()},abort:new AbortController(),pending:new Set(),inflight:false};
   active=job;try{job.child=spawnWorker();}catch{active=null;throw Error('Worker unavailable');}
   job.timer=setTimeout(()=>stop('60-second deadline reached'),LIMITS.durationMs);
   job.child.on('message',message=>{
    if(active!==job||job.abort.signal.aborted)return;
-   if(message.type==='fetch'){
+   if(message.type==='ready'){job.child.send({type:'task',task:job.task});}
+   else if(message.type==='fetch'){
     const work=(async()=>{try{
       if(job.inflight)throw Error('Concurrent model call denied');
-      const body=boundedRequest(message.url,message,job.view.calls);job.view.calls++;job.inflight=true;
+      const body=boundedRequest(message.url,message,job.view.calls,job.task?NOTE_TOOL:TOOL);job.inflight=true;await job.hooks?.onCall?.(job.abort.signal);job.abort.signal.throwIfAborted();job.view.calls++;
       const response=await fetchImpl('http://omniroute:20128/v1/chat/completions',{method:'POST',redirect:'error',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(body),signal:job.abort.signal});
       const text=await boundedResponse(response,job.abort.signal);job.abort.signal.throwIfAborted();
       if(job.child.connected)job.child.send({type:'response',id:message.id,body:text});
@@ -35,12 +38,12 @@ export function createPilot({key,fetchImpl=fetch,spawnWorker=()=>fork(fileURLToP
      if(typeof message.text!=='string'||Buffer.byteLength(job.view.output)+Buffer.byteLength(message.text)>LIMITS.outputBytes){stop('Output size limit reached');return;}
      job.view.output+=message.text;
    } else if(message.type==='tool'){
-     if(message.name!=='lookup_fixture'||++job.view.toolCalls>LIMITS.toolCalls)stop('Tool limit reached');
+     if(message.name!==(job.task?NOTE_TOOL.name:TOOL.name)||++job.view.toolCalls>LIMITS.toolCalls)stop('Tool limit reached');
    } else if(message.type==='done'){job.view.status='completed';}
    else if(message.type==='failed')stop('Native runtime stopped');
   });
   job.child.on('error',()=>stop('Worker error'));
-  job.child.on('exit',async()=>{clearTimeout(job.timer);clearTimeout(job.killTimer);job.abort.abort();await Promise.allSettled([...job.pending]);if(job.view.status!=='completed')job.view.status='stopped';job.view.finishedAt=new Date().toISOString();last=job.view;if(active===job)active=null;});
+  job.child.on('exit',async(code)=>{clearTimeout(job.timer);clearTimeout(job.killTimer);job.abort.abort();await Promise.allSettled([...job.pending]);if(job.view.status!=='completed'||code!==0)job.view.status='stopped';job.view.finishedAt=new Date().toISOString();try{job.hooks?.onFinish?.(job.view);}catch{job.view.status='stopped';job.view.reason='Could not persist draft';}last=job.view;if(active===job)active=null;});
   return snapshot();
  }
  return {snapshot,start,stop};

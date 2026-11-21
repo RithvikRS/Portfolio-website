@@ -858,7 +858,8 @@
       "user": "1000:1000",
       "networks": [
         "swarm_rakazo_app",
-        "swarm_rakazo_data"
+        "swarm_rakazo_data",
+        "swarm_rakazo_notes"
       ],
       "read_only": true,
       "cap_drop": [
@@ -1205,7 +1206,8 @@
       "user": "1000:1000",
       "networks": [
         "swarm_rakazo_agent",
-        "swarm_rakazo_models"
+        "swarm_rakazo_models",
+        "swarm_rakazo_notes"
       ],
       "read_only": true,
       "cap_drop": [
@@ -1214,7 +1216,7 @@
       "stop_grace_period": "10s",
       "command": [
         "node",
-        "/pilot/agent-pilot.mjs"
+        "/pilot/note-server.mjs"
       ],
       "environment": {
         "NODE_ENV": "production",
@@ -1232,6 +1234,26 @@
         {
           "source": "rakazo_agent_worker",
           "target": "/pilot/agent-worker.mjs"
+        },
+        {
+          "source": "rakazo_note_store_mjs",
+          "target": "/pilot/note-store.mjs"
+        },
+        {
+          "source": "rakazo_note_api_mjs",
+          "target": "/pilot/note-api.mjs"
+        },
+        {
+          "source": "rakazo_note_server_mjs",
+          "target": "/pilot/note-server.mjs"
+        },
+        {
+          "source": "rakazo_note_ui_mjs",
+          "target": "/pilot/note-ui.mjs"
+        },
+        {
+          "source": "rakazo_note_page_html",
+          "target": "/pilot/note-page.html"
         }
       ],
       "secrets": [
@@ -1244,6 +1266,11 @@
           "tmpfs": {
             "size": 33554432
           }
+        },
+        {
+          "type": "bind",
+          "source": "/srv/swarm/rakazo_agent",
+          "target": "/data"
         }
       ],
       "logging": {
@@ -1363,6 +1390,11 @@
       "driver": "overlay",
       "attachable": false,
       "internal": true
+    },
+    "swarm_rakazo_notes": {
+      "driver": "overlay",
+      "attachable": false,
+      "internal": true
     }
   },
   "caddy_networks": [
@@ -1393,6 +1425,21 @@
     },
     "rakazo_agent_worker": {
       "file": "deploy/rakazo/agent-worker.mjs"
+    },
+    "rakazo_note_store_mjs": {
+      "file": "deploy/rakazo/note-store.mjs"
+    },
+    "rakazo_note_api_mjs": {
+      "file": "deploy/rakazo/note-api.mjs"
+    },
+    "rakazo_note_server_mjs": {
+      "file": "deploy/rakazo/note-server.mjs"
+    },
+    "rakazo_note_ui_mjs": {
+      "file": "deploy/rakazo/note-ui.mjs"
+    },
+    "rakazo_note_page_html": {
+      "file": "deploy/rakazo/note-page.html"
     }
   },
   "secrets": {

@@ -54,7 +54,9 @@ class RakazoDeploymentTests(unittest.TestCase):
         self.assertEqual(service['deploy']['replicas'], 1)
         self.assertEqual(service['deploy']['update_config']['order'], 'stop-first')
         self.assertNotIn('ports', service)
-        self.assertTrue(all(m['type'] == 'tmpfs' for m in service['volumes']))
+        self.assertEqual([m for m in service['volumes'] if m['type'] == 'bind'], [{'type': 'bind', 'source': '/srv/swarm/rakazo_agent', 'target': '/data'}])
+        peers = {name for name, item in catalog['services'].items() if 'swarm_rakazo_notes' in item.get('networks', [])}
+        self.assertEqual(peers, {'rakazo_agent', 'rakazo_api'})
         for network in service['networks']:
             self.assertTrue(catalog['networks'][network]['internal'])
             self.assertFalse(catalog['networks'][network]['attachable'])

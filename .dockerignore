@@ -34,3 +34,9 @@
 
 !deploy/rakazo/agent-policy.mjs
 !deploy/rakazo/agent-pilot.mjs
+
+!deploy/rakazo/note-store.mjs
+!deploy/rakazo/note-api.mjs
+!deploy/rakazo/note-server.mjs
+!deploy/rakazo/note-ui.mjs
+!deploy/rakazo/note-page.html
