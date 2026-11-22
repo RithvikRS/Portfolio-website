@@ -1,6 +1,6 @@
 # Rakazo personal assistant
 
-> Current policy: Rakazo uses provider-managed usage with no local daily token/run/call caps, minute pacing, cumulative tool/model-call limits or overall task deadline. Keep Stop, owner-only access, approvals, free-only routing and resource/individual-operation protections. Older quota values below describe the prior rollout. See [current policy](RAKAZO-PERSONAL-ASSISTANT.md#provider-managed-usage).
+> Current policy: Rakazo uses provider-managed usage with no local token allowances, context windows, daily run/call caps, minute pacing, cumulative tool/model-call limits or overall task deadline. Keep Stop, owner-only access, approvals, free-only routing and resource/individual-operation protections. Older quota values below describe the prior rollout. See [current policy](RAKAZO-PERSONAL-ASSISTANT.md#provider-managed-usage).
 
 Open **Rakazo** from your admin dashboard, or use `/rakazo` on the portfolio domain. Sign in through Authelia with your owner account and authenticator, then use Rakazo's Authelia sign-in button if shown. Other users, including other administrators, cannot access this service.
 

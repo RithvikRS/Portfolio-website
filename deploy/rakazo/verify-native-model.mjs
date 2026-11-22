@@ -6,7 +6,7 @@ http.createServer(async(req,res)=>{
  if(req.url==='/stats'){res.end(JSON.stringify({calls,tools,stops}));return;}
  if(req.url!=='/v1/chat/completions'){res.writeHead(404);res.end();return;}
  const input=await body(req);calls++;
- if(input.model!=='agent-free'||input.max_tokens!==4096){res.writeHead(400);res.end();return;}
+ if(input.model!=='agent-free'||['max_tokens','max_completion_tokens','max_output_tokens'].some(k=>k in input)){res.writeHead(400);res.end();return;}
  const prompt=JSON.stringify(input.messages.filter(m=>m.role==='user').at(-1)?.content);
  if(prompt.includes('QUOTA_REHEARSAL')){res.writeHead(429,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:'Token limit exceeded for account: 500001/500000 tokens used in the current window.',code:'token_limit_exceeded',reset_at:'2099-11-22T00:00:00.000Z',retry_after:3600}}));return;}
  if(prompt.includes('BATCH_APPROVAL_REHEARSAL')){
@@ -14,6 +14,10 @@ http.createServer(async(req,res)=>{
   const delta=count<3?{role:'assistant',tool_calls:[{index:0,id:'batch-'+count,type:'function',function:{name:'personal_assistant',arguments:JSON.stringify({action:'memory_save',data:{title:'Batch preference '+(count+1),body:'Synthetic value '+(count+1)}})}}]}:{role:'assistant',content:'Review the three proposed changes below.'};
   res.writeHead(200,{'Content-Type':'text/event-stream'});
   res.end('data: '+JSON.stringify({id:'batch',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta,finish_reason:count<3?'tool_calls':'stop'}]})+'\n\ndata: [DONE]\n\n');return;
+ }
+ if(prompt.includes('PROVIDER_TOKENS_REHEARSAL')){
+  res.writeHead(200,{'Content-Type':'text/event-stream'});
+  res.end('data: '+JSON.stringify({choices:[{index:0,delta:{role:'assistant',reasoning_content:'x'.repeat(600000)},finish_reason:null}]})+'\n\ndata: '+JSON.stringify({choices:[{index:0,delta:{content:'Provider-managed response completed beyond the old buffer.'},finish_reason:'stop'}],usage:{completion_tokens:9000,total_tokens:9001}})+'\n\ndata: [DONE]\n\n');return;
  }
  if(prompt.includes('RUN_LIMIT_REHEARSAL')){
   // Context compaction can discard old tool results; count fixture requests directly.
