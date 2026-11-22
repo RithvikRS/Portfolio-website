@@ -11,6 +11,8 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 COPY scripts/ ./scripts/
 COPY server/ ./server/
 COPY tests/ ./tests/
+# Public locale patch inputs used only by build-stage tests.
+COPY deploy/omniroute/cost-labels.mjs deploy/omniroute/cost-labels.json ./deploy/omniroute/
 COPY deploy/rakazo/edge.mjs deploy/rakazo/bridge.mjs deploy/rakazo/native-agent-bridge.mjs deploy/rakazo/native-executor-proxy.mjs deploy/rakazo/assistant-web.mjs deploy/rakazo/assistant-store.mjs deploy/rakazo/assistant-services.mjs ./deploy/rakazo/
 # Rakazo authorization and browser-path tests import these public helpers only in the build stage.
 COPY deploy/rakazo/entrypoint.mjs deploy/rakazo/native-assistant.patch ./deploy/rakazo/
