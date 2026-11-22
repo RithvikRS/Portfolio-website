@@ -99,7 +99,7 @@ Future approved app -> private swarm_models_app -> OmniRoute /v1 -> providers
                        separate inference key
 ```
 
-- Pin OmniRoute 3.8.53 by immutable multi-architecture image digest. Run one replica on Ampere's exact node ID with `workload.compute=true`.
+- Pin the OmniRoute 3.8.53 display customization by immutable ARM64 image digest. Run one replica on Ampere's exact node ID with `workload.compute=true`.
 - Store SQLite and generated encryption/session keys under `/srv/swarm/omniroute`, owned by UID/GID 1000 with private permissions. Do not move this task to another node without restoring its data.
 - Cap the app at 1.5 GiB RAM and 2 CPUs; reserve 384 MiB. The SSO proxy has a separate 96 MiB limit.
 - Keep host ports unpublished. Only the SSO proxy joins both `swarm_models_edge` and `swarm_models_app`; Caddy joins the edge network only. Do not attach unrelated services to the application network.
