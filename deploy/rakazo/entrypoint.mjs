@@ -29,8 +29,8 @@ if (mode === 'api') {
     process.env.PI_DEFAULT_CREDENTIALS = 'host';
     process.env.RAKAZO_LOCAL_MODELS = 'agent-free';
     process.env.RAKAZO_LOCAL_MODELS_URL = 'http://127.0.0.1:1/v1';
-    process.env.RAKAZO_LOCAL_MAX_TOKENS = '4096';
-    process.env.RAKAZO_LOCAL_CONTEXT_WINDOW = '32768';
+    delete process.env.RAKAZO_LOCAL_MAX_TOKENS;
+    delete process.env.RAKAZO_LOCAL_CONTEXT_WINDOW;
     process.env.MAX_TOOL_CALLS_PER_TURN = '0';
     process.env.MODEL_STREAM_MAX_RETRIES = '0';
     process.env.MODEL_STREAM_TIMEOUT_MS = '120000';

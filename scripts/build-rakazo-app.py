@@ -20,9 +20,9 @@ PATCH_NAMES = ('workspace-only.patch', 'workspace-ui.patch', 'native-assistant.p
 ARTIFACTS = {
     'api-src': '/app/apps/api/src', 'api-dist': '/app/apps/api/dist',
     'web-src': '/app/apps/web/src', 'web-dist': '/app/apps/web/dist',
-    'contracts-src': '/app/packages/contracts/src',
+    'contracts-src': '/app/packages/contracts/src', 'adapters-src': '/app/packages/adapters/src',
 }
-PATCH_PREFIXES = ('apps/api/src/', 'apps/web/src/', 'packages/contracts/src/')
+PATCH_PREFIXES = ('apps/api/src/', 'apps/web/src/', 'packages/contracts/src/', 'packages/adapters/src/')
 BUILD_COMMAND = '''
 set -eu
 [ "$GIT_SHA" = "747ece9641dcc60c95467ffae8ab2311fb1f3f81" ]

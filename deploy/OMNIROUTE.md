@@ -1,6 +1,6 @@
 # Model gateway
 
-> Current policy: Rakazo uses provider-managed usage with no local daily token/run/call caps, minute pacing, cumulative tool/model-call limits or overall task deadline. Keep Stop, owner-only access, approvals, free-only routing and resource/individual-operation protections. Older quota values below describe the prior rollout. See [current policy](RAKAZO-PERSONAL-ASSISTANT.md#provider-managed-usage).
+> Current policy: Rakazo uses provider-managed usage with no local token allowances, context windows, daily run/call caps, minute pacing, cumulative tool/model-call limits or overall task deadline. Keep Stop, owner-only access, approvals, free-only routing and resource/individual-operation protections. Older quota values below describe the prior rollout. See [current policy](RAKAZO-PERSONAL-ASSISTANT.md#provider-managed-usage).
 
 Open **OmniRoute** in the administrator dashboard, or use [the model gateway shortcut](https://rithvik.ddns.net/models). The shortcut opens `https://models.144.24.135.201.sslip.io/` on its own browser origin. Sign in through Authelia with MFA, then select OmniRoute's OIDC sign-in button if prompted. Reuse your existing Authelia session; do not create a separate OmniRoute password.
 

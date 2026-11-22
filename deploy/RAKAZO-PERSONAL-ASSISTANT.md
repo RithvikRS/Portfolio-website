@@ -54,8 +54,17 @@ Rakazo has no local daily run/token/call quotas, per-run model/tool counts, minu
 
 Stop cancels the active run, outstanding model/tool requests and isolated computer. Keep one active run, owner-only Authelia, explicit approvals, persisted accounting and restart/replay protection. Do not automatically resume stopped or interrupted work.
 
-CPU/RAM/PID and sandbox network limits remain. Response/context buffers, 4,096 output tokens per response, 55-second model requests and 20-second shell commands remain bounded to protect resources and recover from stalled individual operations. These do not impose a cumulative task-duration or usage quota. Reminder delivery and note storage safeguards remain separate from chat usage.
+CPU/RAM/PID and sandbox network limits remain. Rakazo sends no max_tokens/max_completion_tokens/max_output_tokens allowance, applies no local model context window, and streams model output without a byte-size cutoff. Provider context/output ceilings still apply. Shell-command deadlines and transport failure detection remain operational safeguards. These do not impose a cumulative task-duration or usage quota. Reminder delivery and note storage safeguards remain separate from chat usage.
 
 The API entrypoint sets MAX_TOOL_CALLS_PER_TURN=0 (the upstream runtime's unlimited setting). Deploy the matching native-agent-bridge.mjs on Ampere: it has no overall timer or cumulative tool counter. The regression completes 40 tools and 41 model calls, then checks Stop.
 
 Retain the upstream stalled-loop guard: repeated failing or near-identical actions can stop early with an explicit stuck-loop message. This is progress detection, not a cumulative tool quota; a progressing sequence can exceed 32 tools.
+
+
+## Provider-owned token limits
+
+Do not set a replacement token number. The native gateway omits token-budget fields even if an SDK supplies defaults. The native context policy passes the full prepared history through without token-budget truncation. Remove stale RAKAZO_LOCAL_MAX_TOKENS and RAKAZO_LOCAL_CONTEXT_WINDOW settings at startup.
+
+Run scripts/configure-rakazo-token-policy.mjs using a private, temporary management credential, the Rakazo inference key ID, and a private backup path. It preserves strict free-only access, removes saved token-quota records and request-rate allowances for that key, disables router compression for it, and installs token-field filters for the five providers in agent-free. Gemini and Kiro use provider-default generation settings so translated token defaults do not become local ceilings. Keep the policy backup outside Git and revoke the temporary management token afterward.
+
+When adding a provider, verify its final request translation does not introduce a token budget. Providers requiring an explicit maximum need their documented provider maximum; never substitute an arbitrary local number. Provider quota, context and output errors remain provider failures, not a reason to enable paid models.
