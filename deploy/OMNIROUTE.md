@@ -151,7 +151,7 @@ Keep paid-model hiding and strict free access enabled. Do not relax these settin
 
 ## Free-pool fallback order and Groq 413
 
-Use this priority order for `agent-free`: Groq GPT-OSS 120B, Gemini 3.1 Flash Lite, Kiro Claude Haiku 4.5, NVIDIA Nemotron 3.5 Super VL, then OpenRouter Nemotron 3.5 Lightning `:free`. Keep strict free-only access and the existing pinned provider connections. This order lives in OmniRoute's private database; changing a repository file alone does not update it. Back up the combo before changing its model order through the management API.
+Use this priority order for `agent-free`: Groq GPT-OSS 120B, OpenRouter Nemotron 3.5 Lightning `:free`, NVIDIA Nemotron 3.5 Super VL, Kiro GLM-5, then Gemini 3.1 Flash-Lite. See [the model evaluation](RAKAZO-MODEL-EVALUATION.md) for the scored tests, all ten provider outcomes and the tradeoffs behind this quality-first order. Keep strict free-only access and the existing pinned provider connections. This order lives in OmniRoute's private database; changing a repository file alone does not update it. Back up the combo before changing its model order through the management API.
 
 Groq can reject a single large request with HTTP 413 when it exceeds the account's model-specific tokens-per-minute allowance. On 23 November 2026 IST, the recent error reported an 8,000-token allowance and a 40,647-token request. Retrying that same oversized request on Groq will not help. Let the priority combo advance to another free provider; do not trim history or introduce a local token budget. See [Groq rate limits](https://console.groq.com/docs/rate-limits).
 
