@@ -13,7 +13,16 @@ Use Rakazo's existing chat. The browser still requires the exact owner's Autheli
 
 ## Approve a change
 
-Rakazo appends the exact stored proposal to the reply. Send `approve <id>` or `reject <id>` as a new message in the same chat. Approval is handled by the server before model inference; models cannot approve their own tool calls. A proposal belongs to one user, space and chat, expires after 15 minutes and executes at most once. Stop cancels pending proposals created by that run.
+Rakazo appends one numbered review with the exact changes. Reply in the same chat:
+
+- `approve all` or `I approve all 3` to accept the displayed batch.
+- `approve 1 and 3` to accept selected proposals, or `reject 2` to decline one.
+- `I approve` when the review contains just one proposal.
+- `reject all` to decline the batch.
+
+Approvals go directly to the server without another model call or repeated drafting. Numbers refer only to the latest displayed review in that chat. A vague approval with several proposals asks you to choose; it does not guess. Existing `approve <id>` commands still work, including several commands in one message. Identical pending proposals reuse the same stored change.
+
+A batch executes sequentially and reports each result. If a write fails, later items are not attempted; completed writes are not rolled back. A batch containing an expired or already-handled proposal is rejected before starting new writes. Approve the remaining numbered items individually after checking the result. Models cannot approve their own tool calls. A proposal belongs to one user, space and chat, expires after 15 minutes and executes at most once. Stop cancels pending proposals created by that run.
 
 A failed or uncertain external write is not retried automatically. Check the target service before proposing another write. Stop can abort an in-flight request but cannot undo an external service's already-accepted change. Pausing a reminder prevents future deliveries; it cannot retract one already sent.
 

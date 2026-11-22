@@ -43,6 +43,16 @@ export class AssistantServices{
   signal?.throwIfAborted();if(this.store.cancelled(s))throw Error('Run stopped');
   return this.store.propose(s,action,payload);
  }
+ async decide(s,command,signal){
+  this.check(s);signal?.throwIfAborted();if(this.store.cancelled(s))throw Error('Run stopped');await this.authorized(signal);
+  const {decision,items}=this.store.decisionItems(s,command);const results=[];
+  for(const [index,item] of items.entries()){
+   signal?.throwIfAborted();if(this.store.cancelled(s))throw Error('Run stopped');
+   try{const result=decision==='approve'?await this.approve(s,item.id,signal):this.store.reject(s,item.id);results.push({title:item.payload.title||item.action,action:item.action,status:decision==='approve'?'completed':'rejected',result});}
+   catch(e){results.push({title:item.payload.title||item.action,status:'failed',error:e.message});for(const rest of items.slice(index+1))results.push({title:rest.payload.title||rest.action,status:'not attempted'});break;}
+  }
+  return results;
+ }
  async approve(s,id,signal){
   this.check(s);signal?.throwIfAborted();if(this.store.cancelled(s))throw Error('Run stopped');await this.authorized(signal);const r=this.store.claim(s,id),p=r.payload;let external=false;
   try{
@@ -88,7 +98,7 @@ export function serve(service){
   if(req.method==='GET'&&req.url==='/healthz'){res.end('{"ok":true}');return;}
   const auth=req.headers.authorization||'';
   if(!service.config.apiToken||!timingSafeEqual(createHash('sha256').update(auth).digest(),createHash('sha256').update('Bearer '+service.config.apiToken).digest())){res.writeHead(401);res.end();return;}
-  if(req.method!=='POST'||!['/call','/approve','/reject','/pending','/cancel','/import'].includes(req.url)){res.writeHead(404);res.end();return;}
+  if(req.method!=='POST'||!['/call','/approve','/reject','/pending','/review','/decide','/cancel','/import'].includes(req.url)){res.writeHead(404);res.end();return;}
   let scope,controller;
   try{
    let body='';for await(const c of req){body+=c;if(Buffer.byteLength(body)>65536)throw Error('Request too large');}
@@ -101,7 +111,7 @@ export function serve(service){
    res.on('close',()=>{if(!res.writableEnded)controller.abort();});const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(25000)]);
    await service.authorized(signal);
    if(service.store.cancelled(scope))throw Error('Run stopped');
-   const result=req.url==='/import'?service.store.transaction(()=>service.store.importDocument(scope,j.data)):req.url==='/call'?await service.call(scope,j.action,j.data,signal):req.url==='/approve'?await service.approve(scope,j.id,signal):req.url==='/reject'?service.store.reject(scope,j.id):service.store.pending(scope);
+   const result=req.url==='/decide'?await service.decide(scope,j.command,signal):req.url==='/review'?service.store.review(scope):req.url==='/import'?service.store.transaction(()=>service.store.importDocument(scope,j.data)):req.url==='/call'?await service.call(scope,j.action,j.data,signal):req.url==='/approve'?await service.approve(scope,j.id,signal):req.url==='/reject'?service.store.reject(scope,j.id):service.store.pending(scope);
    signal.throwIfAborted();res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));
   }catch(e){res.writeHead(400);res.end(JSON.stringify({error:e.message}));}
   finally{if(scope&&service.active.get(scope.run)===controller)service.active.delete(scope.run);}

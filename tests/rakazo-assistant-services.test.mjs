@@ -78,3 +78,51 @@ test('late delivery completion cannot reactivate a paused or deleted schedule',(
  let now=1000000;const st=new AssistantStore(':memory:',()=>now);
  for(const state of ['paused','deleted']){const r=st.schedule(s,{title:'race',body:'test',due:now+60000,repeat_ms:3600000});now+=60000;const active=st.claimDue();st.scheduleState(s,r.id,state);st.delivered(active,true);assert.equal(st.schedules(s).find(x=>x.id===r.id).state,state);}st.close();
 });
+
+test('numbered approval uses the displayed batch, not newer hidden proposals',async()=>{
+ const st=new AssistantStore(':memory:');const api=new AssistantServices(st,config,{fetcher:allow});
+ for(let i=1;i<=3;i++)await api.call(s,'memory_save',{title:'Preference '+i,body:'Synthetic '+i});
+ st.review(s);const next={...s,run:'decision'};
+ await api.call({...s,run:'hidden'},'memory_save',{title:'Not reviewed',body:'Do not save'});
+ await assert.rejects(api.decide(next,'I approve'),/3 proposals/);
+ await assert.rejects(api.decide(next,'approve all 4'),/number does not match/);
+ await assert.rejects(api.decide({...next,thread:'other'},'approve all'),/No current/);
+ await assert.rejects(api.decide({...next,user:'other'},'approve all'),/Owner/);
+ const results=await api.decide(next,'approve 1 and 3');assert.deepEqual(results.map(r=>r.status),['completed','completed']);
+ assert.equal(st.list(s,'memory').length,2);
+ const rest=await api.decide({...next,run:'reject'},'reject 2');assert.equal(rest[0].status,'rejected');
+ await assert.rejects(api.decide({...next,run:'again'},'approve all'),/already handled/);
+ assert.equal(st.list(s,'memory').length,2);st.close();
+});
+
+test('single approval, legacy batch commands and duplicate proposals work without model interpretation',async()=>{
+ const st=new AssistantStore(':memory:');const api=new AssistantServices(st,config,{fetcher:allow});
+ const p=await api.call(s,'memory_save',{title:'One',body:'first'});
+ const duplicate=await api.call({...s,run:'new'},'memory_save',{title:'One',body:'first'});assert.equal(duplicate.id,p.id);
+ st.review({...s,run:'new'});await api.decide({...s,run:'yes'},'I approve');assert.equal(st.list(s,'memory').length,1);
+ const a=await api.call(s,'memory_save',{title:'Two',body:'second'}),b=await api.call(s,'memory_save',{title:'Three',body:'third'});
+ await api.decide({...s,run:'batch'},'approve '+a.id+' approve '+b.id);assert.equal(st.list(s,'memory').length,3);st.close();
+});
+
+test('approval selections fail closed on ambiguity, expiry, replay, invalid IDs and Stop',async()=>{
+ let now=1000000;const st=new AssistantStore(':memory:',()=>now);const api=new AssistantServices(st,config,{fetcher:allow});
+ const p=await api.call(s,'memory_save',{title:'One',body:'first'});st.review(s);const next={...s,run:'approve'};
+ for(const command of ['approve if safe','approve 1 and delete everything','approve 0','approve 11','approve '+p.id+' reject '+p.id,'approve '+p.id+' approve '+'a'.repeat(32)])await assert.rejects(api.decide(next,command));
+ assert.equal(st.list(s,'memory').length,0);now+=16*60000;await assert.rejects(api.decide(next,'approve all'),/expired/);
+ const later={...s,run:'later'};await api.call(later,'memory_save',{title:'Later',body:'new'});st.review(later);st.cancelRun(next);await assert.rejects(api.decide(next,'approve all'),/stopped/);
+ st.review({...s,run:'empty'});await assert.rejects(api.decide({...s,run:'last'},'approve all'),/No current/);st.close();
+});
+
+test('batch failure reports completed and unattempted items without retrying external writes',async()=>{
+ const st=new AssistantStore(':memory:');const api=new AssistantServices(st,config,{fetcher:async url=>url.includes('authorize-rakazo')?new Response(null,{status:204}):new Response('{}',{status:503})});
+ await api.call(s,'memory_save',{title:'First',body:'saved'});await api.call(s,'outline_create',{title:'Second',text:'draft'});await api.call(s,'memory_save',{title:'Third',body:'not yet'});st.review(s);
+ const rows=await api.decide({...s,run:'decision'},'I approve all 3');assert.deepEqual(rows.map(r=>r.status),['completed','failed','not attempted']);assert.equal(st.list(s,'memory').length,1);
+ await assert.rejects(api.decide({...s,run:'retry'},'approve all'),/already handled/);st.close();
+});
+
+test('Stop between batch writes prevents subsequent changes',async()=>{
+ const st=new AssistantStore(':memory:');const api=new AssistantServices(st,config,{fetcher:allow});
+ for(let i=0;i<3;i++)await api.call(s,'memory_save',{title:'Item '+i,body:'synthetic'});st.review(s);
+ const abort=new AbortController(),original=api.approve.bind(api);api.approve=async(...args)=>{const result=await original(...args);abort.abort();return result;};
+ await assert.rejects(api.decide({...s,run:'decision'},'approve all',abort.signal));assert.equal(st.list(s,'memory').length,1);st.close();
+});
