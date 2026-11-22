@@ -307,7 +307,7 @@ new file mode 100644
 +      }};
 +      for await (const event of runtime.run(safe,{...context,signal})) {
 +        signal.throwIfAborted();
-+        if(event.type==='text' && (output+=Buffer.byteLength(event.text))>65536)throw Error('Output limit reached');
++        if(event.type==='text') output=1;
 +        if(event.type==='done' && personal){const proposals=await assistantCall('/pending',scope,{},signal);for(const p of proposals)yield {type:'text',text:'\n\n**Approval required**\n```json\n'+JSON.stringify({action:p.action,changes:p.payload},null,2)+'\n```\nSend `approve '+p.id+'` or `reject '+p.id+'` in this chat within 15 minutes.'};}
 +        if(event.type==='done' && output>0) yield {type:'text',text:routeFooter(routes)};
 +        yield event;

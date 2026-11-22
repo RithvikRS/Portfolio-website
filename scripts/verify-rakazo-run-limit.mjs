@@ -17,9 +17,10 @@ try{
  const cleared=await page.evaluate(async()=>{const botId=location.pathname.split('/').filter(Boolean).at(-1);const r=await fetch('/rpc/threads/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({json:{botId}})});return r.status;});assert.equal(cleared,200);await page.reload();await page.locator('textarea').waitFor();
  const send=async text=>{await page.locator('textarea').fill(text);await page.getByRole('button',{name:'Send',exact:true}).click();};
  await send('RUN_LIMIT_REHEARSAL: complete the synthetic 40-tool task.');
- await page.getByText('Completed 40 tools without local usage caps.',{exact:true}).waitFor({timeout:180000});
+ await page.getByTestId('transcript').getByText(/Completed 40 tools without local usage caps\./).waitFor({timeout:180000});
  assert.equal(await page.getByTestId('composer-error').count(),0);
  await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});
+ await page.evaluate(async()=>{const botId=location.pathname.split('/').filter(Boolean).at(-1);await fetch('/rpc/threads/clear',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({json:{botId}})});});await page.reload();await page.locator('textarea').waitFor();
  await send('STOP_REHEARSAL: wait while I test Stop.');const stop=page.getByRole('button',{name:'Stop',exact:true});await stop.waitFor();await stop.click();await stop.waitFor({state:'hidden'});await page.waitForTimeout(32000);assert.equal(await stop.count(),0);
  await page.screenshot({path:join(artifacts,'provider-managed-usage.png'),fullPage:true});
  console.log('Native UI completed 40 tools/41 model calls without local quotas, then honored Stop.');
