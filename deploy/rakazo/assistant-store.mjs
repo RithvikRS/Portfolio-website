@@ -7,9 +7,25 @@ export function scopeOf(value){
  for(const k of ['user','space','thread','run'])if(typeof value?.[k]!=='string'||! /^[a-zA-Z0-9_-]{1,128}$/.test(value[k]))throw Error('Authenticated scope required');
  return value;
 }
+
+// Accept only explicit decisions, never model-generated consent.
+export function parseDecision(text){
+ if(typeof text!=='string'||text.length>2000)throw Error('Use approve all, approve 1 and 3, or reject all.');
+ const t=text.trim().toLowerCase().replace(/[.!]$/,'');
+ if(/^(?:(?:approve|reject) [a-f0-9]{32})(?:[\s,;]+(?:approve|reject) [a-f0-9]{32})*$/.test(t)){
+  const parts=[...t.matchAll(/(approve|reject) ([a-f0-9]{32})/g)];if(new Set(parts.map(x=>x[1])).size!==1)throw Error('Send approvals and rejections separately.');return {decision:parts[0][1],ids:[...new Set(parts.map(x=>x[2]))]};
+ }
+ const m=t.match(/^(?:i\s+)?(approve|reject)(?:\s+(.*))?$/);if(!m)throw Error('Use approve all, approve 1 and 3, or reject all.');
+ const tail=m[2]||'';if(!tail)return {decision:m[1],single:true};
+ const all=tail.match(/^all(?:\s+([1-9]|10))?$/);if(all)return {decision:m[1],all:true,count:all[1]?Number(all[1]):undefined};
+ if(!/^(?:[1-9]|10)(?:(?:\s*,\s*|\s+and\s+|\s+)(?:[1-9]|10))*$/.test(tail))throw Error('Use approve all, approve 1 and 3, or reject all. No changes were made.');
+ return {decision:m[1],indices:[...new Set(tail.match(/\d+/g).map(Number))]};
+}
+
 export class AssistantStore{
  constructor(file,now=()=>Date.now()){
   this.now=now;this.db=new DatabaseSync(file);this.db.exec(`PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;
+   CREATE TABLE IF NOT EXISTS approval_reviews(user TEXT,space TEXT,thread TEXT,ids TEXT,PRIMARY KEY(user,space,thread));
    CREATE TABLE IF NOT EXISTS cancelled_runs(id TEXT PRIMARY KEY);
    CREATE TABLE IF NOT EXISTS items(user TEXT,space TEXT,kind TEXT,id TEXT,title TEXT,body TEXT,version INTEGER,updated INTEGER,PRIMARY KEY(user,space,kind,id));
    CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY,user TEXT,space TEXT,thread TEXT,run TEXT,action TEXT,payload TEXT,digest TEXT,expires INTEGER,state TEXT);
@@ -34,12 +50,31 @@ export class AssistantStore{
  propose(s,action,payload){
   scopeOf(s);if(JSON.stringify(payload).length>40000)throw Error('Proposal too large');
   this.db.prepare("UPDATE approvals SET state='expired' WHERE state='pending' AND expires<?").run(this.now());
+  const digest=hash({action,payload});
+  const duplicate=this.db.prepare("SELECT id FROM approvals WHERE user=? AND space=? AND thread=? AND digest=? AND state='pending' AND expires>?").get(s.user,s.space,s.thread,digest,this.now());
+  if(duplicate){this.db.prepare('UPDATE approvals SET run=? WHERE id=?').run(s.run,duplicate.id);return {id:duplicate.id,action,payload,duplicate:true};}
   const n=this.db.prepare("SELECT count(*) n FROM approvals WHERE user=? AND state='pending'").get(s.user).n;if(n>=10)throw Error('Review or cancel existing proposals first');
-  const id=randomBytes(16).toString('hex'),digest=hash({action,payload});
+  const id=randomBytes(16).toString('hex');
   this.db.prepare("INSERT INTO approvals VALUES(?,?,?,?,?,?,?,?,?,'pending')").run(id,s.user,s.space,s.thread,s.run,action,JSON.stringify(payload),digest,this.now()+15*60000);
-  return {id,action,payload,expiresMinutes:15,instruction:'Review the exact proposal below, then send approve '+id+' or reject '+id+' in this chat.'};
+  return {id,action,payload,expiresMinutes:15,instruction:'The server will show a numbered review. Ask the user to reply approve all or approve a proposal number. Do not create it again on approval.'};
  }
  pending(s){return this.db.prepare("SELECT id,action,payload FROM approvals WHERE user=? AND space=? AND thread=? AND run=? AND state='pending'").all(s.user,s.space,s.thread,s.run).map(r=>({...r,payload:JSON.parse(r.payload)}));}
+ review(s){scopeOf(s);const rows=this.pending(s);this.db.prepare('INSERT INTO approval_reviews VALUES(?,?,?,?) ON CONFLICT(user,space,thread) DO UPDATE SET ids=excluded.ids').run(s.user,s.space,s.thread,JSON.stringify(rows.map(r=>r.id)));return rows;}
+ decisionItems(s,command){
+  scopeOf(s);const choice=parseDecision(command);let ids=choice.ids;
+  if(!ids){const r=this.db.prepare('SELECT ids FROM approval_reviews WHERE user=? AND space=? AND thread=?').get(s.user,s.space,s.thread);const shown=r?JSON.parse(r.ids):[];
+   if(!shown.length)throw Error('No current proposals to approve. Ask me to prepare the changes first.');
+   if(choice.single&&shown.length!==1)throw Error('There are '+shown.length+' proposals. Reply approve all, or approve a number. No changes were made.');
+   if(choice.count!==undefined&&choice.count!==shown.length)throw Error('The number does not match the displayed proposals. Review them again. No changes were made.');
+   if(choice.indices?.some(i=>i>shown.length))throw Error('That proposal number is not in the displayed review. No changes were made.');
+   ids=choice.indices?choice.indices.map(i=>shown[i-1]):shown;
+  }
+  if(!ids.length||ids.length>10)throw Error('Select between one and ten proposals.');
+  const items=ids.map(id=>{const r=this.db.prepare("SELECT * FROM approvals WHERE id=? AND user=? AND space=? AND thread=? AND state='pending'").get(id,s.user,s.space,s.thread);
+   if(!r||r.expires<=this.now())throw Error('A selected proposal expired or was already handled. No new changes were made.');
+   const payload=JSON.parse(r.payload);if(r.digest!==hash({action:r.action,payload}))throw Error('Proposal integrity check failed');return {id,action:r.action,payload};});
+  return {...choice,items};
+ }
  claim(s,id){return this.transaction(()=>{
   const r=this.db.prepare("SELECT * FROM approvals WHERE id=? AND user=? AND space=? AND thread=? AND state='pending'").get(id,s.user,s.space,s.thread);
   if(!r||r.expires<this.now())throw Error('Approval missing, expired or already used');
