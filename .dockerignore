@@ -41,3 +41,8 @@
 
 !deploy/rakazo/entrypoint.mjs
 !deploy/rakazo/native-assistant.patch
+
+# Public inputs for the OmniRoute display tests.
+!deploy/omniroute/
+!deploy/omniroute/cost-labels.mjs
+!deploy/omniroute/cost-labels.json
