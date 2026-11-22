@@ -1,8 +1,8 @@
 {
-  "archive_sha256": "ed7c918e0238c098cea0a8d2fe04f4df12d3e0fe7410de05854d11ee19470823",
-  "image_id": "sha256:0e89196fc486fed6736e5837a2958269c18c5b171583749df2db09da27951678",
-  "configuration_id": "sha256:246045fa5c66163085a0a46c43a061f5398c02a0617a159eb23fa47f774b3a51",
-  "inputs": "40cac8b25f43dee065af5b00af07adb191199329be3f7cbc223920b5ef0e6ba4",
-  "local_tag": "portfolio-rakazo:workspace-40cac8b25f43dee0",
-  "registry_tag": "ghcr.io/rithvikrs/portfolio-website:rakazo-workspace-40cac8b25f43dee0"
+  "archive_sha256": "2c85c6b0cb6140bd11c6b0bed30c1a3013693ab611ad103d39a91ad0c809fe8a",
+  "image_id": "sha256:5335acfaec9004806c42f6175c62ac26668fafeb6ab52540a2b11704652ffb72",
+  "configuration_id": "sha256:d18c38ba95a9b8ae00822ba5ad9ec6c3aac4c591eeeae30e7efae4b77db30e4f",
+  "inputs": "0bc087f97ff6cad9133f705ce13a92246589500959bb1de0e98b80661d3dbe9d",
+  "local_tag": "portfolio-rakazo:workspace-0bc087f97ff6cad9",
+  "registry_tag": "ghcr.io/rithvikrs/portfolio-website:rakazo-workspace-0bc087f97ff6cad9"
 }
