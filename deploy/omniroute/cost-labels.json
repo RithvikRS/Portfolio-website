@@ -1,0 +1,200 @@
+[
+  {
+    "namespace": "costs",
+    "key": "title",
+    "before": "Costs",
+    "after": "Usage value"
+  },
+  {
+    "namespace": "costs",
+    "key": "pageDescription",
+    "before": "Track spending, analyze trends, and manage your AI budget across all providers",
+    "after": "Actual charges: not available here. Usage values combine provider-reported costs with list-price estimates when no cost is reported. Free-tier estimates are not bills; check your provider billing page for actual charges."
+  },
+  {
+    "namespace": "costs",
+    "key": "overviewTitle",
+    "before": "Cost Overview",
+    "after": "Usage value, not your bill"
+  },
+  {
+    "namespace": "costs",
+    "key": "overviewDescription",
+    "before": "Real-time spending breakdown across all connected providers and models",
+    "after": "Actual charges: not available here. Usage values combine provider-reported costs with list-price estimates when no cost is reported. Free-tier estimates are not bills; check your provider billing page for actual charges."
+  },
+  {
+    "namespace": "costs",
+    "key": "totalCost",
+    "before": "Total Cost",
+    "after": "Total usage value"
+  },
+  {
+    "namespace": "costs",
+    "key": "breakdown",
+    "before": "Cost Breakdown",
+    "after": "Usage value breakdown"
+  },
+  {
+    "namespace": "costs",
+    "key": "spendToday",
+    "before": "Spend Today",
+    "after": "Value today"
+  },
+  {
+    "namespace": "costs",
+    "key": "spend7d",
+    "before": "Spend 7D",
+    "after": "Value over 7 days"
+  },
+  {
+    "namespace": "costs",
+    "key": "spend30d",
+    "before": "Spend 30D",
+    "after": "Value over 30 days"
+  },
+  {
+    "namespace": "costs",
+    "key": "avgCostPerRequest",
+    "before": "Avg Cost / Request",
+    "after": "Avg. value / request"
+  },
+  {
+    "namespace": "costs",
+    "key": "cost",
+    "before": "Cost",
+    "after": "Usage value"
+  },
+  {
+    "namespace": "costs",
+    "key": "costTrend",
+    "before": "Cost Trend",
+    "after": "Usage value trend"
+  },
+  {
+    "namespace": "costs",
+    "key": "costByApiKey",
+    "before": "Cost by API Key",
+    "after": "Usage value by API key"
+  },
+  {
+    "namespace": "costs",
+    "key": "costByAccount",
+    "before": "Cost by Account",
+    "after": "Usage value by account"
+  },
+  {
+    "namespace": "costs",
+    "key": "monthlyForecast",
+    "before": "Monthly Forecast",
+    "after": "Monthly usage value projection"
+  },
+  {
+    "namespace": "costs",
+    "key": "avgDailyCost",
+    "before": "Avg. daily cost",
+    "after": "Avg. daily usage value"
+  },
+  {
+    "namespace": "costs",
+    "key": "costExplorerTitle",
+    "before": "Cost Explorer",
+    "after": "Usage value explorer"
+  },
+  {
+    "namespace": "costs",
+    "key": "costExplorerDescription",
+    "before": "Explore spend by provider, model, API key, account, or service tier.",
+    "after": "Compare estimated or provider-reported usage values, not billed charges. A missing provider cost does not mean a confirmed $0 bill."
+  },
+  {
+    "namespace": "costs",
+    "key": "legacyFreeLabel",
+    "before": "Legacy / Free",
+    "after": "Unpriced / zero value"
+  },
+  {
+    "namespace": "costs",
+    "key": "legacyOrFree",
+    "before": "Legacy / Free",
+    "after": "Unpriced / zero value"
+  },
+  {
+    "namespace": "costs",
+    "key": "noCostDataDescription",
+    "before": "Start making requests to see cost data appear here. Costs are tracked automatically for all providers.",
+    "after": "No priced usage is available for this window. This does not confirm that your provider bill is zero."
+  },
+  {
+    "namespace": "costs",
+    "key": "serviceTierCostShareSuffix",
+    "before": "of cost",
+    "after": "of usage value"
+  },
+  {
+    "namespace": "analytics",
+    "key": "chartCost",
+    "before": "Cost",
+    "after": "Usage value"
+  },
+  {
+    "namespace": "analytics",
+    "key": "chartCostPct",
+    "before": "{pct}% of cost",
+    "after": "{pct}% of usage value"
+  },
+  {
+    "namespace": "analytics",
+    "key": "chartCostByProvider",
+    "before": "Cost by Provider",
+    "after": "Usage value by provider"
+  },
+  {
+    "namespace": "analytics",
+    "key": "estCost",
+    "before": "Est. Cost",
+    "after": "Usage value (not billed)"
+  },
+  {
+    "namespace": "analytics",
+    "key": "perfCostReq",
+    "before": "Cost/Req",
+    "after": "Value / request"
+  },
+  {
+    "namespace": "analytics",
+    "key": "overviewDescription",
+    "before": "Monitor your API usage patterns, token consumption, costs, and activity trends across all providers and models.",
+    "after": "Actual charges: not available here. Usage values combine provider-reported costs with list-price estimates when no cost is reported. Free-tier estimates are not bills; check your provider billing page for actual charges."
+  },
+  {
+    "namespace": "analytics",
+    "key": "comboHealthProjectedCost",
+    "before": "Projected cost",
+    "after": "Projected usage value"
+  },
+  {
+    "namespace": "analytics",
+    "key": "comboHealthForecastTitle",
+    "before": "Cost & quota forecast",
+    "after": "Usage value and quota forecast"
+  },
+  {
+    "namespace": "analytics",
+    "key": "searchAnalyticsTotalCost",
+    "before": "Total Cost",
+    "after": "Usage value"
+  },
+  {
+    "namespace": "analytics",
+    "key": "searchAnalyticsApiCosts",
+    "before": "search API costs",
+    "after": "search API usage value"
+  },
+  {
+    "namespace": "stats",
+    "key": "totalCost",
+    "before": "Total Cost",
+    "after": "Usage value (not billed)"
+  }
+]
