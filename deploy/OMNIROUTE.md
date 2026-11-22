@@ -147,3 +147,16 @@ Leave these linked connections out of the active agent pool until a bounded rete
 | Vercel AI Gateway | Its public catalogue listed zero-priced models, but the tested Nemotron Lightning free target was skipped by the existing pre-dispatch filters. |
 
 Keep paid-model hiding and strict free access enabled. Do not relax these settings to make a failing test pass. Provider availability and free entitlements can change; recheck them before adding or replacing a target.
+
+
+## Free-pool fallback order and Groq 413
+
+Use this priority order for `agent-free`: Groq GPT-OSS 120B, Gemini 3.1 Flash Lite, Kiro Claude Haiku 4.5, NVIDIA Nemotron 3.5 Super VL, then OpenRouter Ling 3.2 Flash `:free`. Keep strict free-only access and the existing pinned provider connections. This order lives in OmniRoute's private database; changing a repository file alone does not update it. Back up the combo before changing its model order through the management API.
+
+Groq can reject a single large request with HTTP 413 when it exceeds the account's model-specific tokens-per-minute allowance. On 23 November 2026 IST, the recent error reported an 8,000-token allowance and a 40,647-token request. Retrying that same oversized request on Groq will not help. Let the priority combo advance to another free provider; do not trim history or introduce a local token budget. See [Groq rate limits](https://console.groq.com/docs/rate-limits).
+
+Matching synthetic 600-word explanation probes took 4.8 seconds on Groq, 5.2 on Gemini, 7.0 on Kiro and 11.2 on NVIDIA. Small tool-call probes were different: NVIDIA took 0.7-1.0 seconds, Groq about 0.75, Gemini 1.9-2.7 and Kiro 1.3-2.4. These small samples guide the order; they are not a performance guarantee. OpenRouter's isolated probe encountered a key/model authorization rejection, so do not treat its probe as a provider speed measurement or a verified working fallback. Keep it last pending a separate authorization review.
+
+A synthetic oversized streaming request through Rakazo's production inference key produced Groq 413, followed by Gemini 200 with 76,319 reported input tokens and a valid tool call. The client received a complete successful stream in about four seconds without a stream error. No tool was executed and no user documents were used. Preserve all five candidates, no same-provider retries, no token quotas, Stop and free-only access.
+
+Fallback can hide a provider rejection before output reaches the client. It cannot promise uninterrupted execution when every free provider rejects the request or after a partially delivered response; report that failure accurately rather than silently enabling paid routes or replaying actions.
