@@ -11,16 +11,16 @@ http.createServer(async(req,res)=>{
  if(prompt.includes('QUOTA_REHEARSAL')){res.writeHead(429,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:'Token limit exceeded for account: 500001/500000 tokens used in the current window.',code:'token_limit_exceeded',reset_at:'2099-11-22T00:00:00.000Z',retry_after:3600}}));return;}
  if(prompt.includes('RUN_LIMIT_REHEARSAL')){
   const count=input.messages.filter(m=>m.role==='tool').length;
-  const delta={role:'assistant',tool_calls:[{index:0,id:'limit-'+count,type:'function',function:{name:'sandbox_shell',arguments:JSON.stringify({command:'echo '+count})}}]};
+  const delta=count<40?{role:'assistant',tool_calls:[{index:0,id:'limit-'+count,type:'function',function:{name:'sandbox_shell',arguments:JSON.stringify({command:'echo stage_'+String.fromCharCode(97+Math.floor(count/26))+String.fromCharCode(97+count%26)})}}]}:{role:'assistant',content:'Completed 40 tools without local usage caps.'};
   res.writeHead(200,{'Content-Type':'text/event-stream'});
-  res.end('data: '+JSON.stringify({id:'limit',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta,finish_reason:null}]})+'\n\ndata: '+JSON.stringify({id:'limit',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta:{},finish_reason:'tool_calls'}]})+'\n\ndata: [DONE]\n\n');return;
+  res.end('data: '+JSON.stringify({id:'limit',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta,finish_reason:null}]})+'\n\ndata: '+JSON.stringify({id:'limit',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta:{},finish_reason:count<40?'tool_calls':'stop'}]})+'\n\ndata: [DONE]\n\n');return;
  }
  const long=prompt.includes('LONG_REHEARSAL');
  if(long){
   const count=input.messages.filter(m=>m.role==='tool').length;
   await new Promise(r=>setTimeout(r,22000));
   if(res.destroyed)return;
-  const delta=count<9?{role:'assistant',tool_calls:[{index:0,id:'long-'+count,type:'function',function:{name:'sandbox_shell',arguments:JSON.stringify({command:'echo '+count})}}]}:{role:'assistant',content:'Long task completed after nine tools and ten model calls.'};
+  const delta=count<9?{role:'assistant',tool_calls:[{index:0,id:'long-'+count,type:'function',function:{name:'sandbox_shell',arguments:JSON.stringify({command:'echo stage_'+String.fromCharCode(97+Math.floor(count/26))+String.fromCharCode(97+count%26)})}}]}:{role:'assistant',content:'Long task completed after nine tools and ten model calls.'};
   res.writeHead(200,{'Content-Type':'text/event-stream'});
   res.end('data: '+JSON.stringify({id:'long',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta,finish_reason:null}]})+'\n\ndata: '+JSON.stringify({id:'long',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta:{},finish_reason:count<9?'tool_calls':'stop'}]})+'\n\ndata: [DONE]\n\n');return;
  }

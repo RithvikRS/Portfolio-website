@@ -7,7 +7,7 @@ export function agentBridge({base,headers,api,getId,setId,fetchImpl=fetch}) {
  const stop=async runId=>{
   if(active&&active.runId!==runId)throw Error('Run scope mismatch');
   if(stopping)return stopping;if(!active)return;
-  const job=active;job.abort.abort();clearTimeout(job.timer);
+  const job=active;job.abort.abort();
   stopping=(async()=>{try{if(getId())await api('/computers/'+getId()+'/stop',{});try{unlinkSync(marker);}catch(e){if(e.code!=='ENOENT')throw e;}active=null;}catch{blocked=true;throw Error('Computer stop needs recovery');}finally{stopping=null;}})();
   return stopping;
  };
@@ -27,8 +27,8 @@ export function agentBridge({base,headers,api,getId,setId,fetchImpl=fetch}) {
    if(active&&(active.runId!==body.runId||active.userId!==body.userId||active.spaceId!==body.spaceId))throw Error('Computer belongs to another run');
    busy=true;
    try {
-    if(!active){active={runId:body.runId,userId:body.userId,spaceId:body.spaceId,abort:new AbortController(),tools:0};writeFileSync(marker,JSON.stringify({runId:body.runId,userId:body.userId,spaceId:body.spaceId}),{mode:0o600});active.timer=setTimeout(()=>{void stop(body.runId).catch(()=>{blocked=true;});},600000);}
-    const job=active;if(++job.tools>32)throw Error('Tool limit');
+    if(!active){active={runId:body.runId,userId:body.userId,spaceId:body.spaceId,abort:new AbortController(),tools:0};writeFileSync(marker,JSON.stringify({runId:body.runId,userId:body.userId,spaceId:body.spaceId}),{mode:0o600});}
+    const job=active;
     const computer=await api('/computers',{botId:'pilot-owner',spaceId:'pilot-owner-space',homePath:base+'/workspaces/homes/pilot-owner'});setId(computer.id);if(job.abort.signal.aborted){await api('/computers/'+computer.id+'/stop',{});job.abort.signal.throwIfAborted();}
     const response=await fetchImpl('http://127.0.0.1:7091/computers/'+computer.id+'/exec',{method:'POST',headers,body:JSON.stringify({argv:['/bin/sh','-lc',body.command],cwd:'/home/rakazo',timeoutMs:20000}),signal:AbortSignal.any([job.abort.signal,AbortSignal.timeout(25000)])});
     if(!response.ok)throw Error('Computer command rejected');

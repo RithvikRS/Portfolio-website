@@ -16,9 +16,11 @@ try{
  await page.locator('textarea').waitFor();assert.equal(await page.locator('[data-rakazo-surface="workspace-only"]').count(),0);
  const cleared=await page.evaluate(async()=>{const botId=location.pathname.split('/').filter(Boolean).at(-1);const r=await fetch('/rpc/threads/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({json:{botId}})});return r.status;});assert.equal(cleared,200);await page.reload();await page.locator('textarea').waitFor();
  const send=async text=>{await page.locator('textarea').fill(text);await page.getByRole('button',{name:'Send',exact:true}).click();};
- await send('RUN_LIMIT_REHEARSAL: keep using the synthetic tool until the model-call allowance is exhausted.');
- await page.getByTestId('composer-error').filter({hasText:'Run model-call limit reached (12/12)'}).waitFor({timeout:240000});
- const text=await page.getByTestId('composer-error').innerText();assert.ok(text.includes('Send another message'));assert.ok(!text.includes("couldn't be reached"));assert.ok(!text.includes('Connection error'));
- await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});await page.screenshot({path:join(artifacts,'run-limit-error.png'),fullPage:true});
- console.log('Native UI shows 12/12 local model-call limit and continuation guidance, without a connection error.');
+ await send('RUN_LIMIT_REHEARSAL: complete the synthetic 40-tool task.');
+ await page.getByText('Completed 40 tools without local usage caps.',{exact:true}).waitFor({timeout:180000});
+ assert.equal(await page.getByTestId('composer-error').count(),0);
+ await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});
+ await send('STOP_REHEARSAL: wait while I test Stop.');const stop=page.getByRole('button',{name:'Stop',exact:true});await stop.waitFor();await stop.click();await stop.waitFor({state:'hidden'});await page.waitForTimeout(32000);assert.equal(await stop.count(),0);
+ await page.screenshot({path:join(artifacts,'provider-managed-usage.png'),fullPage:true});
+ console.log('Native UI completed 40 tools/41 model calls without local quotas, then honored Stop.');
 }catch(e){await page.screenshot({path:join(artifacts,'run-limit-failure.png'),fullPage:true}).catch(()=>{});throw e;}finally{await browser.close();}

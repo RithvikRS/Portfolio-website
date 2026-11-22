@@ -32,18 +32,18 @@ test('stopping during computer startup stops the eventual computer before execut
 });
 
 
-test('executor accepts 32 tools and stops before executing the 33rd',async()=>{
+test('executor accepts more than 32 tools and still obeys Stop',async()=>{
  const base=mkdtempSync(join(tmpdir(),'bridge-limit-'));let calls=0,stops=0;
  const bridge=agentBridge({base,headers:{},getId:()=> 'fixed',setId:()=>{},api:async path=>{if(path.endsWith('/stop'))stops++;return {id:'fixed'};},fetchImpl:async()=>{calls++;return new Response('ok');}});
  const {Readable}=await import('node:stream');
  const request=async()=>{let status;const req=Readable.from([JSON.stringify({runId:'a',userId:'u',spaceId:'s',command:'true'})]);req.method='POST';req.url='/agent/exec';await bridge.handle(req,{writeHead:n=>status=n,end:()=>{}});return status;};
- try{for(let i=0;i<32;i++)assert.equal(await request(),200);assert.equal(await request(),409);assert.equal(calls,32);assert.equal(stops,1);assert.equal(bridge.active(),false);}finally{rmSync(base,{recursive:true});}
+ try{for(let i=0;i<40;i++)assert.equal(await request(),200);assert.equal(calls,40);assert.equal(stops,0);const req=Readable.from([JSON.stringify({runId:'a'})]);req.method='POST';req.url='/agent/stop';await bridge.handle(req,{writeHead:n=>assert.equal(n,200),end:()=>{}});assert.equal(stops,1);assert.equal(bridge.active(),false);}finally{rmSync(base,{recursive:true});}
 });
 
-test('executor permits work past two minutes and stops at ten minutes',async t=>{
+test('executor stays active past ten minutes until explicitly stopped',async t=>{
  t.mock.timers.enable({apis:['setTimeout']});
  const base=mkdtempSync(join(tmpdir(),'bridge-deadline-'));let stopped;const done=new Promise(r=>stopped=r);
  const bridge=agentBridge({base,headers:{},getId:()=> 'fixed',setId:()=>{},api:async path=>{if(path.endsWith('/stop'))stopped();return {id:'fixed'};},fetchImpl:async()=>new Response('ok')});
  const {Readable}=await import('node:stream');const req=Readable.from([JSON.stringify({runId:'a',userId:'u',spaceId:'s',command:'true'})]);req.method='POST';req.url='/agent/exec';
- try{await bridge.handle(req,{writeHead:n=>assert.equal(n,200),end:()=>{}});t.mock.timers.tick(120001);assert.equal(bridge.active(),true);t.mock.timers.tick(479999);await done;await Promise.resolve();assert.equal(bridge.active(),false);}finally{t.mock.timers.reset();rmSync(base,{recursive:true});}
+ try{await bridge.handle(req,{writeHead:n=>assert.equal(n,200),end:()=>{}});t.mock.timers.tick(120001);assert.equal(bridge.active(),true);t.mock.timers.tick(600000);assert.equal(bridge.active(),true);const stopReq=Readable.from([JSON.stringify({runId:'a'})]);stopReq.method='POST';stopReq.url='/agent/stop';await bridge.handle(stopReq,{writeHead:n=>assert.equal(n,200),end:()=>{}});await done;assert.equal(bridge.active(),false);}finally{t.mock.timers.reset();rmSync(base,{recursive:true});}
 });
