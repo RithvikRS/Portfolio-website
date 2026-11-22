@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 
-IMAGE = "ghcr.io/cheaper-inference/omniroute:3.8.53@sha256:b52a17661a1aff42ffb78f349f423e986dfc55b57274f28559f8387622ef8ee4"
+IMAGE = "ghcr.io/rithvikrs/portfolio-website@sha256:69fab0d23eb9886648623bed2e1698a90089d79f58078ab9d9cca3e35cbf5f50"
 NODE = "tzqsl1t88r3l1i8zcqvcmredo"
 DATA = Path("/srv/swarm/omniroute")
 

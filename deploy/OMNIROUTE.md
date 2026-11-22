@@ -6,6 +6,19 @@ Open **OmniRoute** in the administrator dashboard, or use [the model gateway sho
 
 Only the infrastructure administrator can open this gateway. Family service grants do not give anyone access to provider credentials. Applications will receive separate inference keys, not your dashboard login or upstream provider keys.
 
+## Read usage values and billing
+
+Open **Costs** to see **Usage value, not your bill**. The English cost and analytics screens label totals, model rows, averages and projections as usage values. These combine provider-reported costs where available with list-price estimates for requests that have no reported cost. They are not invoices or confirmed charges.
+
+- **Actual charges: not available here.** Check the provider's billing page. OmniRoute does not retrieve your invoices.
+- **Missing reported cost is unknown, not confirmed $0.** A zero usage value can also mean missing pricing or older unpriced history.
+- **Free-tier estimates are not bills.** For example, 76,319 input tokens and 20 output tokens at Gemini's paid list prices produce a $0.01910975 usage estimate even when the request uses a free account. That estimate alone does not establish any charge.
+- Keep free-only accounts, strict free routing and paid fallback restrictions. Display text does not change account entitlements or billing settings. Keep the current provider-managed usage policy with no local token caps.
+
+The presentation customization lives in `deploy/omniroute/`. It changes 33 English messages in one checksum-pinned locale bundle; other languages retain upstream wording. It leaves usage records, numeric API/export fields, pricing calculations, inference code, authentication and provider settings unchanged. Read exported `cost` values with the same qualification: they are usage valuations, not invoices.
+
+To maintain it, update the pinned upstream image and review its English bundle before changing the checksum or expected source messages. The build refuses an unexpected bundle or changed message. Run `node --test tests/omniroute-cost-labels.test.mjs`, publish through **Publish OmniRoute display customization**, then pin the resulting immutable ARM64 image in `swarm-services.json` and `scripts/setup-omniroute.py`. Keep the previous image for rollback. The publication workflow does not deploy; merging the catalog change uses the normal deployment pipeline.
+
 ## Add provider keys privately
 
 1. Open **Providers** in OmniRoute. Select the provider and add an API-key connection.
@@ -86,7 +99,7 @@ Future approved app -> private swarm_models_app -> OmniRoute /v1 -> providers
                        separate inference key
 ```
 
-- Pin OmniRoute 3.8.53 by immutable multi-architecture image digest. Run one replica on Ampere's exact node ID with `workload.compute=true`.
+- Pin the OmniRoute 3.8.53 display customization by immutable ARM64 image digest. Run one replica on Ampere's exact node ID with `workload.compute=true`.
 - Store SQLite and generated encryption/session keys under `/srv/swarm/omniroute`, owned by UID/GID 1000 with private permissions. Do not move this task to another node without restoring its data.
 - Cap the app at 1.5 GiB RAM and 2 CPUs; reserve 384 MiB. The SSO proxy has a separate 96 MiB limit.
 - Keep host ports unpublished. Only the SSO proxy joins both `swarm_models_edge` and `swarm_models_app`; Caddy joins the edge network only. Do not attach unrelated services to the application network.
