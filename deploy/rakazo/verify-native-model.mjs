@@ -10,11 +10,13 @@ http.createServer(async(req,res)=>{
  const prompt=JSON.stringify(input.messages.filter(m=>m.role==='user').at(-1)?.content);
  if(prompt.includes('FAILURE_RECOVERY_REHEARSAL')){
   recoveryCalls++;
-  res.writeHead(200,{'Content-Type':'text/event-stream','x-omniroute-provider':'fixture-cut','x-omniroute-model':'model-cut'});
-  if(recoveryCalls>1){res.end('data: '+JSON.stringify({choices:[{index:0,delta:{role:'assistant',content:'Unexpected automatic retry occurred.'},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');return;}
-  res.write('data: '+JSON.stringify({choices:[{index:0,delta:{role:'assistant',content:'Recovery rehearsal saved this partial result.\n\n'},finish_reason:null}]})+'\n\n');
-  // Deliberately cut a real HTTP response after a visible chunk; never emit tools or writes.
-  setTimeout(()=>res.destroy(),500);return;
+  if(recoveryCalls===2){res.writeHead(503,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{code:'fixture_provider_unavailable',message:'Synthetic provider outage after completed progress'}}));return;}
+  res.writeHead(200,{'Content-Type':'text/event-stream','x-omniroute-provider':'fixture-recovery','x-omniroute-model':'model-recovery'});
+  if(recoveryCalls>2){res.end('data: '+JSON.stringify({choices:[{index:0,delta:{role:'assistant',content:'Unexpected automatic retry occurred.'},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');return;}
+  // Complete one model turn and read-only tool before failing the following model call.
+  // Completed visible progress must survive; unfinished/unemitted stream chunks are not promised.
+  const delta={role:'assistant',content:'Recovery rehearsal saved this partial result.\n\n',tool_calls:[{index:0,id:'recovery-readonly',type:'function',function:{name:'sandbox_shell',arguments:JSON.stringify({command:'echo recovery_readonly_probe'})}}]};
+  res.end('data: '+JSON.stringify({choices:[{index:0,delta,finish_reason:null}]})+'\n\ndata: '+JSON.stringify({choices:[{index:0,delta:{},finish_reason:'tool_calls'}]})+'\n\ndata: [DONE]\n\n');return;
  }
  if(prompt.includes('QUOTA_REHEARSAL')){res.writeHead(429,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:'Token limit exceeded for account: 500001/500000 tokens used in the current window.',code:'token_limit_exceeded',reset_at:'2099-11-22T00:00:00.000Z',retry_after:3600}}));return;}
  if(prompt.includes('BATCH_APPROVAL_REHEARSAL')){

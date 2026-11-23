@@ -26,7 +26,7 @@ try{
    const send=async text=>{await page.locator('textarea').fill(text);await page.getByRole('button',{name:'Send',exact:true}).click();};
    await send('FAILURE_RECOVERY_REHEARSAL: return a partial answer, then simulate a provider outage.');
    await page.getByTestId('transcript').getByText(/Recovery rehearsal saved this partial result/).first().waitFor({timeout:30000});
-   await page.getByText(/The free model pool is temporarily unavailable/).first().waitFor({timeout:90000});
+   await page.waitForFunction(()=>document.body.innerText.includes('The free model pool is temporarily unavailable.'),{},{timeout:90000});
    await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});
    const snapshot=async()=>{const r=await rpc('threads/get',{botId});assert.equal(r.status,200,r.body);return JSON.parse(r.body).json;};
    const failed=await snapshot();assert.equal(failed.run.status,'failed');assert.match(failed.run.error,/free_pool_unavailable/);
@@ -40,7 +40,7 @@ try{
    await page.getByText('Hello! I can help you plan, think through questions and work in the isolated computer.',{exact:true}).last().waitFor({timeout:30000});
    await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});
    const continued=await snapshot();assert.notEqual(continued.run.id,failed.run.id);assert.equal(continued.run.status,'completed');assert.ok(JSON.stringify(continued.messages).includes(partial));
-   console.log('A deliberate provider stream cut preserved its actual partial answer across reload, showed the specific error, stayed stopped, and allowed manual continuation.');
+   console.log('A deliberate provider failure after a completed tool turn preserved its actual progress across reload, showed the specific error, stayed stopped, and allowed manual continuation.');
   }else if(phase==='tokens'){
    assert.equal((await rpc('threads/clear',{botId})).status,200);await page.reload();await page.locator('textarea').waitFor();
    await page.locator('textarea').fill('PROVIDER_TOKENS_REHEARSAL: test provider-managed output.');await page.getByRole('button',{name:'Send',exact:true}).click();

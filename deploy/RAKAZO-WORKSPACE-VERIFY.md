@@ -158,3 +158,10 @@ The image build runs signed OIDC admission/revocation tests, native run/Stop/err
 Before installing the scoped controller bridge, run `scripts/migrate-rakazo-homes.py` as root on Ampere without arguments. After a successful private backup, run it with `--apply` to move all disposable homes into the existing bounded cache. It stops only the isolated engine/controller/bridge, keeps original data and records old mount definitions and bridge code. The installer refuses unbounded home storage. Test two synthetic user/workspace identities serially, their distinct homes and scoped Stop before admitting members.
 
 If controller migration fails, use `--rollback` with the retained migration record. It restores the old code/mount configuration and retains new bounded data for inspection. Do not remove either copy until recovery is checked. Never restart production Docker for this migration.
+
+
+### Roll back across the first multi-user release
+
+The scoped bridge changes the internal Stop request contract. Keep the controller migration record with the matching private backup. If you restore an application release from before scoped Stop, also run the staged `migrate-rakazo-homes.py --rollback` on Ampere to restore its bridge and home mount. Do not leave the new bridge paired with an old API. Stop active chat work before this maintenance; verify that no isolated computer remains running afterward. The old application/SSO policy admits only the owner, while saved member data remains on disk.
+
+Later rollbacks between releases using the same scoped contract do not need this initial migration rollback. Preserve the matching controller code and configuration whenever you change that contract again.

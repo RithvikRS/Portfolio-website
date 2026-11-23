@@ -610,3 +610,56 @@ diff --git a/apps/web/src/pages/shell/composer.test.tsx b/apps/web/src/pages/she
 +  expect(actions).not.toContain("Manage connections");
 +  expect(onSend).not.toHaveBeenCalled();
 +});
+diff --git a/packages/adapters/src/run-turn.ts b/packages/adapters/src/run-turn.ts
+--- a/packages/adapters/src/run-turn.ts
++++ b/packages/adapters/src/run-turn.ts
+@@ -1006,7 +1006,12 @@
+     !runPromotesMidTurnNarration(run.trigger)
+       ? ""
+       : redactSecrets(
+-          extractNarrationText(reply.messageSegments, reply.currentTextSegment).text,
++          // Native pre-tool notes have not been saved as durable messages yet.
++          // Promoted narration is removed from workingNotes; never repeat it.
++          [
++            ...(process.env.NATIVE_ASSISTANT === "true" ? reply.workingNotes : []),
++            extractNarrationText(reply.messageSegments, reply.currentTextSegment).text,
++          ].filter(Boolean).join("\n\n"),
+           ctx.secrets,
+         ).trim();
+   const partialReply =
+diff --git a/packages/adapters/src/executor-user-progress.test.ts b/packages/adapters/src/executor-user-progress.test.ts
+--- a/packages/adapters/src/executor-user-progress.test.ts
++++ b/packages/adapters/src/executor-user-progress.test.ts
+@@ -1897,3 +1897,32 @@
+     expect(result.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ markUnread: true }));
+   });
+ });
++
++
++describe("native assistant interrupted tool turns", () => {
++  it.each([false, true])("keeps pre-tool text once after failure (already promoted: %s)", async (promoted) => {
++    const previous = process.env.NATIVE_ASSISTANT;
++    process.env.NATIVE_ASSISTANT = "true";
++    const narrative = "Recovery rehearsal saved this partial result.";
++    const guide = "Task interrupted. Review completed results before continuing.";
++    try {
++      const { finalizeRun, messages } = await runTurn("", false, "", [], "fyi", {
++        ...(promoted ? {startedAt: new Date(Date.now() - 120_000)} : {}),
++        runtimeEvents: [
++          {type: "text", text: narrative},
++          {type: "tool", name: "read_file", args: {}, executionId: "read-1"},
++          {type: "text", text: guide},
++        ],
++        runtimeFailure: true,
++      });
++      const failure = finalizeRun.mock.calls[0]![0] as unknown as {outcome:string;partialReply?:MessageBlock[]};
++      expect(failure.outcome).toBe("failed");
++      const saved = JSON.stringify([...messages.flatMap(message => message.blocks), ...(failure.partialReply ?? [])]);
++      expect(saved.split(narrative).length - 1).toBe(1);
++      expect(saved).toContain(guide);
++    } finally {
++      if (previous === undefined) delete process.env.NATIVE_ASSISTANT;
++      else process.env.NATIVE_ASSISTANT = previous;
++    }
++  });
++});

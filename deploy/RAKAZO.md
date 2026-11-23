@@ -1,6 +1,6 @@
 # Rakazo personal assistant
 
-> Current policy: Rakazo uses provider-managed usage with no local token allowances, context windows, daily run/call caps, minute pacing, cumulative tool/model-call limits or overall task deadline. Keep Stop, explicit access grants, approvals, free-only routing and resource/individual-operation protections. Older quota values below describe the prior rollout. See [current policy](RAKAZO-PERSONAL-ASSISTANT.md#provider-managed-usage).
+> Current policy: Rakazo uses provider-managed usage with no local token allowances, context windows, daily run/call caps, minute pacing, cumulative tool/model-call limits or overall task deadline. Keep Stop, explicit access grants, approvals, free-only routing and resource/individual-operation protections. See [current policy](RAKAZO-PERSONAL-ASSISTANT.md#provider-managed-usage).
 
 Open **Rakazo** from your admin dashboard, or use `/rakazo` on the portfolio domain. Sign in through Authelia with your granted account and authenticator, then use Rakazo's Authelia sign-in button if shown. The infrastructure owner retains access. Grant other users access explicitly through Service access; other administrators do not inherit it.
 
@@ -71,7 +71,7 @@ The private executor has no published port and shares an internal, non-attachabl
 2. Copy the current `deploy/rakazo/` files and `scripts/install-rakazo-controller.py` to the staged source tree on Ampere. Run the installer there as root. It checks the node ID, dedicated identity, existing 8 GiB mounted cache and staged prerequisites. It installs/enables only the dedicated pilot user services.
 3. Start the fixed desktop through the local Unix bridge, then run `verify-rakazo-controller.py`. Rerun negative admission tests after changing runtime policy. Keep production Docker unchanged and verify the native executor separately.
 4. Validate the candidate Caddy/Authelia configuration, backup inventory and edge service. Review the separate-origin screen and reconnect behavior. The dedicated user-manager restart test recreates the cgroups and recovers the controller without restarting production Docker. A whole-host reboot remains outside that rehearsal.
-5. Batch the change into one PR and merge through the existing deployment pipeline. Confirm all existing services and the new edge converge, anonymous requests redirect to Authelia, non-owners fail, and the owner can view/control/stop the desktop.
+5. Batch the change into one PR and merge through the existing deployment pipeline. Confirm all existing services and the new edge converge, anonymous requests redirect to Authelia, ungranted users fail, and only the owner can view/control/stop the maintenance desktop.
 6. Verify native chat and Stop through the free-only pool. Keep autonomous model runs and Google integrations disabled. Grant member access only after checking isolation. Verify approved reminders separately from foreground chat.
 
 For maintenance, run the user service commands as `rakazo-pilot` with `XDG_RUNTIME_DIR=/run/user/986` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/986/bus`. The units are `rakazo-engine`, `rakazo-controller` and `rakazo-bridge`. Stop the desktop first, then stop bridge/controller/engine. Never restart production Docker to operate this pilot.
@@ -136,15 +136,15 @@ Treat scratchpad notes and profile instructions as database plaintext. The pinne
 
 ## Sign in through your dashboard
 
-Open `/rakazo` from your admin dashboard. The outer OIDC gate and Rakazo's native login both use `https://rithvik.ddns.net/auth`, so they reuse your existing central Authelia MFA session. If Rakazo shows its Authelia sign-in button, click it; you should not need to enter your password and authenticator again while that central session remains valid. With no central session, complete MFA once. On first use, Authelia may ask you to approve Rakazo-edge access to your identity, email, groups and offline session renewal. This consent is separate from entering your password and authenticator; it does not enable model access. The root URL opens `/app` instead of the upstream marketing page.
+Open `/rakazo` from your dashboard. The outer OIDC gate and Rakazo's native login both use `https://rithvik.ddns.net/auth`, so they reuse your existing central Authelia MFA session. If Rakazo shows its Authelia sign-in button, click it; you should not need to enter your password and authenticator again while that central session remains valid. With no central session, complete MFA once. On first use, Authelia may ask you to approve Rakazo-edge access to your identity, email, groups and offline session renewal. This consent is separate from entering your password and authenticator; it does not enable model access. The root URL opens `/app` instead of the upstream marketing page.
 
-Keep the edge cookie scoped to the Rakazo host. Do not share cookies across `sslip.io` tenants or disable the outer gate. The gate requires the owner email and `admins` claim; Caddy also checks the current directory on every app and desktop request, rejecting a disabled owner, removed admin membership, duplicate email, or another admin. Native workspace login retains its own owner allowlist. Only the restricted native assistant runtime is enabled; provider configuration, schedules and external integrations remain disabled.
+Keep the edge cookie scoped to the Rakazo host. Do not share cookies across `sslip.io` tenants or disable the outer gate. The edge requires an admitted group, and Caddy checks the current directory on every app request. Native OIDC and API requests check the verified user's current Rakazo grant too. Disabled accounts, duplicate emails and revoked grants fail closed. The shared maintenance desktop requires the exact owner separately. Native provider administration and autonomous model schedules stay disabled; approved personal-assistant connectors and reminders use their own boundaries.
 
 The two-minute edge refresh renews the secure browser ticket during requests. Store OIDC tokens in the isolated, memory-only `rakazo_sessions` service; restarting it signs the edge session out without deleting workspace data. Both session services run on Ampere with limits and no published ports. The five-minute ID-token lifetime uses the existing `omniroute_edge` Authelia lifespan policy; it does not reuse OmniRoute credentials or session storage.
 
 Before the first deployment, run `python3 scripts/setup-rakazo-sso.py` on the manager as the checkout owner. It creates `.secrets/rakazo-edge/recovery.json`, `.secrets/rakazo-edge/edge.cfg`, and `.auth/secrets/rakazo-edge-client-hash` privately and refuses to overwrite mismatched keys. Include these paths in the normal private server backup. Do not commit them. Roll back through the previous Swarm release if sign-in fails; retain the old Rakazo Authelia host-cookie configuration for rollback compatibility.
 
-Verify a fresh session prompts for MFA once, an existing dashboard session reaches Rakazo without another credential prompt, and logout returns to `/admin/`. Anonymous or forged identity headers must never reach workspace or desktop data. Recheck navigation after more than five minutes to exercise ticket renewal.
+Verify a fresh session prompts for MFA once, an existing dashboard session reaches Rakazo without another credential prompt, and logout returns to `/dashboard/`. Anonymous or forged identity headers must never reach workspace or desktop data. Recheck navigation after more than five minutes to exercise ticket renewal.
 
 ## Native chat, limits and Stop
 
@@ -152,22 +152,23 @@ Open **Rakazo** from the dashboard and send a message in the existing composer. 
 
 The native thread/job machinery stores messages and run states. A restricted Pi runtime adapter uses only the free-only pool and exposes `sandbox_shell`. Shell commands go through a private executor service and the existing Unix bridge into the networkless gVisor computer. Neither the API nor the executor receives a Docker socket. The executor has no model key or workspace database credentials. The API has no host shell interface.
 
-- One active model run across the deployment.
-- Per authenticated user: 200 run admissions per UTC day, 600 gateway calls per UTC day and four calls per rolling minute.
-- Per run: 600 seconds, 12 gateway calls, 32 tools, 4,096 completion tokens per call and 64 KiB visible text.
+- One active foreground model run and one isolated computer across the deployment.
+- No local token allowances, context windows, daily run/call quotas, cumulative model/tool limits or overall task deadline. Provider quotas and context/output limits still apply.
 - Each shell command has a 20-second deadline and bounded output. Stop and run completion stop the computer, terminating lingering background processes.
-- Gateway request/response envelopes are capped at 96/128 KiB. Oversized conversation context is rejected with a request to start a new chat.
-- OmniRoute's restricted key still enforces its free-only connection pool and 12,000-total-token daily allowance. Limits may end a run earlier; requests already accepted by a provider may finish after cancellation.
+- Transport timeouts detect stalled requests; free-only fallback never enables a paid route. A failed task preserves completed progress for manual continuation and does not replay writes.
+- CPU/RAM/PID, network, storage and approval protections remain. See [the current usage policy](RAKAZO-PERSONAL-ASSISTANT.md#provider-managed-usage).
 
-The private ledger `/srv/swarm/rakazo_api/native-assistant.sqlite` charges admissions and calls before dispatch. Counts survive restarts; interrupted IDs cannot replay. Native chat history remains in PostgreSQL. The ledger requires one exact-node replica and stop-first updates. Keep both database and API data in coordinated private backups. A bridge recovery marker prevents an abandoned command from being silently reused after restart; investigate a recovery failure before admitting another run.
+The private ledger `/srv/swarm/rakazo_api/native-assistant.sqlite` records admissions and calls before dispatch. Counts survive restarts; interrupted IDs cannot replay. Native chat history remains in PostgreSQL. The ledger requires one exact-node replica and stop-first updates. Keep both database and API data in coordinated private backups. A bridge recovery marker prevents an abandoned command from being silently reused after restart; investigate a recovery failure before admitting another run.
 
 The historical `/srv/swarm/rakazo_agent/notes.sqlite` remains private for recovery but has no running service or UI. Do not delete it or its backups merely to retire the feature.
 
-## Adding other people later
+## Grant access to other people
 
-Owner-only Authelia MFA, current-directory authorization and the native signup allowlist remain enforced. Do not widen those gates yet. The ledger already keys usage to the authenticated user ID and native workspace access keeps its row-level checks, but the computer currently uses one fixed owner home.
+Use **Service access** to grant Rakazo to an individual account with a unique verified email and MFA. The owner retains access; other administrators need an explicit grant. New grants do not share the owner's Outline key, notification topic, memory or workspace.
 
-Before allowing family or friends, allocate separate computer identities and homes per user/workspace, enforce ownership on every command and screen request, add per-user pool budgets and concurrent-resource limits, and test cross-user data denial, revocation, restart recovery and backup/restore. Connect service permissions to the existing access console. Sharing the present owner computer is not multi-user isolation.
+Native workspaces use database membership checks. Assistant data also carries the authenticated user/workspace; each computer uses a separate hashed user/workspace home and supervisor identity. Keep these homes on the bounded disposable runtime disk. The maintenance desktop remains owner-only. Run the cross-user, revocation, Stop and recovery checks before adding accounts.
+
+Follow [private member connections](RAKAZO-PERSONAL-ASSISTANT.md#members-and-private-connections) for Outline and ntfy. Google remains deferred: each person will connect their own Google accounts through separate OAuth consent. Do not configure a shared Google login.
 
 ## Release verification
 
@@ -175,4 +176,4 @@ The native chat model selector and working status show **Auto**. Completed repli
 
 Build the image from all three pinned patches with `scripts/build-rakazo-app.py`. Keep the default image workspace-only; production enables the restricted adapter with `NATIVE_ASSISTANT=true`. The entrypoint fixes the pool identity, disabled native sandbox/provider configuration and retry settings. Never enable the unrestricted upstream runtime with an environment override.
 
-Run the repository tests, native ledger/job-policy tests, disposable compiled API/browser tests and real gVisor bridge checks. Confirm native conversation replies, tool result rendering, Stop without subsequent model calls, durable quotas, owner denial and unchanged health of other services. The disposable model fixture uses synthetic responses and cannot establish provider quality or production login success. Keep its generated credentials, screenshots and restore evidence outside Git.
+Run the repository tests, native ledger/job-policy tests, disposable compiled API/browser tests and real gVisor bridge checks. Confirm native conversation replies, tool result rendering, Stop without subsequent model calls, persistent accounting, ungranted-user denial and unchanged health of other services. The disposable model fixture uses synthetic responses and cannot establish provider quality or production login success. Keep its generated credentials, screenshots and restore evidence outside Git.
