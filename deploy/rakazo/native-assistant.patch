@@ -160,7 +160,7 @@ diff --git a/apps/api/src/native-assistant.ts b/apps/api/src/native-assistant.ts
 new file mode 100644
 --- /dev/null
 +++ b/apps/api/src/native-assistant.ts
-@@ -0,0 +1,229 @@
+@@ -0,0 +1,231 @@
 +import { DatabaseSync } from "node:sqlite";
 +import { chmodSync, readFileSync } from "node:fs";
 +import http from "node:http";
@@ -222,13 +222,15 @@ new file mode 100644
 +  close() { this.db.close(); }
 +}
 +
++// Cold VFS computer creation can take minutes; this transport budget exceeds the controller's 540s startup budget.
++export const COMPUTER_OPERATION_TIMEOUT_MS=600000;
 +export function bridgeCall(path: string, body: object, signal?: AbortSignal): Promise<unknown> {
 +  return new Promise((resolve,reject) => {
 +    const req = http.request({ hostname: 'rakazo_executor', port: 8080, path, method:'POST', signal,
-+      headers: { 'Content-Type':'application/json' }, timeout: 30000 }, res => {
++      headers: { 'Content-Type':'application/json' }, timeout: COMPUTER_OPERATION_TIMEOUT_MS }, res => {
 +      let text = ''; res.on('data', chunk => { text += chunk; if (Buffer.byteLength(text)>32768) req.destroy(Error('Computer output limit reached')); });
 +      res.on('end', () => { if (res.statusCode!==200) return reject(Error('Isolated computer unavailable')); try { resolve(JSON.parse(text)); } catch { reject(Error('Invalid computer reply')); } });
-+    }); req.on('error',reject); req.on('timeout',()=>req.destroy(Error('Computer deadline reached'))); req.end(JSON.stringify(body));
++    }); req.on('error',reject); req.on('timeout',()=>req.destroy(Error('Computer operation transport timed out'))); req.end(JSON.stringify(body));
 +  });
 +}
 +

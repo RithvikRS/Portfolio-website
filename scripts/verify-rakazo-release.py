@@ -242,6 +242,12 @@ def start_assistant(state):
     seed(state,source=Path(state['directory'])/'bundle')
     cid=create(state,'assistant',['create','--name',state['prefix']+'-assistant','--network',state['network'],'--network-alias','rakazo_assistant',*v.limits('256m','0.5'),'--user','1000:1000','--read-only','--mount','type=volume,src='+state['volumes']['secrets']+',dst=/run/secrets,readonly','--mount','type=volume,src='+state['volumes']['data']+',dst=/data','--entrypoint','node',state['image'],'/run/secrets/assistant-services.mjs'])
     docker.call('start',cid)
+    for _ in range(15):
+        try:
+            docker.call('exec',cid,'node','-e',"fetch('http://127.0.0.1:8080/healthz',{signal:AbortSignal.timeout(1500)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",timeout=5)
+            break
+        except RuntimeError:time.sleep(1)
+    else:raise RuntimeError('Disposable assistant did not become healthy; inspect the private fixture diagnostics.')
     print('Owner-bound disposable assistant started; notifications remain disabled.')
 
 

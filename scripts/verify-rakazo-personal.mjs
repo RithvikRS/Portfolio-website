@@ -39,7 +39,9 @@ try{
    await send('Continue after the synthetic outage with a brief greeting.');
    await page.getByText('Hello! I can help you plan, think through questions and work in the isolated computer.',{exact:true}).last().waitFor({timeout:30000});
    await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});
-   const continued=await snapshot();assert.notEqual(continued.run.id,failed.run.id);assert.equal(continued.run.status,'completed');assert.ok(JSON.stringify(continued.messages).includes(partial));
+   const continued=await snapshot();assert.equal(continued.activeRuns.length,0);assert.ok(JSON.stringify(continued.messages).includes(partial));
+   const reply=continued.messages.findLast(m=>m.role==='bot'&&JSON.stringify(m.blocks).includes('Hello! I can help you plan'));assert.ok(reply?.runId);assert.notEqual(reply.runId,failed.run.id);
+   const runs=await rpc('runs/list',{filter:'recent'});assert.equal(runs.status,200,runs.body);assert.ok(JSON.parse(runs.body).json.runs.some(r=>r.runId===reply.runId&&r.status==='completed'));
    console.log('A deliberate provider failure after a completed tool turn preserved its actual progress across reload, showed the specific error, stayed stopped, and allowed manual continuation.');
   }else if(phase==='tokens'){
    assert.equal((await rpc('threads/clear',{botId})).status,200);await page.reload();await page.locator('textarea').waitFor();

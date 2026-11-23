@@ -56,7 +56,7 @@ test('homes and supervisor calls are isolated per user and space; manual ID stay
   const scope={runId:'r',userId,spaceId};assert.equal(await request('/agent/exec',{...scope,command:'true'}),200);
   assert.equal(await request('/agent/stop',{...scope,userId:'intruder'}),409);
   assert.equal(await request('/agent/stop',scope),200);
-  const last=calls.slice(-3);for(const call of last){assert.equal(call.headers['x-rakazo-bot-id'],creates.at(-1).botId);assert.equal(call.headers['x-rakazo-space-id'],spaceId);}
+  const last=calls.slice(-4);for(const call of last){assert.equal(call.headers['x-rakazo-bot-id'],creates.at(-1).botId);assert.equal(call.headers['x-rakazo-space-id'],spaceId);}
  }assert.equal(new Set(creates.map(c=>c.botId)).size,3);assert.equal(manual,0);for(const c of creates)assert.equal(c.homePath,base+'/workspaces/homes/'+c.botId);
  }finally{rmSync(base,{recursive:true});}
 });
@@ -67,5 +67,34 @@ test('restart stops only the recorded scoped computer and unknown creation fails
  const prior={userId:'u',spaceId:'s',runId:'r',...(known?{computerId:'owned'}:{})};writeFileSync(join(base,'agent-active.json'),JSON.stringify(prior));
  const bridge=agentBridge({base,homePreparer:()=>{},headers:{},api:async(...args)=>{calls.push(args);return {};},fetchImpl:async()=>new Response('')});
  const req=Readable.from([JSON.stringify({userId:'u',spaceId:'s',runId:'r'})]);req.method='POST';req.url='/agent/stop';let status;
- try{await bridge.handle(req,{writeHead:n=>status=n,end:()=>{}});assert.equal(status,known?200:409);assert.equal(calls.length,known?1:0);if(known){assert.equal(calls[0][0],'/computers/owned/stop');assert.equal(calls[0][2]['x-rakazo-space-id'],'s');}else assert.equal(bridge.active(),true);}finally{rmSync(base,{recursive:true});}}
+ try{await bridge.handle(req,{writeHead:n=>status=n,end:()=>{}});assert.equal(status,known?200:409);assert.equal(calls.length,known?2:0);if(known){assert.equal(calls[0][0],'/computers/owned/stop');assert.equal(calls[0][2]['x-rakazo-space-id'],'s');}else assert.equal(bridge.active(),true);}finally{rmSync(base,{recursive:true});}}
+});
+
+test('Stop removes only the scoped disposable container and preserves its home',async()=>{
+ const {Readable}=await import('node:stream');const {mkdirSync,writeFileSync,readFileSync}=await import('node:fs');
+ const base=mkdtempSync(join(tmpdir(),'bridge-delete-'));const calls=[];let home;
+ const bridge=agentBridge({base,headers:{Authorization:'fixture'},homePreparer:path=>{home=path;mkdirSync(path,{recursive:true});writeFileSync(path+'/note','retained');},api:async(...args)=>{calls.push(args);return {id:'owned'};},fetchImpl:async()=>new Response('ok')});
+ const request=async(url,body)=>{let status;const req=Readable.from([JSON.stringify(body)]);Object.assign(req,{url,method:'POST'});await bridge.handle(req,{writeHead:n=>status=n,end:()=>{}});return status;};
+ const scope={userId:'u',spaceId:'s',runId:'r'};
+ try{assert.equal(await request('/agent/exec',{...scope,command:'true'}),200);assert.equal(await request('/agent/stop',scope),200);const deletion=calls.at(-1);assert.equal(deletion[0],'/computers/owned');assert.equal(deletion[3],'DELETE');assert.equal(deletion[2]['x-rakazo-bot-id'],calls[0][1].botId);assert.equal(deletion[2]['x-rakazo-space-id'],'s');assert.equal(readFileSync(home+'/note','utf8'),'retained');}finally{rmSync(base,{recursive:true});}
+});
+
+test('stop/delete failures retain recovery marker; restart retries scoped cleanup and accepts already deleted',async()=>{
+ const {Readable}=await import('node:stream');const {existsSync}=await import('node:fs');
+ for(const failure of ['stop','delete']){
+  const base=mkdtempSync(join(tmpdir(),'bridge-delete-recovery-'));const calls=[];const scope={userId:'u',spaceId:'s',runId:'r'};
+  const request=async(bridge,url,body)=>{let status;const req=Readable.from([JSON.stringify(body)]);Object.assign(req,{url,method:'POST'});await bridge.handle(req,{writeHead:n=>status=n,end:()=>{}});return status;};
+  const bridge=agentBridge({base,headers:{},homePreparer:()=>{},api:async(path,body,headers,method)=>{calls.push([path,method]);if((failure==='stop'&&path.endsWith('/stop'))||(failure==='delete'&&method==='DELETE'))throw Object.assign(Error(),{status:500});return {id:'owned'};},fetchImpl:async()=>new Response('ok')});
+  try{assert.equal(await request(bridge,'/agent/exec',{...scope,command:'true'}),200);assert.equal(await request(bridge,'/agent/stop',scope),409);assert.equal(existsSync(base+'/agent-active.json'),true);assert.equal(bridge.active(),true);if(failure==='stop')assert.ok(!calls.some(c=>c[1]==='DELETE'));
+   const recovered=[];const next=agentBridge({base,headers:{},api:async(...args)=>{recovered.push(args);throw Object.assign(Error(),{status:404});}});
+   assert.equal(await request(next,'/agent/stop',scope),200);assert.equal(existsSync(base+'/agent-active.json'),false);assert.equal(next.active(),false);assert.equal(recovered.length,2);assert.equal(recovered[1][3],'DELETE');assert.equal(recovered[1][2]['x-rakazo-space-id'],'s');
+  }finally{rmSync(base,{recursive:true});}
+ }
+});
+
+test('manual Stop removes scoped disposable computer; missing container is idempotent',async()=>{
+ const {removeStoppedComputer}=await import('../deploy/rakazo/bridge.mjs');
+ const headers={'x-rakazo-bot-id':'pilot-owner','x-rakazo-space-id':'pilot-owner-space'};
+ for(const missing of [false,true]){const calls=[];await removeStoppedComputer(async(...args)=>{calls.push(args);if(missing)throw Object.assign(Error(),{status:404});},'manual',headers);assert.equal(calls.length,2);assert.equal(calls[0][0],'/computers/manual/stop');assert.equal(calls[1][0],'/computers/manual');assert.equal(calls[1][3],'DELETE');assert.deepEqual(calls[1][2],headers);}
+ const calls=[];await assert.rejects(removeStoppedComputer(async(...args)=>{calls.push(args);throw Object.assign(Error(),{status:403});},'manual',headers));assert.equal(calls.length,1);
 });

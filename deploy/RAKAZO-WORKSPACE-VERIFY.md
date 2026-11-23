@@ -165,3 +165,10 @@ If controller migration fails, use `--rollback` with the retained migration reco
 The scoped bridge changes the internal Stop request contract. Keep the controller migration record with the matching private backup. If you restore an application release from before scoped Stop, also run the staged `migrate-rakazo-homes.py --rollback` on Ampere to restore its bridge and home mount. Do not leave the new bridge paired with an old API. Stop active chat work before this maintenance; verify that no isolated computer remains running afterward. The old application/SSO policy admits only the owner, while saved member data remains on disk.
 
 Later rollbacks between releases using the same scoped contract do not need this initial migration rollback. Preserve the matching controller code and configuration whenever you change that contract again.
+
+
+### Disposable computer lifecycle
+
+Stop ends execution and removes that scoped disposable container; its bounded home directory stays available for the next start. Removing the stopped container releases its writable layers. Keep the home mount and the runtime image. Never use a broad Docker prune to recover this space.
+
+Cold creation on the isolated VFS runtime can take more than two minutes. The native bridge and executor proxy allow 600 seconds for an individual transport operation, above the controller startup budget; disconnect and Stop still cancel pending work. This operational timeout does not add a token, model-call or overall task-duration cap. Keep CPU, RAM, PID and bounded-disk protections.

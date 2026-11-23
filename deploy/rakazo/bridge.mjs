@@ -11,6 +11,12 @@ const js=`const status=document.querySelector('#status'), frame=document.querySe
  return {page, js};
 }
 
+export async function removeStoppedComputer(api,id,headers){
+ if(!id)return;
+ try{await api('/computers/'+id+'/stop',{},headers);}catch(e){if(e.status!==404)throw e;}
+ try{await api('/computers/'+id,undefined,headers,'DELETE');}catch(e){if(e.status!==404)throw e;}
+}
+
 export function startBridge() {
 const {page, js} = pilotAssets(process.env.BASE_PATH ?? '');
 const base='/var/lib/rakazo-pilot';
@@ -18,9 +24,9 @@ const env=Object.fromEntries(readFileSync(base+'/controller.env','utf8').trim().
 const headers={'Authorization':'Bearer '+env.SANDBOX_SUPERVISOR_TOKEN,'Content-Type':'application/json','x-rakazo-bot-id':'pilot-owner','x-rakazo-space-id':'pilot-owner-space'};
 let id,screen,busy=false;
 try {id=JSON.parse(readFileSync(base+'/controller-create-result.json','utf8')).id;}catch{}
-async function api(path,body,requestHeaders=headers) {
- const response=await fetch('http://127.0.0.1:7091'+path,{method:body===undefined?'GET':'POST',headers:requestHeaders,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(540000)});
- if(!response.ok) throw new Error('Controller request failed');return response.json();
+async function api(path,body,requestHeaders=headers,method=body===undefined?'GET':'POST') {
+ const response=await fetch('http://127.0.0.1:7091'+path,{method,headers:requestHeaders,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(540000)});
+ if(!response.ok){const error=new Error('Controller request failed');error.status=response.status;throw error;}return response.json();
 }
 function json(res,status,value){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(value));}
 function target(path){if(!screen)throw Error('Open a screen first');const u=new URL(screen);if(!/^172\.|^192\.168\.|^10\./.test(u.hostname))throw Error('Invalid screen endpoint');const token=new URL(u.searchParams.get('path') || '', 'http://screen/').searchParams.get('token');if(!token)throw Error('Missing screen authorization');u.pathname=path.slice('/desktop'.length);u.search='';if(u.pathname==='/websockify')u.searchParams.set('token',token);return u;}
@@ -41,7 +47,7 @@ const server=http.createServer(async(req,res)=>{try{
  if(busy){json(res,409,{error:'Another operation is running'});return;}busy=true;
  try{if(req.url==='/api/start'){const r=await api('/computers',{botId:'pilot-owner',spaceId:'pilot-owner-space',homePath:base+'/workspaces/homes/pilot-owner'});id=r.id;writeFileSync(base+'/controller-create-result.json',JSON.stringify(r),{mode:0o600});screen=null;}
  else if(!id)throw Error('Start the computer first');
- else if(req.url==='/api/stop'){await api('/computers/'+id+'/stop',{});screen=null;}
+ else if(req.url==='/api/stop'){await removeStoppedComputer(api,id,headers);try{unlinkSync(base+'/controller-create-result.json');}catch(e){if(e.code!=='ENOENT')throw e;}id=null;screen=null;}
  else{const control=req.url==='/api/control';const r=await api('/computers/'+id+'/screen-mode',{interactive:control,...(control?{controlToken:randomUUID()}: {})});screen=r.screenUrl;}
  json(res,200,{message:req.url==='/api/stop'?'Computer stopped':'Ready'});}finally{busy=false;}
  }catch{json(res,503,{error:'Pilot operation failed. Retry after checking controller health.'});}});

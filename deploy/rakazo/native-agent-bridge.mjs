@@ -25,7 +25,10 @@ export function agentBridge({base,headers,api,fetchImpl=fetch,homePreparer=prepa
    // Wait for the eventual ID: never stop the shared manual desktop as a substitute.
    if(job.creating)await job.creating;
    if(!valid(job.computerId))throw Error('Unknown computer needs recovery');
-   await api('/computers/'+job.computerId+'/stop',{},scoped(job));
+   try{await api('/computers/'+job.computerId+'/stop',{},scoped(job));}catch(e){if(e.status!==404)throw e;}
+   // Remove only this identity's disposable container layer. The bound home survives.
+   // 404 also makes restart recovery safe after deletion succeeded but marker removal failed.
+   try{await api('/computers/'+job.computerId,undefined,scoped(job),'DELETE');}catch(e){if(e.status!==404)throw e;}
    try{unlinkSync(marker);}catch(e){if(e.code!=='ENOENT')throw e;}
    if(active===job)active=null;
   }catch{blocked=true;throw Error('Computer stop needs recovery');}})();
