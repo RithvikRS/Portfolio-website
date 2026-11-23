@@ -165,7 +165,7 @@ def verify(image, check_only=False, docker=None, ampere_pilot=False, diagnostics
         # Free the migration container's writable layer before the API fixture.
         docker.call('rm', '-v', migrate)
         containers.remove(migrate)
-        phase = 'running owner OIDC, persistence and execution-denial checks'
+        phase = 'running granted-user OIDC, isolation, revocation and execution-denial checks'
         test = create(application_args(prefix+'-test', network, image, environment,
                       ['pnpm', 'exec', 'vitest', 'run', 'apps/api/src/verify-workspace.postgres.test.ts', '--maxWorkers=1'], '/app'))
         docker.call('cp', str(ROOT/'deploy/rakazo/verify-workspace.postgres.test.ts'),

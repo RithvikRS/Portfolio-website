@@ -24,6 +24,10 @@ def main():
     image=Path('/srv/swarm/.rakazo-runtime-cache.img')
     if not os.path.ismount(cache) or not image.is_file() or image.stat().st_size!=8*1024**3:
         raise SystemExit('Stage and mount the dedicated 8 GiB cache first')
+    home=BASE/'workspaces/homes'
+    bounded=cache/'family-homes'
+    if not os.path.ismount(home) or not bounded.is_dir() or os.stat(home).st_dev!=os.stat(cache).st_dev or os.stat(home).st_ino!=os.stat(bounded).st_ino:
+        raise SystemExit('Run migrate-rakazo-homes.py --apply before installing the per-user bridge')
     for path in [BASE/'controller.env',BASE/'controller-src/infra/sandboxes/supervisor/node_modules/tsx/dist/cli.mjs',Path('/opt/rakazo-runtime/node'),Path('/opt/rakazo-runtime/release-20261102.0/runsc')]:
         if not path.is_file():raise SystemExit('Missing staged prerequisite: '+str(path))
     for name in ['runtime_launcher.py','prepare_cgroups.py','enter_namespace.py','bridge.mjs','native-agent-bridge.mjs']:
@@ -41,19 +45,11 @@ def main():
     write(BASE/'controller.env',''.join(k+'='+v+'\n' for k,v in env.items()),0o600,(986,984))
     for name in ['rakazo-bridge','rakazo-controller','rakazo-engine','rakazo-controller-probe','rakazo-engine-probe']:
         subprocess.run(PREFIX+['systemctl','--user','stop',name],capture_output=True)
-    home=BASE/'workspaces/homes/pilot-owner'
-    bounded=cache/'pilot-home'
-    if not bounded.exists():
-        bounded.mkdir();run('cp','-a',str(home)+'/.',str(bounded)+'/');os.chown(bounded,2000999,2000999)
-    home_mount=run('systemd-escape','--path','--suffix=mount',str(home))
-    write(Path('/etc/systemd/system')/home_mount,f'[Unit]\nRequiresMountsFor={cache}\n[Mount]\nWhat={bounded}\nWhere={home}\nType=none\nOptions=bind,nodev,nosuid\n')
-    if not os.path.ismount(home):run('mount','--bind',str(bounded),str(home))
     bridge=BASE/'bridge';bridge.mkdir(exist_ok=True);bridge.chmod(0o700);os.chown(bridge,986,984)
     source=BASE/'controller-src/infra/sandboxes/supervisor/src/computer-spec.ts'
     write(source,source.read_text().replace('process.env.RAKAZO_PILOT_BIND_IP ?? "127.0.0.1"','"127.0.0.1"'),owner=(986,984))
     mount_name=run('systemd-escape','--path','--suffix=mount',str(cache))
     write(Path('/etc/systemd/system')/mount_name,f'[Unit]\nDescription=Bounded disposable Rakazo cache\nRequiresMountsFor=/srv/swarm\n[Mount]\nWhat={image}\nWhere={cache}\nType=ext4\nOptions=loop,nodev,nosuid\n')
-    write(Path('/etc/systemd/system/user@986.service.d/rakazo-delegation.conf'),f'[Unit]\nRequiresMountsFor={cache} {home}\n[Service]\nDelegate=cpu cpuset io memory pids\n')
     write(Path('/etc/systemd/system/user-986.slice.d/rakazo-limits.conf'),'[Slice]\nMemoryMax=4G\nMemorySwapMax=0\nCPUQuota=150%\nTasksMax=1536\n')
     units=BASE/'.config/systemd/user'
     units.mkdir(parents=True,exist_ok=True)

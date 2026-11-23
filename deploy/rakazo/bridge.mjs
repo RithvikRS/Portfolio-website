@@ -18,8 +18,8 @@ const env=Object.fromEntries(readFileSync(base+'/controller.env','utf8').trim().
 const headers={'Authorization':'Bearer '+env.SANDBOX_SUPERVISOR_TOKEN,'Content-Type':'application/json','x-rakazo-bot-id':'pilot-owner','x-rakazo-space-id':'pilot-owner-space'};
 let id,screen,busy=false;
 try {id=JSON.parse(readFileSync(base+'/controller-create-result.json','utf8')).id;}catch{}
-async function api(path,body) {
- const response=await fetch('http://127.0.0.1:7091'+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(540000)});
+async function api(path,body,requestHeaders=headers) {
+ const response=await fetch('http://127.0.0.1:7091'+path,{method:body===undefined?'GET':'POST',headers:requestHeaders,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(540000)});
  if(!response.ok) throw new Error('Controller request failed');return response.json();
 }
 function json(res,status,value){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(value));}
@@ -29,7 +29,7 @@ function proxy(req,res,socket,head){let u;try{u=target(req.url.split('?')[0]);}c
  const out=http.request(u,{method:'GET',headers:h,timeout:30000});out.on('error',()=>{if(socket)socket.destroy();else{if(!res.headersSent)res.writeHead(502);res.end();}});out.on('timeout',()=>out.destroy());
  if(socket){out.on('upgrade',(r,peer,buffered)=>{socket.write('HTTP/1.1 101 Switching Protocols\r\n'+Object.entries(r.headers).map(([k,v])=>`${k}: ${v}\r\n`).join('')+'\r\n');if(buffered.length)socket.write(buffered);if(head.length)peer.write(head);peer.pipe(socket);socket.pipe(peer);socket.on('close',()=>peer.destroy());socket.on('error',()=>peer.destroy());peer.on('error',()=>socket.destroy());});out.on('response',()=>socket.destroy());}
  else out.on('response',r=>{res.writeHead(r.statusCode,{'content-type':r.headers['content-type']||'application/octet-stream','cache-control':'no-store','content-security-policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; form-action 'none'; base-uri 'none'"});r.pipe(res);});out.end();}
-const agent=agentBridge({base,headers,api,getId:()=>id,setId:value=>{id=value;writeFileSync(base+'/controller-create-result.json',JSON.stringify({id}),{mode:0o600});}});
+const agent=agentBridge({base,headers,api});
 const server=http.createServer(async(req,res)=>{try{
  if(await agent.handle(req,res))return;
  if(agent.active()&&req.method==='POST'){json(res,409,{error:'Use Stop in Rakazo chat before controlling this computer'});return;}

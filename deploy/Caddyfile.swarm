@@ -248,14 +248,19 @@ rakazo.144.24.135.201.sslip.io {
                         forward_auth access_console:8080 {
                             uri /internal/authorize-rakazo?
                         }
+                        # The shared manual desktop remains restricted to the exact owner.
+                        @ownerDesktop path /computer /computer/*
+                        forward_auth @ownerDesktop access_console:8080 {
+                            uri /internal/authorize-rakazo-owner?
+                        }
                         request_header -X-Rakazo-Email
-                        redir /dashboard-exit https://rithvik.ddns.net/admin/ 302
+                        redir /dashboard-exit https://rithvik.ddns.net/dashboard/ 302
                         redir / /app 302
                         @retiredNoteAssistant path /agent-pilot /agent-pilot/*
                         redir @retiredNoteAssistant /app 302
                         redir /computer /computer/ 302
                         handle_path /computer/* {
-                            # The directory check above admitted this exact owner/admin.
+                            # The separate desktop directory check admitted the exact owner/admin.
                             # Browser-supplied identity headers were stripped at ingress.
                             request_header Remote-User rithvik
                             request_header Remote-Groups admins

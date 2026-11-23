@@ -28,7 +28,7 @@ access_control:
   default_policy: 'deny'
   rules:
     - domain: 'rakazo.144.24.135.201.sslip.io'
-      subject: ['user:rithvik']
+      subject: ['user:rithvik', 'group:rakazo']
       policy: 'two_factor'
     - domain: '{{ env "DOMAIN" }}'
       resources: ['^/dashboard/(guide/)?$']
@@ -87,11 +87,11 @@ identity_providers:
         # OmniRoute validates admission from the ID token, not userinfo.
         id_token: ['email', 'email_verified']
     authorization_policies:
-      rakazo_owner:
+      rakazo_members:
         default_policy: 'deny'
         rules:
           - policy: 'two_factor'
-            subject: ['user:rithvik']
+            subject: ['user:rithvik', 'group:rakazo']
       infrastructure_admins:
         default_policy: 'deny'
         rules:
@@ -112,7 +112,7 @@ identity_providers:
         client_name: 'Rakazo'
         client_secret: '{{ secret "/secrets/rakazo-client-hash" }}'
         public: false
-        authorization_policy: 'rakazo_owner'
+        authorization_policy: 'rakazo_members'
         claims_policy: 'omniroute_identity'
         consent_mode: 'implicit'
         require_pkce: true
@@ -209,7 +209,7 @@ identity_providers:
         client_name: 'Rakazo-edge'
         client_secret: '{{ secret "/secrets/rakazo-edge-client-hash" }}'
         public: false
-        authorization_policy: 'rakazo_owner'
+        authorization_policy: 'rakazo_members'
         consent_mode: 'implicit'
         require_pkce: true
         pkce_challenge_method: 'S256'

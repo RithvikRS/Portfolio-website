@@ -131,6 +131,7 @@
     "access_console": {
       "image": "python:3.13-alpine@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca",
       "networks": [
+        "swarm_rakazo_identity",
         "swarm_access",
         "swarm_rakazo_connectors"
       ],
@@ -859,6 +860,7 @@
       "image": "ghcr.io/rithvikrs/portfolio-website@sha256:ac550bda3a57883860d60bc52b16df6739937c4233b70e39bdae1793a2e34e97",
       "user": "1000:1000",
       "networks": [
+        "swarm_rakazo_identity",
         "swarm_rakazo_app",
         "swarm_rakazo_data",
         "swarm_rakazo_models",
@@ -914,6 +916,7 @@
         }
       ],
       "environment": {
+        "MULTI_USER_ASSISTANT": "true",
         "NODE_ENV": "production",
         "WORKSPACE_ONLY": "true",
         "DATA_DIR": "/data",
@@ -1099,6 +1102,7 @@
         "--code-challenge-method=S256",
         "--scope=openid profile email groups offline_access",
         "--allowed-group=admins",
+        "--allowed-group=rakazo",
         "--upstream=static://202",
         "--skip-provider-button=true",
         "--cookie-name=__Host-rakazo_sso",
@@ -1116,7 +1120,7 @@
         "--session-store-type=redis",
         "--redis-connection-url=redis://rakazo_sessions:6379/0",
         "--set-xauthrequest=true",
-        "--authenticated-emails-file=/run/secrets/rakazo_owner_email"
+        "--email-domain=*"
       ],
       "networks": [
         "swarm_rakazo_app",
@@ -1308,6 +1312,7 @@
         "/assistant/assistant-services.mjs"
       ],
       "environment": {
+        "MULTI_USER_ASSISTANT": "true",
         "NODE_ENV": "production",
         "NODE_OPTIONS": "--max-old-space-size=160"
       },
@@ -1383,6 +1388,11 @@
     }
   },
   "networks": {
+    "swarm_rakazo_identity": {
+      "driver": "overlay",
+      "attachable": false,
+      "internal": true
+    },
     "swarm_monitoring": {
       "driver": "overlay",
       "attachable": false

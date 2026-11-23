@@ -1,6 +1,6 @@
 # Accounts, passwords, and notes
 
-Open **Service access** in the portfolio admin dashboard. Sign in as the infrastructure owner with MFA. Create a separate account for each person, save its generated password at creation, and give it privately to the account owner. A new account receives only the services you select. The console preserves administrator accounts and restricts grant changes to **Outline notes** and **Password vault**.
+Open **Service access** in the portfolio admin dashboard. Sign in as the infrastructure owner with MFA. Create a separate account for each person, save its generated password at creation, and give it privately to the account owner. A new account receives only the services you select. The console preserves administrator accounts and restricts grant changes to **Outline notes**, **Password vault** and **Rakazo**.
 
 Share the [user guide](https://rithvik.ddns.net/dashboard/guide/) with members for first sign-in, notes, vault use and account recovery. The guide shows service instructions according to each member’s grants.
 
@@ -32,3 +32,7 @@ Run `python3 scripts/setup-family-services.py` on the manager as the portfolio c
 Pin PostgreSQL, Outline attachments and Vaultwarden SQLite/files to the approved Ampere worker. Create `/srv/swarm/notes_db`, `/srv/swarm/outline`, `/srv/swarm/notes_cache`, and `/srv/swarm/vaultwarden` on its mounted application disk before deployment. PostgreSQL requires its container data owner, Outline uses UID 1001, and Vaultwarden uses its container data owner. Use the existing worker storage labeling and restore procedure. Redis persists its queue on the same worker and uses the private backend overlay.
 
 Run the full private cluster backup after configuration changes. Restore the manager's directory, matching OIDC hashes and secrets, application encryption keys, the PostgreSQL data directory, attachments, and Vaultwarden data including its RSA keys. Keep a coordinated worker snapshot with writers stopped. Rehearse restoration offline before relying on it. Use a member-only account to test private notes and vault isolation after a restore.
+
+## Rakazo access
+
+Grant Rakazo explicitly in Service access. Members use their own native workspace and assistant data; the maintenance desktop and infrastructure administration stay owner-only. Connect each member's Outline and notification credentials separately, outside Git. Follow [member connections and acceptance checks](RAKAZO-PERSONAL-ASSISTANT.md#members-and-private-connections). Google connections remain deferred and will belong to each user/account.

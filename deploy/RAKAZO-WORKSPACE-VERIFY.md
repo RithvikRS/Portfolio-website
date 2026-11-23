@@ -147,3 +147,14 @@ The native image adds `native-assistant.patch` after the two workspace patches. 
 The disposable release runner now includes an internal synthetic model/executor fixture and a generated inference-key file. It uses no live provider. Run `scripts/verify-rakazo-native.mjs` with the same private Playwright/artifact environment and loopback tunnel described above. It clears only the disposable chat, then checks fresh conversation replies, tool results, native Stop, reload, prohibited routes and mobile layout. Never point this runner at production.
 
 Rehearse encrypted restore of the native PostgreSQL history and API quota ledger with the existing release helper. Separately check real shell execution, network denial and command cancellation through the bounded gVisor bridge. Stop the computer afterward. After publication, retain the registry digest and remove the temporary download secret and draft transfer asset. Verify all live services, retired-note redirects, native mode and owner denial after deployment; an authenticated production conversation remains a distinct check.
+
+
+## Granted-user release checks
+
+The PostgreSQL fixture signs in two synthetic users with a mocked current-grant directory. OIDC, API handlers, encrypted artifacts and database persistence run against the candidate image. It denies cross-user workspace/profile/thread/file access, forged identity headers and access after revocation. The connector import boundary is mocked explicitly; it records the verified user/email scope without accessing real notes or provider keys.
+
+The image build runs signed OIDC admission/revocation tests, native run/Stop/error tests, rendered Composer tests, and upstream partial-reply persistence/continuation tests. These gates do not replace live Authelia routing checks or a private backup.
+
+Before installing the scoped controller bridge, run `scripts/migrate-rakazo-homes.py` as root on Ampere without arguments. After a successful private backup, run it with `--apply` to move all disposable homes into the existing bounded cache. It stops only the isolated engine/controller/bridge, keeps original data and records old mount definitions and bridge code. The installer refuses unbounded home storage. Test two synthetic user/workspace identities serially, their distinct homes and scoped Stop before admitting members.
+
+If controller migration fails, use `--rollback` with the retained migration record. It restores the old code/mount configuration and retains new bounded data for inspection. Do not remove either copy until recovery is checked. Never restart production Docker for this migration.

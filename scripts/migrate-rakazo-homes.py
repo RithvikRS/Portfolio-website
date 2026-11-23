@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""Stage/apply bounded per-user homes; run on Ampere only during controller maintenance.
+
+Default is a read-only preflight. --apply stops only the isolated Rakazo services.
+--rollback restores the old mount/config; retains new home data on the bounded cache.
+Rollback also restores the pre-migration bridge code before restarting services.
+Never deletes the original home data. Swarm services are not touched.
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+
+BASE = Path('/var/lib/rakazo-pilot')
+CACHE = BASE / 'engine/cache'
+HOMES = BASE / 'workspaces/homes'
+BOUNDED = CACHE / 'family-homes'
+STATE = BASE / 'family-homes-migration.json'
+UNITS = Path('/etc/systemd/system')
+RUNTIME = Path('/opt/rakazo-runtime/pilot')
+DROPIN = Path('/etc/systemd/system/user@986.service.d/rakazo-delegation.conf')
+PREFIX = ['sudo', '-u', 'rakazo-pilot', 'env', 'XDG_RUNTIME_DIR=/run/user/986', 'DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/986/bus', 'HOME=' + str(BASE), 'systemctl', '--user']
+SERVICES = ['rakazo-bridge', 'rakazo-controller', 'rakazo-engine']
+
+def run(*args):
+    return subprocess.run(args, check=True, text=True, capture_output=True).stdout.strip()
+
+def unit(path):
+    return run('systemd-escape', '--path', '--suffix=mount', str(path))
+
+def preflight():
+    if os.geteuid() != 0 or run('docker', 'info', '--format', '{{.Swarm.NodeID}}') != 'tzqsl1t88r3l1i8zcqvcmredo':
+        raise RuntimeError('Run as root on the approved Ampere worker')
+    image = Path('/srv/swarm/.rakazo-runtime-cache.img')
+    if not os.path.ismount(CACHE) or image.stat().st_size != 8 * 1024**3:
+        raise RuntimeError('Dedicated 8 GiB cache must be mounted')
+    # Resolve the mounted loop device to its backing file, not just a same-sized file.
+    source = run('findmnt', '-n', '-o', 'SOURCE', '--target', str(CACHE))
+    if Path(run('losetup', '-n', '-O', 'BACK-FILE', source)).resolve() != image.resolve():
+        raise RuntimeError('Cache is not backed by the approved loop image')
+    if HOMES.is_symlink() or BOUNDED.is_symlink():
+        raise RuntimeError('Home roots must not be symlinks')
+
+def update_dependencies(text):
+    # Preserve unrelated Unit/Service settings and Delegate exactly as configured.
+    lines = text.splitlines()
+    section = None
+    found = False
+    for i, line in enumerate(lines):
+        if line.startswith('['):
+            section = line
+        if section == '[Unit]' and line.startswith('RequiresMountsFor='):
+            values = line.split('=', 1)[1].split()
+            values = [v for v in values if v != str(HOMES / 'pilot-owner')]
+            for value in [str(CACHE), str(HOMES)]:
+                if value not in values:
+                    values.append(value)
+            lines[i] = 'RequiresMountsFor=' + ' '.join(values)
+            found = True
+    if not found:
+        lines += ['[Unit]', f'RequiresMountsFor={CACHE} {HOMES}']
+    return '\n'.join(lines) + '\n'
+
+
+def assert_homes_mount():
+    if not os.path.ismount(HOMES):
+        raise RuntimeError('Homes mount missing')
+    target, source = os.stat(HOMES), os.stat(BOUNDED)
+    if (target.st_dev, target.st_ino) != (source.st_dev, source.st_ino):
+        raise RuntimeError('Unexpected homes mount')
+
+
+def restore(state):
+    # A failed start may leave some services running. Stop before undoing mounts.
+    run(*PREFIX, 'stop', *SERVICES)
+    if os.path.ismount(HOMES):
+        assert_homes_mount()
+        run('umount', str(HOMES))
+    for name, text in state['files'].items():
+        path = Path(name)
+        if text is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(text)
+    for name, saved in state.get('runtime', {}).items():
+        path = Path(name)
+        path.write_text(saved['text']); path.chmod(saved['mode'])
+    run('systemctl', 'daemon-reload')
+    if state['old_mounted'] and not os.path.ismount(HOMES / 'pilot-owner'):
+        run('mount', '--bind', str(CACHE / 'pilot-home'), str(HOMES / 'pilot-owner'))
+    if state['active']:
+        run(*PREFIX, 'start', *reversed(state['active']))
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--apply', action='store_true')
+    mode.add_argument('--rollback', action='store_true')
+    args = parser.parse_args()
+    preflight()
+    if args.rollback:
+        state = json.loads(STATE.read_text())
+        run(*PREFIX, 'stop', *SERVICES)
+        restore(state)
+        print('Original mount restored; family-homes data retained in bounded cache.')
+        return
+    if os.path.ismount(HOMES):
+        assert_homes_mount()
+        print('All homes already use bounded storage.')
+        return
+    if STATE.exists() or BOUNDED.exists():
+        raise RuntimeError('Prior migration artifacts exist; inspect or roll back before retrying')
+    size = int(run('du', '-s', '-B1', str(HOMES)).split()[0])
+    if shutil.disk_usage(CACHE).free < size + 256 * 1024**2:
+        raise RuntimeError('Insufficient bounded cache space to preserve and copy existing homes')
+    print('Preflight passed: copy existing homes, preserve original data, bind all homes into 8 GiB cache.')
+    if not args.apply:
+        return
+    old_unit = UNITS / unit(HOMES / 'pilot-owner')
+    new_unit = UNITS / unit(HOMES)
+    state = {'files': {str(p): p.read_text() if p.exists() else None for p in [old_unit, new_unit, DROPIN]},
+             'runtime': {str(p): {'text': p.read_text(), 'mode': p.stat().st_mode & 0o777} for p in [RUNTIME/'bridge.mjs', RUNTIME/'native-agent-bridge.mjs'] if p.exists()},
+             'old_mounted': os.path.ismount(HOMES / 'pilot-owner'),
+             'active': [s for s in SERVICES if subprocess.run(PREFIX + ['is-active', '--quiet', s]).returncode == 0]}
+    STATE.write_text(json.dumps(state, indent=2) + '\n'); STATE.chmod(0o600)
+    try:
+        run(*PREFIX, 'stop', *SERVICES)
+        BOUNDED.mkdir(mode=0o700)
+        run('cp', '-a', str(HOMES) + '/.', str(BOUNDED) + '/')
+        os.chown(BOUNDED, 986, 984)
+        # Compare content before hiding the old tree. Existing copies remain for rollback.
+        run('diff', '-qr', str(HOMES), str(BOUNDED))
+        if state['old_mounted']:
+            run('umount', str(HOMES / 'pilot-owner'))
+        old_unit.unlink(missing_ok=True)
+        new_unit.write_text(f'[Unit]\nRequiresMountsFor={CACHE}\n[Mount]\nWhat={BOUNDED}\nWhere={HOMES}\nType=none\nOptions=bind,nodev,nosuid\n')
+        DROPIN.write_text(update_dependencies(state['files'][str(DROPIN)] or ''))
+        run('systemctl', 'daemon-reload')
+        run('systemctl', 'start', new_unit.name)
+        assert_homes_mount()
+        if state['active']:
+            run(*PREFIX, 'start', *reversed(state['active']))
+    except BaseException:
+        restore(state)
+        raise
+    print('All homes bounded; original pilot-home and migration record retained for rollback.')
+
+if __name__ == '__main__':
+    main()

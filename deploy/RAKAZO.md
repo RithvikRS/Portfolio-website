@@ -1,8 +1,8 @@
 # Rakazo personal assistant
 
-> Current policy: Rakazo uses provider-managed usage with no local token allowances, context windows, daily run/call caps, minute pacing, cumulative tool/model-call limits or overall task deadline. Keep Stop, owner-only access, approvals, free-only routing and resource/individual-operation protections. Older quota values below describe the prior rollout. See [current policy](RAKAZO-PERSONAL-ASSISTANT.md#provider-managed-usage).
+> Current policy: Rakazo uses provider-managed usage with no local token allowances, context windows, daily run/call caps, minute pacing, cumulative tool/model-call limits or overall task deadline. Keep Stop, explicit access grants, approvals, free-only routing and resource/individual-operation protections. Older quota values below describe the prior rollout. See [current policy](RAKAZO-PERSONAL-ASSISTANT.md#provider-managed-usage).
 
-Open **Rakazo** from your admin dashboard, or use `/rakazo` on the portfolio domain. Sign in through Authelia with your owner account and authenticator, then use Rakazo's Authelia sign-in button if shown. Other users, including other administrators, cannot access this service.
+Open **Rakazo** from your admin dashboard, or use `/rakazo` on the portfolio domain. Sign in through Authelia with your granted account and authenticator, then use Rakazo's Authelia sign-in button if shown. The infrastructure owner retains access. Grant other users access explicitly through Service access; other administrators do not inherit it.
 
 Use Rakazo's normal chat UI to ask questions, plan work and run bounded shell tasks in the isolated offline computer. Conversations and profiles stay in the native workspace. The separate note assistant is retired; its old links redirect to `/app`. Existing scratchpad notes stay in the database. Sign out through Rakazo to return to your dashboard.
 
@@ -38,7 +38,7 @@ The desktop-control page wraps Rakazo's supervisor and stays separate from the w
 
 The pinned runtime cannot use the rootless user manager's systemd connection. `runtime_launcher.py` validates the OCI limits and home mounts, joins an enforced cgroup **before** starting gVisor, and refuses unbounded computers. It handles the cgroup itself instead of granting access to host ancestors. Whole-cgroup OOM termination prevents a partially killed desktop from lingering.
 
-Keep the controller trusted and its Docker socket private. A default Docker runtime alone cannot constrain arbitrary Docker API callers. The public browser edge exposes no Docker API or command endpoint. The separate internal executor exposes only bounded commands in the fixed gVisor guest. Do not mount either Docker socket into a computer or the browser edge.
+Keep the controller trusted and its Docker socket private. A default Docker runtime alone cannot constrain arbitrary Docker API callers. The public browser edge exposes no Docker API or command endpoint. The separate internal executor exposes only bounded commands in the authenticated user/workspace gVisor guest. Do not mount either Docker socket into a computer or the browser edge.
 
 The upstream supervisor uses `SANDBOX_COMPUTER_EGRESS=open` because its firewall helper does not support this rootless topology. Actual egress remains blocked by the enclosing network namespace. Do not copy that setting to a normal networked engine. Keep host SELinux Enforcing and leave production Docker/firewalld configuration unchanged.
 
@@ -61,7 +61,7 @@ The earlier standalone runtime probe remains available as `scripts/verify-rakazo
 
 ## Browser access
 
-Open `/rakazo` from your dashboard. The outer OIDC gate reuses central Authelia MFA, checks the exact owner identity, and checks current account/group access through the access console. Native OIDC separately validates the owner allowlist. Anonymous requests and forged identity headers cannot reach chat or computer tools.
+Open `/rakazo` from your dashboard. The outer OIDC gate reuses central Authelia MFA, checks the authenticated identity and current account/group access through the access console. Native OIDC separately validates the current directory grant. Anonymous requests and forged identity headers cannot reach chat or computer tools.
 
 The private executor has no published port and shares an internal, non-attachable network only with the native API. Caddy cannot route to it. The model key is available only to the API; the computer and executor have no provider credentials. See [sign-in behavior](#sign-in-through-your-dashboard) for session renewal and consent.
 
@@ -72,7 +72,7 @@ The private executor has no published port and shares an internal, non-attachabl
 3. Start the fixed desktop through the local Unix bridge, then run `verify-rakazo-controller.py`. Rerun negative admission tests after changing runtime policy. Keep production Docker unchanged and verify the native executor separately.
 4. Validate the candidate Caddy/Authelia configuration, backup inventory and edge service. Review the separate-origin screen and reconnect behavior. The dedicated user-manager restart test recreates the cgroups and recovers the controller without restarting production Docker. A whole-host reboot remains outside that rehearsal.
 5. Batch the change into one PR and merge through the existing deployment pipeline. Confirm all existing services and the new edge converge, anonymous requests redirect to Authelia, non-owners fail, and the owner can view/control/stop the desktop.
-6. Verify native chat and Stop through the free-only pool. Keep autonomous model runs, Google integrations and multi-user admission disabled. Verify approved reminders separately from foreground chat.
+6. Verify native chat and Stop through the free-only pool. Keep autonomous model runs and Google integrations disabled. Grant member access only after checking isolation. Verify approved reminders separately from foreground chat.
 
 For maintenance, run the user service commands as `rakazo-pilot` with `XDG_RUNTIME_DIR=/run/user/986` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/986/bus`. The units are `rakazo-engine`, `rakazo-controller` and `rakazo-bridge`. Stop the desktop first, then stop bridge/controller/engine. Never restart production Docker to operate this pilot.
 
