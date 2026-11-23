@@ -164,6 +164,9 @@ If controller migration fails, use `--rollback` with the retained migration reco
 
 The scoped bridge changes the internal Stop request contract. Keep the controller migration record with the matching private backup. If you restore an application release from before scoped Stop, also run the staged `migrate-rakazo-homes.py --rollback` on Ampere to restore its bridge and home mount. Do not leave the new bridge paired with an old API. Stop active chat work before this maintenance; verify that no isolated computer remains running afterward. The old application/SSO policy admits only the owner, while saved member data remains on disk.
 
+To retry a rolled-back first migration, keep API admission stopped and run the staged `migrate-rakazo-homes.py --reapply`, then `install-rakazo-controller.py`. Reapply reuses the retained bounded homes and preserves the original rollback record and bridge snapshot. It checks the legacy mount, original configuration, root-owned private record, bounded filesystem, and home ownership before changing anything. If the old manual home changed after rollback, the content comparison stops the retry; reconcile those files privately first. Do not delete the migration record or recopy over retained member homes to force a retry. Reopen API admission only with the matching scoped application release; use `--rollback` again if that release fails.
+
+
 Later rollbacks between releases using the same scoped contract do not need this initial migration rollback. Preserve the matching controller code and configuration whenever you change that contract again.
 
 

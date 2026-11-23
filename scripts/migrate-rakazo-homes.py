@@ -9,6 +9,7 @@ Never deletes the original home data. Swarm services are not touched.
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -93,11 +94,65 @@ def restore(state):
     if state['active']:
         run(*PREFIX, 'start', *reversed(state['active']))
 
+def validate_reapply(state):
+    # Never replace the original rollback snapshot with a snapshot of the newer bridge.
+    if STATE.is_symlink() or STATE.stat().st_uid != 0 or STATE.stat().st_mode & 0o077:
+        raise RuntimeError('Migration record must be private and root-owned')
+    expected_files = {str(UNITS / unit(HOMES/'pilot-owner')), str(UNITS / unit(HOMES)), str(DROPIN)}
+    expected_runtime = {str(RUNTIME/'bridge.mjs'), str(RUNTIME/'native-agent-bridge.mjs')}
+    if set(state.get('files', {})) != expected_files or set(state.get('runtime', {})) != expected_runtime or state.get('old_mounted') is not True:
+        raise RuntimeError('Incomplete or unexpected original rollback record')
+    for name, text in state['files'].items():
+        path = Path(name)
+        if path.is_symlink() or (path.read_text() if path.exists() else None) != text:
+            raise RuntimeError('Legacy service configuration differs from rollback record')
+    for name, saved in state['runtime'].items():
+        path = Path(name)
+        if path.is_symlink() or path.read_text() != saved['text'] or path.stat().st_mode & 0o777 != saved['mode']:
+            raise RuntimeError('Legacy bridge differs from rollback record')
+    legacy = HOMES/'pilot-owner'
+    original = CACHE/'pilot-home'
+    if not os.path.ismount(legacy) or legacy.is_symlink():
+        raise RuntimeError('Restore legacy pilot mount before reapplying')
+    if (legacy.stat().st_dev, legacy.stat().st_ino) != (original.stat().st_dev, original.stat().st_ino):
+        raise RuntimeError('Unexpected legacy home source')
+    if not BOUNDED.is_dir() or BOUNDED.is_symlink():
+        raise RuntimeError('Retained family homes missing or unsafe')
+    root = BOUNDED.stat()
+    if root.st_dev != CACHE.stat().st_dev or (root.st_uid, root.st_gid) != (986, 984) or root.st_mode & 0o022:
+        raise RuntimeError('Retained home root has unsafe storage or ownership')
+    for home in BOUNDED.iterdir():
+        if home.is_symlink() or not home.is_dir() or not re.fullmatch(r'pilot-owner|chat-[a-f0-9]{64}', home.name):
+            raise RuntimeError('Unexpected retained home')
+        stat = home.stat()
+        if stat.st_dev != root.st_dev or (stat.st_uid, stat.st_gid) != (2000999, 2000999) or stat.st_mode & 0o022:
+            raise RuntimeError('Retained home ownership or permissions differ')
+    if not (BOUNDED/'pilot-owner').is_dir():
+        raise RuntimeError('Retained manual home missing')
+    # A legacy session after rollback may have changed its home; never hide those edits.
+    run('diff', '-qr', str(legacy), str(BOUNDED/'pilot-owner'))
+
+
+def activate_retained_homes(state):
+    old_unit = UNITS/unit(HOMES/'pilot-owner')
+    new_unit = UNITS/unit(HOMES)
+    run('umount', str(HOMES/'pilot-owner'))
+    old_unit.unlink(missing_ok=True)
+    new_unit.write_text(f'[Unit]\nRequiresMountsFor={CACHE}\n[Mount]\nWhat={BOUNDED}\nWhere={HOMES}\nType=none\nOptions=bind,nodev,nosuid\n')
+    DROPIN.write_text(update_dependencies(state['files'][str(DROPIN)] or ''))
+    run('systemctl', 'daemon-reload')
+    run('systemctl', 'start', new_unit.name)
+    assert_homes_mount()
+    if state['active']:
+        run(*PREFIX, 'start', *reversed(state['active']))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--apply', action='store_true')
     mode.add_argument('--rollback', action='store_true')
+    mode.add_argument('--reapply', action='store_true', help='Reuse retained bounded homes after a completed rollback; keep original snapshot')
     args = parser.parse_args()
     preflight()
     if args.rollback:
@@ -109,6 +164,18 @@ def main():
     if os.path.ismount(HOMES):
         assert_homes_mount()
         print('All homes already use bounded storage.')
+        return
+    if args.reapply:
+        state = json.loads(STATE.read_text())
+        validate_reapply(state)
+        try:
+            run(*PREFIX, 'stop', *SERVICES)
+            validate_reapply(state)
+            activate_retained_homes(state)
+        except BaseException:
+            restore(state)
+            raise
+        print('Retained bounded homes reactivated; original rollback record and bridge snapshot unchanged. Install scoped controller before reopening API admission.')
         return
     if STATE.exists() or BOUNDED.exists():
         raise RuntimeError('Prior migration artifacts exist; inspect or roll back before retrying')

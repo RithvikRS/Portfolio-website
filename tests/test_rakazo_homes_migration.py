@@ -30,7 +30,7 @@ class MigrationTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'missing'):
                 m.assert_homes_mount()
 
-    def exercise(self, fail=None, rollback=False):
+    def exercise(self, fail=None, rollback=False, reapply=False, retry_failure=False):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             homes, cache, units, runtime = [root / p for p in ['homes', 'cache', 'units', 'runtime']]
@@ -87,7 +87,44 @@ class MigrationTests(unittest.TestCase):
                     self.assertFalse((units/'new.mount').exists())
                     self.assertEqual((runtime/'bridge.mjs').read_text(), 'previous code')
                     self.assertEqual(calls[-1], ('userctl', 'start', 'rakazo-engine', 'rakazo-controller', 'rakazo-bridge'))
+                if reapply:
+                    snapshot=(root/'state.json').read_bytes()
+                    (bounded/'retained-member-file').write_text('preserve this')
+                    if retry_failure:
+                        fail='after-bind';failed=False
+                    with patch.object(m,'validate_reapply') as validate, patch.object(sys,'argv',['migration','--reapply']):
+                        if retry_failure:
+                            with self.assertRaisesRegex(RuntimeError,'injected'):m.main()
+                            self.assertNotIn(str(homes),mounts)
+                            self.assertIn(str(homes/'pilot-owner'),mounts)
+                            self.assertEqual(dropin.read_text(),original)
+                        else:
+                            m.main();self.assertIn(str(homes),mounts)
+                        self.assertEqual(validate.call_count,2)
+                    self.assertEqual((root/'state.json').read_bytes(),snapshot)
+                    self.assertEqual((bounded/'retained-member-file').read_text(),'preserve this')
+                    self.assertEqual((runtime/'bridge.mjs').read_text(),'previous code')
+
                 self.assertEqual((homes/'pilot-owner/note.txt').read_text(), 'existing private data')
+
+    def test_reapply_preserves_original_snapshot_and_retained_data(self):
+        self.exercise(rollback=True,reapply=True)
+
+    def test_reapply_failure_restores_legacy_without_replacing_snapshot(self):
+        self.exercise(rollback=True,reapply=True,retry_failure=True)
+
+    def test_reapply_rejects_nonprivate_or_unowned_record(self):
+        for uid,mode in [(1000,0o600),(0,0o644)]:
+            state=SimpleNamespace(is_symlink=lambda:False,stat=lambda:SimpleNamespace(st_uid=uid,st_mode=mode))
+            with patch.object(m,'STATE',state):
+                with self.assertRaisesRegex(RuntimeError,'private and root-owned'):
+                    m.validate_reapply({})
+
+    def test_reapply_rejects_incomplete_original_snapshot(self):
+        state=SimpleNamespace(is_symlink=lambda:False,stat=lambda:SimpleNamespace(st_uid=0,st_mode=0o600))
+        with patch.object(m,'STATE',state),patch.object(m,'unit',return_value='fixture.mount'):
+            with self.assertRaisesRegex(RuntimeError,'Incomplete or unexpected'):
+                m.validate_reapply({'files':{},'runtime':{},'old_mounted':True})
 
     def test_failure_before_bind(self): self.exercise('before-bind')
     def test_failure_after_bind(self): self.exercise('after-bind')

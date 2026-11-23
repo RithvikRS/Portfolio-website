@@ -177,3 +177,8 @@ The native chat model selector and working status show **Auto**. Completed repli
 Build the image from all three pinned patches with `scripts/build-rakazo-app.py`. Keep the default image workspace-only; production enables the restricted adapter with `NATIVE_ASSISTANT=true`. The entrypoint fixes the pool identity, disabled native sandbox/provider configuration and retry settings. Never enable the unrestricted upstream runtime with an environment override.
 
 Run the repository tests, native ledger/job-policy tests, disposable compiled API/browser tests and real gVisor bridge checks. Confirm native conversation replies, tool result rendering, Stop without subsequent model calls, persistent accounting, ungranted-user denial and unchanged health of other services. The disposable model fixture uses synthetic responses and cannot establish provider quality or production login success. Keep its generated credentials, screenshots and restore evidence outside Git.
+
+
+## Sign-in proxy rollout
+
+Rakazo's stateless OIDC proxy can briefly fail discovery while Caddy and Authelia restart. Let Swarm retry its update with `failure_action: continue`; otherwise an early failed task leaves the update paused even after its replacement is healthy. Keep one stop-first replica and the existing restart policy. The deployment still requires all service replicas, completed update states, the proxy `/ready` endpoint and protected HTTP routes before promotion; a persistent failure rolls back the release. This exception applies only to the Rakazo sign-in proxy, not databases or application services.

@@ -1148,6 +1148,12 @@
             "memory": "96M",
             "cpus": "0.50"
           }
+        },
+        "update_config": {
+          "parallelism": 1,
+          "order": "stop-first",
+          "failure_action": "continue",
+          "monitor": "45s"
         }
       }
     },

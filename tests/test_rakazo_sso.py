@@ -35,6 +35,15 @@ class RakazoSSOTests(unittest.TestCase):
         self.assertIn("authorization_policy: 'rakazo_members'", client)
         self.assertIn("require_pkce: true", client)
 
+    def test_transient_discovery_failure_retries_but_release_still_requires_readiness(self):
+        c = json.loads((ROOT / 'deploy/swarm-services.json').read_text())
+        policy = c['services']['rakazo_sso']['deploy']['update_config']
+        self.assertEqual(policy, {'parallelism': 1, 'order': 'stop-first',
+                                  'failure_action': 'continue', 'monitor': '45s'})
+        self.assertIn('http://rakazo_sso:4180/ready', c['internal_checks'])
+        self.assertTrue(any(check['url'] == 'https://rakazo.144.24.135.201.sslip.io/'
+                            for check in c['http_checks']))
+
     def test_routing_checks_current_owner_before_app_and_renews_cookie(self):
         caddy = (ROOT / 'deploy/Caddyfile.swarm').read_text().split('rakazo.144.24.135.201.sslip.io {',1)[1]
         self.assertLess(caddy.index('request_header -X-Rakazo-Email'), caddy.index('rewrite /oauth2/auth?'))
