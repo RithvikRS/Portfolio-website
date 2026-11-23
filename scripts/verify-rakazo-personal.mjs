@@ -7,7 +7,7 @@ const root=process.env.RAKAZO_PLAYWRIGHT_ROOT,artifacts=process.env.RAKAZO_TEST_
 if(!root||!artifacts)throw Error('Private browser tooling/artifact paths required');
 mkdirSync(artifacts,{recursive:true});const {chromium}=createRequire(resolve(root,'package.json'))('playwright');
 const origin='https://rakazo.verify.test:18443',phase=process.argv[2];
-if(!['login','chat','restored','quota','batch','tokens'].includes(phase))throw Error('Expected login, chat or restored phase');
+if(!['login','chat','restored','quota','batch','tokens','recovery'].includes(phase))throw Error('Expected login, chat or restored phase');
 const browser=await chromium.launch({headless:true,args:['--host-resolver-rules=MAP rakazo.verify.test 127.0.0.1','--no-proxy-server']});
 const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1400,height:1000},...(phase==='login'?{}:{storageState:join(artifacts,'session.json')})});
 await context.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
@@ -20,7 +20,28 @@ try{
   await page.locator('textarea').waitFor();
   const rpc=async(name,json)=>page.evaluate(async({name,json})=>{const r=await fetch('/rpc/'+name,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({json})});return {status:r.status,body:await r.text()};},{name,json});
   const botId=new URL(page.url()).pathname.split('/').filter(Boolean).at(-1);
-  if(phase==='tokens'){
+  if(phase==='recovery'){
+   assert.equal((await rpc('threads/clear',{botId})).status,200);await page.reload();await page.locator('textarea').waitFor();
+   const partial='Recovery rehearsal saved this partial result.';
+   const send=async text=>{await page.locator('textarea').fill(text);await page.getByRole('button',{name:'Send',exact:true}).click();};
+   await send('FAILURE_RECOVERY_REHEARSAL: return a partial answer, then simulate a provider outage.');
+   await page.getByTestId('transcript').getByText(/Recovery rehearsal saved this partial result/).first().waitFor({timeout:30000});
+   await page.getByText(/The free model pool is temporarily unavailable/).first().waitFor({timeout:90000});
+   await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});
+   const snapshot=async()=>{const r=await rpc('threads/get',{botId});assert.equal(r.status,200,r.body);return JSON.parse(r.body).json;};
+   const failed=await snapshot();assert.equal(failed.run.status,'failed');assert.match(failed.run.error,/free_pool_unavailable/);
+   assert.ok(JSON.stringify(failed.messages).includes(partial));assert.equal(failed.activeRuns.length,0);
+   await page.reload();await page.locator('textarea').waitFor();
+   assert.ok((await page.getByTestId('transcript').innerText()).includes(partial));
+   await page.waitForTimeout(5000);
+   const stillFailed=await snapshot();assert.equal(stillFailed.run.id,failed.run.id);assert.equal(stillFailed.run.status,'failed');assert.equal(stillFailed.activeRuns.length,0);
+   const beforeContinue=await page.locator('body').innerText();assert.ok(!beforeContinue.includes('Unexpected automatic retry occurred.'));assert.ok(!beforeContinue.includes('Review changes'));assert.ok(!beforeContinue.includes("couldn't be reached"));
+   await send('Continue after the synthetic outage with a brief greeting.');
+   await page.getByText('Hello! I can help you plan, think through questions and work in the isolated computer.',{exact:true}).last().waitFor({timeout:30000});
+   await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});
+   const continued=await snapshot();assert.notEqual(continued.run.id,failed.run.id);assert.equal(continued.run.status,'completed');assert.ok(JSON.stringify(continued.messages).includes(partial));
+   console.log('A deliberate provider stream cut preserved its actual partial answer across reload, showed the specific error, stayed stopped, and allowed manual continuation.');
+  }else if(phase==='tokens'){
    assert.equal((await rpc('threads/clear',{botId})).status,200);await page.reload();await page.locator('textarea').waitFor();
    await page.locator('textarea').fill('PROVIDER_TOKENS_REHEARSAL: test provider-managed output.');await page.getByRole('button',{name:'Send',exact:true}).click();
    await page.getByTestId('transcript').getByText(/Provider-managed response completed beyond the old buffer/).waitFor({timeout:60000});
@@ -52,6 +73,6 @@ try{
    await page.reload();await page.getByTestId('transcript').getByText(/Fixture preference: completed/).waitFor();
   }else await page.getByTestId('transcript').getByText(/Fixture preference: completed/).waitFor();
   await page.screenshot({path:join(artifacts,'personal-'+phase+'.png'),fullPage:true});await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
-  writeFileSync(join(artifacts,'personal-'+phase+'.json'),JSON.stringify({passed:true,nativeChat:true,syntheticModel:true,productionData:false,approval:true,textUpload:true}));console.log('Native proposal, explicit approval, upload restriction and persisted chat passed ('+phase+').');
+  writeFileSync(join(artifacts,'personal-'+phase+'.json'),JSON.stringify({passed:true,nativeChat:true,syntheticModel:true,productionData:false,approval:['chat','batch','restored'].includes(phase),textUpload:phase==='chat',failureRecovery:phase==='recovery'}));console.log('Disposable native browser phase passed ('+phase+').');
  }
 }catch(e){await page.screenshot({path:join(artifacts,'personal-failure.png'),fullPage:true}).catch(()=>{});throw e;}finally{await browser.close();}

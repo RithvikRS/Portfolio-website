@@ -1,13 +1,21 @@
 import http from 'node:http';
 if(process.env.VERIFY_RAKAZO_DISPOSABLE!=='1')throw Error('Disposable fixture only');
-let calls=0,tools=0,stops=0,rehearsalCalls=0;
+let calls=0,tools=0,stops=0,rehearsalCalls=0,recoveryCalls=0;
 const body=async req=>{let s='';for await(const c of req){s+=c;if(s.length>150000)throw Error();}return JSON.parse(s||'{}');};
 http.createServer(async(req,res)=>{
- if(req.url==='/stats'){res.end(JSON.stringify({calls,tools,stops}));return;}
+ if(req.url==='/stats'){res.end(JSON.stringify({calls,tools,stops,recoveryCalls}));return;}
  if(req.url!=='/v1/chat/completions'){res.writeHead(404);res.end();return;}
  const input=await body(req);calls++;
  if(input.model!=='agent-free'||['max_tokens','max_completion_tokens','max_output_tokens'].some(k=>k in input)){res.writeHead(400);res.end();return;}
  const prompt=JSON.stringify(input.messages.filter(m=>m.role==='user').at(-1)?.content);
+ if(prompt.includes('FAILURE_RECOVERY_REHEARSAL')){
+  recoveryCalls++;
+  res.writeHead(200,{'Content-Type':'text/event-stream','x-omniroute-provider':'fixture-cut','x-omniroute-model':'model-cut'});
+  if(recoveryCalls>1){res.end('data: '+JSON.stringify({choices:[{index:0,delta:{role:'assistant',content:'Unexpected automatic retry occurred.'},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');return;}
+  res.write('data: '+JSON.stringify({choices:[{index:0,delta:{role:'assistant',content:'Recovery rehearsal saved this partial result.\n\n'},finish_reason:null}]})+'\n\n');
+  // Deliberately cut a real HTTP response after a visible chunk; never emit tools or writes.
+  setTimeout(()=>res.destroy(),500);return;
+ }
  if(prompt.includes('QUOTA_REHEARSAL')){res.writeHead(429,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:'Token limit exceeded for account: 500001/500000 tokens used in the current window.',code:'token_limit_exceeded',reset_at:'2099-11-22T00:00:00.000Z',retry_after:3600}}));return;}
  if(prompt.includes('BATCH_APPROVAL_REHEARSAL')){
   const count=input.messages.filter(m=>m.role==='tool').length;

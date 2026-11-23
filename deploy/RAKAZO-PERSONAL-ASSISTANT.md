@@ -92,7 +92,7 @@ Outline and ntfy connections are separate from the Rakazo login grant. New membe
 
 A member without a connector can still chat, research and use personal workspace files/memory. Outline and reminders report that the connection is missing. Removing a login grant does not erase data or revoke an external API key; revoke external credentials separately during offboarding.
 
-Each native computer receives a user-and-workspace-specific home and supervisor identity. The shared maintenance desktop stays owner-only. Computer homes are disposable and share the bounded runtime filesystem; save important results to the backed-up application workspace. One computer can run at a time across this small host. CPU/RAM/PID and network isolation remain active.
+Each native computer receives a user-and-workspace-specific home and supervisor identity. The shared maintenance desktop stays owner-only. Computer homes are disposable and share the bounded runtime filesystem; save important results to the backed-up application workspace. One computer can run at a time across this small host. Stop the owner maintenance desktop before starting a chat computer task. A busy computer does not grant another user access to it. CPU/RAM/PID and network isolation remain active.
 
 ## Acceptance checklist
 
