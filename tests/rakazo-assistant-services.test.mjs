@@ -60,7 +60,7 @@ test('restart and file restore preserve memory while refusing replay of uncertai
 });
 test('revoked owner access blocks approvals and scheduled notifications',async()=>{
  const st=new AssistantStore(':memory:');let sent=0;const api=new AssistantServices(st,config,{fetcher:async url=>{if(url.includes('authorize-rakazo'))return new Response(null,{status:403});sent++;return new Response('{}');}});
- const p=await api.call(s,'memory_save',{title:'no',body:'no'});await assert.rejects(api.approve(s,p.id),/disabled/);await assert.rejects(api.notify({title:'a',body:'b'},AbortSignal.timeout(1000)),/disabled/);assert.equal(sent,0);assert.equal(st.list(s,'memory').length,0);st.close();
+ const p=await api.call(s,'memory_save',{title:'no',body:'no'});await assert.rejects(api.approve(s,p.id),/disabled/);await assert.rejects(api.notify({...s,id:'fixture',title:'a',body:'b'},AbortSignal.timeout(1000)),/disabled/);assert.equal(sent,0);assert.equal(st.list(s,'memory').length,0);st.close();
 });
 
 test('private HTTP bridge requires its own credential and rejects model-driven approval',async()=>{
@@ -125,4 +125,31 @@ test('Stop between batch writes prevents subsequent changes',async()=>{
  for(let i=0;i<3;i++)await api.call(s,'memory_save',{title:'Item '+i,body:'synthetic'});st.review(s);
  const abort=new AbortController(),original=api.approve.bind(api);api.approve=async(...args)=>{const result=await original(...args);abort.abort();return result;};
  await assert.rejects(api.decide({...s,run:'decision'},'approve all',abort.signal));assert.equal(st.list(s,'memory').length,1);st.close();
+});
+
+
+test('granted users have isolated memory, approvals, Stop and credentials',async()=>{
+ const st=new AssistantStore(':memory:');const seen=[];
+ const cfg={...config,multiUser:true,users:{alice:{email:'alice@example.test',outline:{token:'alice-token'},ntfy:{authorization:'Bearer alice',topic:'alice-private'}}}};
+ const api=new AssistantServices(st,cfg,{fetcher:async(url,o)=>{seen.push({url,auth:o?.headers?.Authorization,email:o?.headers?.['X-Rakazo-Email']});if(url.includes('authorize-rakazo'))return new Response(null,{status:204});return Response.json({ok:true,data:{id:'doc',title:'Alice',text:'Private'}});}});
+ const alice={...s,user:'alice',email:'alice@example.test'},bob={...s,user:'bob',email:'bob@example.test'};
+ try{
+  st.put(alice,'memory',{title:'Private',body:'Alice only'});assert.equal((await api.call(bob,'memory_list',{})).length,0);
+  const p=await api.call(alice,'memory_save',{title:'Next',body:'Alice'});await assert.rejects(api.approve(bob,p.id),/Approval missing/);
+  st.cancelRun(bob);assert.equal(st.cancelled(alice),false);await api.approve(alice,p.id);
+  await api.call(alice,'outline_read',{id:'doc'});assert.ok(seen.some(x=>x.auth==='Bearer alice-token'));
+  await assert.rejects(api.call({...bob,run:'new'},'outline_read',{id:'doc'}),/not connected/);
+  const status=await api.call({...bob,run:'new'},'integration_status',{});assert.equal(status.outline,false);assert.equal(status.notifications,false);assert.match(status.google,/No Google access/);
+  await assert.rejects(api.call({...alice,email:'changed@example.test'},'outline_read',{id:'doc'}),/not connected/);
+  assert.equal(seen.some(x=>x.auth==='Bearer fixture'),false);
+ }finally{st.close();}
+});
+
+test('each reminder rechecks its own directory identity and uses its own topic',async()=>{
+ const st=new AssistantStore(':memory:');let permitted=true;const deliveries=[];
+ const api=new AssistantServices(st,{...config,multiUser:true,users:{alice:{email:'alice@example.test',ntfy:{authorization:'Bearer alice',topic:'alice-private'}}}},{fetcher:async(url,o)=>{
+  if(url.includes('authorize-rakazo')){assert.equal(o.headers['X-Rakazo-Email'],'alice@example.test');return new Response(null,{status:permitted?204:403});}
+  deliveries.push({url,auth:o.headers.Authorization});return new Response('ok');
+ }});
+ try{const reminder={...s,user:'alice',id:'fixture',title:'Break',body:'Walk'};await api.notify(reminder);assert.deepEqual(deliveries,[{url:'https://ntfy.144.24.135.201.sslip.io/alice-private',auth:'Bearer alice'}]);permitted=false;await assert.rejects(api.notify(reminder),/disabled/);assert.equal(deliveries.length,1);}finally{st.close();}
 });

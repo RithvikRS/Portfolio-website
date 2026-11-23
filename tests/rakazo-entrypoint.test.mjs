@@ -14,3 +14,16 @@ test('API startup pins runtime limits consistently even with stale deployment en
  assert.ok(Number(env.MODEL_STREAM_TIMEOUT_MS)>=61000+55000);assert.ok(Number(env.MODEL_STREAM_IDLE_TIMEOUT_MS)>=61000+55000);
  assert.equal(env.WORKSPACE_ONLY,'true');assert.equal(env.SANDBOX_PROVIDER,'none');assert.equal(env.AUTH_PASSWORD_ENABLED,'false');assert.equal(env.MODEL_STREAM_MAX_RETRIES,'0');
 });
+
+
+test('multi-user admission is opt-in and cannot enable public signup',()=>{
+ const entry=readFileSync(new URL('../deploy/rakazo/entrypoint.mjs',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'');
+ for (const flag of [undefined,'false','true','1']) {
+  const env=flag===undefined?{}:{MULTI_USER_ASSISTANT:flag};
+  const run=()=>vm.runInNewContext(entry,{readFileSync:()=> 'private-owner@example.test',spawn:()=>({on(){},kill(){}}),process:{argv:['node','entrypoint.mjs','api'],env,execPath:'node',on(){}},console});
+  if(flag==='1') {assert.throws(run,/MULTI_USER_ASSISTANT/);continue;}
+  run();assert.equal(env.MULTI_USER_ASSISTANT,flag==='true'?'true':'false');
+  assert.equal(env.SIGNUP_ALLOWLIST,'private-owner@example.test');
+  assert.equal(env.AUTH_PASSWORD_ENABLED,'false');assert.equal(env.OIDC_ALLOW_SIGNUP_BYPASS,'false');
+ }
+});

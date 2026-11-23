@@ -107,3 +107,12 @@ Include `/srv/swarm/rakazo_api/native-assistant.sqlite` with the API data and na
 ## Personal assistant state
 
 Include `/srv/swarm/rakazo_assistant` in the coordinated Ampere snapshot. Pause `portfolio_rakazo_assistant` alongside other writers so its SQLite memories, documents, approvals and reminders form a consistent snapshot. Preserve the manager's `.secrets/rakazo/assistant_config` and `assistant_token` with the encrypted recovery material. After restore, interrupted notifications remain paused and executing approvals remain uncertain; review them in chat instead of replaying writes. See [personal assistant limits and recovery](RAKAZO-PERSONAL-ASSISTANT.md).
+
+
+## Granted-user Rakazo recovery
+
+Keep the user directory, Rakazo OIDC secrets/configuration, native PostgreSQL data, API ledger and assistant SQLite/configuration in the same cluster recovery set. The assistant configuration includes per-user connector bindings; do not restore it from another account or a mismatched database snapshot.
+
+The private worker helper includes `/var/lib/rakazo-pilot/family-homes-migration.json` when present. Its `/etc` snapshot covers the all-homes mount and user-service drop-in. Keep this record to roll back the controller contract with a pre-migration application release. The 8 GiB runtime cache and all computer homes remain disposable exclusions; application workspace files and assistant imports have separate durable coverage.
+
+After restoration, review grants and disabled accounts before opening access: an older directory snapshot may predate an offboarding change. Recheck two-user isolation and connector ownership. Do not automatically resume interrupted tasks, uncertain approvals or paused reminder deliveries. Use the [scoped-controller rollback instructions](RAKAZO-WORKSPACE-VERIFY.md#roll-back-across-the-first-multi-user-release) when restoring an older API.

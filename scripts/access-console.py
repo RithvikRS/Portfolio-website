@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 
 DIRECTORY = Path("/directory/users.yml")
 BASE = "/admin/access/"
-SERVICES = {"notes": "Outline notes", "vault": "Password vault"}
+SERVICES = {"notes": "Outline notes", "vault": "Password vault", "rakazo": "Rakazo assistant"}
 OWNER = os.environ.get("OWNER", "rithvik")
 ORIGIN = os.environ.get("ORIGIN", "https://rithvik.ddns.net")
 esc = html.escape
@@ -80,6 +80,8 @@ def navigation(owner, groups, current):
         workspace.append(("Service access", BASE))
     workspace.append(("User guide", GUIDE))
     personal = [(title, "/" + key) for key, title in [("notes", "Outline"), ("vault", "Vaultwarden")] if owner or key in groups]
+    if not owner and "rakazo" in groups:
+        personal.append(("Rakazo", "/rakazo"))
     sections = [("Workspace", workspace), ("Personal tools", personal)]
     if owner:
         sections.append(("Administration", [("Rakazo", "/rakazo"), ("OmniRoute", "/models"), ("Uptime Kuma", "/uptime"), ("Portainer", "/portainer/"), ("Fieldnotes", "/admin/notes/")]))
@@ -106,6 +108,8 @@ def guide(groups, owner):
         parts.append('<section class="panel"><h2>Outline notes</h2><p>Open <a href="/notes">Outline</a> and choose Authelia. Create a document in your Personal space for a private note. To collaborate, open the document, choose Share, select the person, and choose view or edit. Check the collection permissions before adding a shared document.</p></section>')
     if owner or "vault" in groups:
         parts.append('<section class="panel"><h2>Password vault</h2><p>Open <a href="/vault">Vaultwarden</a>, enter the email assigned to your workspace account and choose single sign-on. On your first visit, set your own master password. Use <strong>Lock now</strong> when you want to unlock the vault again on the same device. Keep your master password private.</p></section>')
+    if owner or "rakazo" in groups:
+        parts.append('<section class="panel"><h2>Rakazo assistant</h2><p>Open <a href="/rakazo">Rakazo</a> and choose Authelia. Use your own workspace for chats, files, memories and reminders. Review proposed changes in chat: approve all, approve selected numbers, or reject them. Use Stop to end active work. Ask the owner to grant access if Rakazo is missing from your dashboard.</p><p>Outline and notifications need a connection assigned to your account. Google connections are not enabled yet; each person will connect and choose their own Google accounts when that integration is available. Never put passwords or provider keys in chat.</p></section>')
     if owner:
         parts.append('<section class="panel"><h2>Administrator tools</h2><p>Open <a href="/admin/access/">Service access</a> to create a member or edit their grants. Use <a href="/models">OmniRoute</a> for provider keys and model routing, <a href="/uptime">Kuma</a> for monitoring, <a href="/portainer/">Portainer</a> for containers and <a href="/admin/notes/">Fieldnotes</a> for public writing.</p></section>')
     parts.append('<section class="panel"><h2>Sign out or get help</h2><p>Use Log out inside a service to return to your dashboard. On a shared device, also sign out of the dashboard and close the browser. If you lose access to your authenticator, contact the workspace owner privately.</p></section>')
@@ -175,6 +179,25 @@ def rakazo_owner_allowed(directory, email):
         return False
 
 
+def rakazo_member_allowed(directory, email):
+    """Recheck an OIDC-verified email against the current unique service grant."""
+    if not isinstance(email, str) or not email or len(email) > 254:
+        return False
+    try:
+        users = json.loads(directory.read_text(encoding="utf-8"))["users"]
+        matches = [(name, user) for name, user in users.items()
+                   if user.get("email", "").casefold() == email.casefold()]
+        if len(matches) != 1:
+            return False
+        name, user = matches[0]
+        groups = user.get("groups", [])
+        if user.get("disabled", False) or not isinstance(groups, list):
+            return False
+        return (name == OWNER and "admins" in groups) or (name != OWNER and "rakazo" in groups)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -199,10 +222,12 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get("Remote-User") == OWNER and "admins" in self.headers.get("Remote-Groups","").split(",")
 
     def do_GET(self):
-        if self.path in ("/internal/authorize-models", "/internal/authorize-rakazo"):
-            allowed = (rakazo_owner_allowed(DIRECTORY, self.headers.get("X-Rakazo-Email", ""))
-                       if self.path == "/internal/authorize-rakazo" else
-                       model_admin_allowed(DIRECTORY, self.headers.get("X-Models-Email", "")))
+        if self.path in ("/internal/authorize-models", "/internal/authorize-rakazo", "/internal/authorize-rakazo-owner"):
+            if self.path == "/internal/authorize-models":
+                allowed = model_admin_allowed(DIRECTORY, self.headers.get("X-Models-Email", ""))
+            else:
+                authorize = rakazo_owner_allowed if self.path.endswith("-owner") else rakazo_member_allowed
+                allowed = authorize(DIRECTORY, self.headers.get("X-Rakazo-Email", ""))
             self.send_response(204 if allowed else 403)
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", "0")

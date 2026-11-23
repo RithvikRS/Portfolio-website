@@ -15,6 +15,26 @@ def bridge(path,method='GET'):
     result=subprocess.run(['curl','-sS','--max-time','60','--unix-socket',str(BASE/'bridge/bridge.sock'),'-X',method,'-w','\n%{http_code}','http://pilot'+path],capture_output=True,text=True,check=True)
     body,status=result.stdout.rsplit('\n',1)
     return int(status),body
+def verify_bounded_home():
+    cache=BASE/'engine/cache'
+    homes=BASE/'workspaces/homes'
+    home=homes/'pilot-owner'
+    image=Path('/srv/swarm/.rakazo-runtime-cache.img')
+    assert os.path.ismount(cache), 'Dedicated cache is not mounted'
+    assert image.stat().st_size==8*1024**3, 'Unexpected cache image size'
+    device=subprocess.check_output(['findmnt','-n','-o','SOURCE','--target',str(cache)],text=True).strip()
+    backing=subprocess.check_output(['losetup','-n','-O','BACK-FILE',device],text=True).strip()
+    assert Path(backing).resolve()==image.resolve(), 'Cache does not use approved loop image'
+    if os.path.ismount(homes):
+        expected=cache/'family-homes'
+        assert (homes.stat().st_dev,homes.stat().st_ino)==(expected.stat().st_dev,expected.stat().st_ino), 'Unexpected parent homes bind'
+        expected=expected/'pilot-owner'
+    else:
+        assert os.path.ismount(home), 'Legacy pilot home is not mounted'
+        expected=cache/'pilot-home'
+    assert (home.stat().st_dev,home.stat().st_ino)==(expected.stat().st_dev,expected.stat().st_ino), 'Home does not use bounded storage'
+    assert home.stat().st_dev==cache.stat().st_dev, 'Home is outside cache filesystem'
+
 def main():
     if os.geteuid()!=0:raise SystemExit('Run as root on Ampere')
     info=json.loads(docker('inspect','rakazo-bot-pilot-owner'))[0]
@@ -41,7 +61,7 @@ def main():
     code="import socket,json; out={};\nfor ip in ['169.254.169.254','10.0.0.249','10.0.0.13','10.0.0.47','144.24.135.201','129.154.45.198','129.225.69.240','1.1.1.1']:\n try:s=socket.create_connection((ip,443),1);s.close();out[ip]=False\n except OSError:out[ip]=True\nprint(json.dumps(out))"
     denied=json.loads(docker('exec','rakazo-bot-pilot-owner','python3','-c',code));assert all(denied.values())
     assert docker('exec','rakazo-bot-pilot-owner','sh','-c','test ! -e /var/run/docker.sock && test ! -e /opt/portfolio/.secrets && echo isolated').strip()=='isolated'
-    assert subprocess.check_output(['findmnt','-no','SOURCE',str(BASE/'workspaces/homes/pilot-owner')],text=True).strip().endswith('[/pilot-home]')
+    verify_bounded_home()
     assert (BASE/'bridge/bridge.sock').stat().st_mode & 0o777 == 0o600
     report={'time_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'ceilings':ceilings,'read_only_root':True,'unprivileged_guest':True,'screen_websocket_and_framebuffer':True,'model_and_agent_routes_disabled':True,'denied_destinations':denied,'production_mounts_absent':True,'home_in_bounded_cache':True,'private_socket_mode':'0600','admission':json.loads((BASE/'admission-verification.json').read_text())}
     assert report['admission']['admission']['reason']=='One-computer pilot limit reached'

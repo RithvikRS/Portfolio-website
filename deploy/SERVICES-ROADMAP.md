@@ -120,15 +120,15 @@ References: [OmniRoute](https://github.com/cheaper-inference/OmniRoute), [OpenRo
 
 ## Phase 6: Rakazo pilot and shared use
 
-Start with the [restricted runtime pilot and its isolation gates](RAKAZO.md). Rootless gVisor passed the offline ARM64 computer-image checks after the Incus confinement probe failed. Use the native owner-only chat integration with the free-only pool, persistent quotas and Stop controls. Keep external integrations and scheduled execution disabled until their separate boundaries are tested.
+Start with the [restricted runtime pilot and its isolation gates](RAKAZO.md). Rootless gVisor passed the offline ARM64 computer-image checks after the Incus confinement probe failed. Use the native chat integration with the free-only pool, explicit user grants, isolated homes and Stop controls. Keep provider-managed usage without local token/task quotas. Approved connector operations and reminders have separate safeguards; autonomous model jobs stay disabled.
 
 Run Rakazo application services on Ampere after validating its selected release, ARM images, Swarm adaptation, PostgreSQL persistence, and backup coverage. Its supported PostgreSQL dependency remains separate from the trading app's Oracle decision.
 
 Use native Authelia OIDC and an explicit admitted-user group/registration policy. Test SSO-only login and email/identity claims with the actual versions. Give each family member or friend an individual account and workspace. Start with two users before expanding.
 
-Separate agent execution from production administration. Do not give general-purpose agents the production Docker socket, manager SSH keys, or financial database credentials. Keep execution in the dedicated rootless gVisor engine on Ampere; sharing an overlay network alone is not a security boundary against host Docker access. Allocate separate computer homes and identities before multi-user admission.
+Separate agent execution from production administration. Do not give general-purpose agents the production Docker socket, manager SSH keys, or financial database credentials. Keep execution in the dedicated rootless gVisor engine on Ampere; sharing an overlay network alone is not a security boundary against host Docker access. Use the separate user/workspace computer homes and identities for every admitted member.
 
-Start with read-only research or repository summaries. Decide who supplies model keys, who pays, and how usage, concurrent agents, disk, and runtime are limited. Verify which limits the selected release actually enforces. Test that users cannot access each other's private agents/files/credentials and that account deactivation stops existing sessions and scheduled work.
+Start with read-only research or repository summaries. Use the centrally managed free-only provider pool. Keep concurrency, disk and computer-resource bounds without adding local token or task-duration caps. Verify which limits the selected release actually enforces. Test that users cannot access each other's private agents/files/credentials and that account deactivation stops existing sessions and scheduled work.
 
 Done when one useful scheduled workflow works for each of two isolated users with bounded resource use and successful recovery.
 
@@ -171,6 +171,8 @@ Verify current versions, licensing, free quotas, and tenancy availability before
 
 ## Rakazo native assistant status
 
-Use Rakazo's existing chat UI for general conversation and bounded shell work through the free-only pool. The separate note-assistant service and screen are retired; existing notes remain. Keep the current owner-only Authelia policy. The computer is offline and its home remains disposable.
+Use Rakazo's existing chat for conversation, public web research, memory, explicitly uploaded documents, approved Outline changes and reminders. The separate note-assistant screen is retired. The computer is offline; per-user/workspace homes are isolated but disposable.
 
-Next, verify production owner chat and Stop, then add separately tested capabilities such as public web research and durable sandbox storage. Before sharing access, implement per-user computer homes, service grants, pool budgets and cross-user isolation/revocation tests. Native workspace ownership and user-keyed quota records provide part of that foundation; the current fixed owner computer is not ready for multiple people. See [the native assistant runbook](RAKAZO.md#native-chat-limits-and-stop).
+Grant Rakazo explicitly through Service access after the release checks pass. Keep MFA, current-directory authorization, scoped Stop, approvals, free-only routing and resource isolation. Do not add local token, daily usage or task-duration caps. Members need their own private Outline/notification connections; the owner credentials are not inherited.
+
+Finish acceptance tests, safe failure recovery and the private cluster backup before inviting members. Google is the next deferred integration: each user connects their own account or accounts, with account-specific consent, scopes and revocation. Keep the trading app last in its separate repository. See [the assistant runbook](RAKAZO-PERSONAL-ASSISTANT.md).

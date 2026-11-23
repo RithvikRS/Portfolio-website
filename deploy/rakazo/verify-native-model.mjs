@@ -1,13 +1,23 @@
 import http from 'node:http';
 if(process.env.VERIFY_RAKAZO_DISPOSABLE!=='1')throw Error('Disposable fixture only');
-let calls=0,tools=0,stops=0,rehearsalCalls=0;
+let calls=0,tools=0,stops=0,rehearsalCalls=0,recoveryCalls=0;
 const body=async req=>{let s='';for await(const c of req){s+=c;if(s.length>150000)throw Error();}return JSON.parse(s||'{}');};
 http.createServer(async(req,res)=>{
- if(req.url==='/stats'){res.end(JSON.stringify({calls,tools,stops}));return;}
+ if(req.url==='/stats'){res.end(JSON.stringify({calls,tools,stops,recoveryCalls}));return;}
  if(req.url!=='/v1/chat/completions'){res.writeHead(404);res.end();return;}
  const input=await body(req);calls++;
  if(input.model!=='agent-free'||['max_tokens','max_completion_tokens','max_output_tokens'].some(k=>k in input)){res.writeHead(400);res.end();return;}
  const prompt=JSON.stringify(input.messages.filter(m=>m.role==='user').at(-1)?.content);
+ if(prompt.includes('FAILURE_RECOVERY_REHEARSAL')){
+  recoveryCalls++;
+  if(recoveryCalls===2){res.writeHead(503,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{code:'fixture_provider_unavailable',message:'Synthetic provider outage after completed progress'}}));return;}
+  res.writeHead(200,{'Content-Type':'text/event-stream','x-omniroute-provider':'fixture-recovery','x-omniroute-model':'model-recovery'});
+  if(recoveryCalls>2){res.end('data: '+JSON.stringify({choices:[{index:0,delta:{role:'assistant',content:'Unexpected automatic retry occurred.'},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');return;}
+  // Complete one model turn and read-only tool before failing the following model call.
+  // Completed visible progress must survive; unfinished/unemitted stream chunks are not promised.
+  const delta={role:'assistant',content:'Recovery rehearsal saved this partial result.\n\n',tool_calls:[{index:0,id:'recovery-readonly',type:'function',function:{name:'sandbox_shell',arguments:JSON.stringify({command:'echo recovery_readonly_probe'})}}]};
+  res.end('data: '+JSON.stringify({choices:[{index:0,delta,finish_reason:null}]})+'\n\ndata: '+JSON.stringify({choices:[{index:0,delta:{},finish_reason:'tool_calls'}]})+'\n\ndata: [DONE]\n\n');return;
+ }
  if(prompt.includes('QUOTA_REHEARSAL')){res.writeHead(429,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:'Token limit exceeded for account: 500001/500000 tokens used in the current window.',code:'token_limit_exceeded',reset_at:'2099-11-22T00:00:00.000Z',retry_after:3600}}));return;}
  if(prompt.includes('BATCH_APPROVAL_REHEARSAL')){
   const count=input.messages.filter(m=>m.role==='tool').length;
@@ -44,4 +54,4 @@ http.createServer(async(req,res)=>{
  const delta=tool?{role:'assistant',tool_calls:[{index:0,id:'test-call',type:'function',function:personal?{name:'personal_assistant',arguments:JSON.stringify({action:'memory_save',data:{title:'Fixture preference',body:'Use TypeScript examples'}})}:{name:'sandbox_shell',arguments:'{"command":"python3 -c \\\"print(17+25)\\\""}'}}]}:{role:'assistant',content:hasResult?'The isolated calculation returned 42.':'Hello! I can help you plan, think through questions and work in the isolated computer.'};
  res.end('data: '+JSON.stringify({id:'test-completion',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta,finish_reason:null}]})+'\n\ndata: '+JSON.stringify({id:'test-completion',object:'chat.completion.chunk',model:'agent-free',choices:[{index:0,delta:{},finish_reason:tool?'tool_calls':'stop'}],usage:{prompt_tokens:10,completion_tokens:10,total_tokens:20}})+'\n\ndata: [DONE]\n\n');
 }).listen(20128,'0.0.0.0');
-http.createServer(async(req,res)=>{if(req.url==='/internal/authorize-rakazo'){res.writeHead(204);res.end();return;}const input=await body(req);if(req.url==='/agent/exec'&&input.runId&&input.userId&&input.spaceId){tools++;res.end(JSON.stringify({result:'42'}));}else if(req.url==='/agent/stop'){stops++;res.end('{"stopped":true}');}else{res.writeHead(404);res.end();}}).listen(8080,'0.0.0.0');
+http.createServer(async(req,res)=>{if(req.url==='/internal/authorize-rakazo'){res.writeHead(req.headers['x-rakazo-email']==='owner@example.test'?204:403);res.end();return;}const input=await body(req);if(req.url==='/agent/exec'&&input.runId&&input.userId&&input.spaceId){tools++;res.end(JSON.stringify({result:'42'}));}else if(req.url==='/agent/stop'){stops++;res.end('{"stopped":true}');}else{res.writeHead(404);res.end();}}).listen(8080,'0.0.0.0');

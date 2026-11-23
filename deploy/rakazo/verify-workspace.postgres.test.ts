@@ -1,7 +1,8 @@
 /** Disposable staging only. Copy to /app/apps/api/src; never ship or run against production.
  * Requires an empty migrated DB named rakazo_workspace_verify_* and separate runtime/owner URLs.
  * Run: VERIFY_RAKAZO_DISPOSABLE=1 pnpm exec vitest run apps/api/src/verify-workspace.postgres.test.ts --maxWorkers=1
- * The only emulated boundary is HTTPS OIDC transport: genuine PKCE, signed ID tokens, auth sessions,
+ * Emulated boundaries: HTTPS OIDC transport, the private grant directory and assistant file import.
+ * Genuine PKCE, signed ID tokens, auth sessions,
  * tenant middleware, RPC handlers, encryption and persistence execute against the real API/DB.
  */
 import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
@@ -14,7 +15,17 @@ const { Pool } = createRequire(new URL("../../../packages/db/package.json", impo
 import { expect, it, vi } from "vitest";
 import { createApp, type AppHandles } from "./app.js";
 
-it("admits only verified owner OIDC and persists inert workspaces without any execution", async () => {
+const imports = vi.hoisted(() => [] as Array<{scope: Record<string,string>; data: Record<string,unknown>}>);
+vi.mock("./native-assistant.js", async (original) => {
+  const actual = await original<typeof import("./native-assistant.js")>();
+  return {...actual, assistantCall: async (path: string, scope: Record<string,string>, data: Record<string,unknown>) => {
+    if (path !== "/import") throw new Error("Only the disposable file-import boundary is emulated");
+    imports.push({scope,data});
+    return {ok:true};
+  }};
+});
+
+it("isolates verified directory users and revokes access with real PostgreSQL persistence", async () => {
   if (process.env.VERIFY_RAKAZO_DISPOSABLE !== "1") throw new Error("Explicit disposable staging opt-in required");
   const runtimeUrl = process.env.DATABASE_URL!;
   const ownerUrl = process.env.DATABASE_MIGRATION_URL!;
@@ -45,6 +56,9 @@ it("admits only verified owner OIDC and persists inert workspaces without any ex
   const jwk = { ...publicKey.export({ format: "jwk" }), kid: "disposable", alg: "RS256", use: "sig" };
   const codes = new Map<string, { nonce: string; challenge: string; claims: Record<string, unknown> }>();
   let nonIssuerRequests = 0;
+  let directoryChecks = 0;
+  const grants = new Set([email]);
+  imports.length = 0;
   let userInfoClaims: Record<string,unknown> = {};
   let handles: AppHandles | undefined;
   const jwt = (claims: Record<string, unknown>) => {
@@ -55,6 +69,12 @@ it("admits only verified owner OIDC and persists inert workspaces without any ex
   };
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.href === "http://access_console:8080/internal/authorize-rakazo") {
+      directoryChecks++;
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+      const currentEmail = headers.get("X-Rakazo-Email") ?? "";
+      return new Response(null, {status:grants.has(currentEmail)?204:403});
+    }
     if (url.origin !== issuer) { nonIssuerRequests++; throw new Error("Provider/network request forbidden in workspace verification"); }
     if (url.pathname.endsWith("openid-configuration")) return Response.json({ issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, userinfo_endpoint: `${issuer}/userinfo`, jwks_uri: `${issuer}/jwks`, id_token_signing_alg_values_supported: ["RS256"] });
     if (url.pathname === "/userinfo") return Response.json(userInfoClaims);
@@ -69,7 +89,7 @@ it("admits only verified owner OIDC and persists inert workspaces without any ex
     }
     throw new Error("Unexpected OIDC endpoint");
   });
-  for (const [key,value] of Object.entries({ WORKSPACE_ONLY:"true", SIGNUP_ALLOWLIST:email, SIGNUPS_ENABLED:"true", AUTH_PASSWORD_ENABLED:"false", OIDC_ISSUER:issuer, OIDC_CLIENT_ID:"disposable-client", OIDC_CLIENT_SECRET:secret, OIDC_ALLOW_SIGNUP_BYPASS:"false", BETTER_AUTH_URL:origin, WEB_ORIGIN:origin, API_URL:origin, BETTER_AUTH_SECRET:randomBytes(32).toString("hex"), ENCRYPTION_KEY:randomBytes(32).toString("hex"), SCREEN_PROXY_SECRET:randomBytes(32).toString("hex"), SECRET_STORE:"encrypted", CONTENT_ENCRYPTION:"on", MASTER_KEY_PROVIDER:"local", EMAIL_PROVIDER:"none", SANDBOX_PROVIDER:"none", CLOUD_AGENT_PROVIDER:"none", USER_DEVICES_ENABLED:"false", WAKEUP_DRIVER:"graphile", NODE_ENV:"test" })) vi.stubEnv(key,value);
+  for (const [key,value] of Object.entries({ WORKSPACE_ONLY:"true", MULTI_USER_ASSISTANT:"true", NATIVE_ASSISTANT:"false", PERSONAL_ASSISTANT:"false", SIGNUP_ALLOWLIST:email, SIGNUPS_ENABLED:"true", AUTH_PASSWORD_ENABLED:"false", OIDC_ISSUER:issuer, OIDC_CLIENT_ID:"disposable-client", OIDC_CLIENT_SECRET:secret, OIDC_ALLOW_SIGNUP_BYPASS:"false", BETTER_AUTH_URL:origin, WEB_ORIGIN:origin, API_URL:origin, BETTER_AUTH_SECRET:randomBytes(32).toString("hex"), ENCRYPTION_KEY:randomBytes(32).toString("hex"), SCREEN_PROXY_SECRET:randomBytes(32).toString("hex"), SECRET_STORE:"encrypted", CONTENT_ENCRYPTION:"on", MASTER_KEY_PROVIDER:"local", EMAIL_PROVIDER:"none", SANDBOX_PROVIDER:"none", CLOUD_AGENT_PROVIDER:"none", USER_DEVICES_ENABLED:"false", WAKEUP_DRIVER:"graphile", NODE_ENV:"test" })) vi.stubEnv(key,value);
   try {
     handles = await createApp({ dataDir });
     expect((await handles.app.request("/ready")).status).toBe(200);
@@ -123,12 +143,76 @@ it("admits only verified owner OIDC and persists inert workspaces without any ex
     for (const {tablename} of jobTables.rows) expect((await ownerDb.query(`SELECT count(*)::int AS count FROM graphile_worker.${tablename}`)).rows[0].count).toBe(0);
     expect(nonIssuerRequests).toBe(0);
     expect((await ownerDb.query('SELECT count(*)::int AS count FROM "user"')).rows[0].count).toBe(1);
+    // Exercise a second real identity outside the private owner allowlist, without creating
+    // any provider credentials or starting the model runtime. The directory is the only grant.
+    const memberEmail="member@example.test";
+    grants.add(memberEmail);
+    const unverifiedMember=await login(memberEmail,false);
+    expect((await rpc("me",unverifiedMember)).status).toBe(401);
+    const memberJar=await login(memberEmail,true);
+    await value(await rpc("me",memberJar));
+    const memberSpace=await value(await rpc("spaces/create",memberJar,{name:"Member private workspace"}));
+    const memberBot=await value(await rpc("bots/create",memberJar,{name:"Member private profile",instructions:"Private to member"},memberSpace.id));
+    expect(memberSpace.id).not.toBe(space.id);
+    expect(memberBot.id).not.toBe(bot.id);
+    expect(JSON.stringify(await value(await rpc("spaces/list",memberJar)))).not.toContain(space.id);
+    expect(JSON.stringify(await value(await rpc("spaces/list",jar)))).not.toContain(memberSpace.id);
+    const ownerHead=await value(await rpc("threads/head",jar,{botId:bot.id},space.id));
+    const memberHead=await value(await rpc("threads/head",memberJar,{botId:memberBot.id},memberSpace.id));
+    expect(ownerHead.threadId).not.toBe(memberHead.threadId);
+    await value(await rpc("threads/get",memberJar,{botId:memberBot.id},memberSpace.id));
+    const denied=async (response:Response) => expect([401,403,404],await response.clone().text()).toContain(response.status);
+    for (const [caller,ownSpace,otherSpace,otherBot] of [[jar,space.id,memberSpace.id,memberBot.id],[memberJar,memberSpace.id,space.id,bot.id]] as const) {
+      await denied(await rpc("bots/get",caller,{botId:otherBot},ownSpace));
+      await denied(await rpc("bots/get",caller,{botId:otherBot},otherSpace));
+      await denied(await rpc("threads/get",caller,{botId:otherBot},ownSpace));
+      await denied(await rpc("threads/messages",caller,{botId:otherBot},otherSpace));
+    }
+    // Enable only native route dispatch for file admission. The app above still holds the
+    // disabled runtime/jobs; the mocked import boundary records the production handler's scope.
+    vi.stubEnv("NATIVE_ASSISTANT","true");
+    vi.stubEnv("PERSONAL_ASSISTANT","true");
+    const upload = (botId:string, body:string) => ({botId,name:"private.txt",mimeType:"text/plain",contentBase64:Buffer.from(body).toString("base64")});
+    const ownerFile=await value(await rpc("artifacts/create",jar,upload(bot.id,"Owner private file"),space.id));
+    const memberFile=await value(await rpc("artifacts/create",memberJar,upload(memberBot.id,"Member private file"),memberSpace.id));
+    expect(imports).toHaveLength(2);
+    expect(imports[0]!.scope).toMatchObject({email,space:space.id,thread:bot.id});
+    expect(imports[1]!.scope).toMatchObject({email:memberEmail,space:memberSpace.id,thread:memberBot.id});
+    expect(imports[0]!.scope.user).not.toBe(imports[1]!.scope.user);
+    expect((await value(await rpc("artifacts/get",jar,{botId:bot.id,artifactId:ownerFile.id},space.id))).contentBase64).toBe(Buffer.from("Owner private file").toString("base64"));
+    expect((await value(await rpc("artifacts/get",memberJar,{botId:memberBot.id,artifactId:memberFile.id},memberSpace.id))).contentBase64).toBe(Buffer.from("Member private file").toString("base64"));
+    for (const [caller,ownSpace,ownBot,otherSpace,otherBot,otherFile] of [[jar,space.id,bot.id,memberSpace.id,memberBot.id,memberFile.id],[memberJar,memberSpace.id,memberBot.id,space.id,bot.id,ownerFile.id]] as const) {
+      await denied(await rpc("artifacts/get",caller,{botId:ownBot,artifactId:otherFile},ownSpace));
+      await denied(await rpc("artifacts/getById",caller,{artifactId:otherFile},ownSpace));
+      await denied(await rpc("artifacts/getById",caller,{artifactId:otherFile},otherSpace));
+      await denied(await rpc("artifacts/create",caller,upload(otherBot,"Forbidden overwrite"),ownSpace));
+      await denied(await rpc("artifacts/remove",caller,{artifactId:otherFile},ownSpace));
+    }
+    expect(imports).toHaveLength(2);
+    expect((await ownerDb.query('SELECT count(*)::int AS count FROM "user"')).rows[0].count).toBe(2);
+    expect((await ownerDb.query('SELECT count(DISTINCT "userId")::int AS count FROM artifacts')).rows[0].count).toBe(2);
+    // Current grant revocation defeats the still-valid native cookie and forged edge headers.
+    grants.delete(memberEmail);
+    const forged={"X-Rakazo-Email":email,"Remote-User":"rithvik","Remote-Groups":"admins"};
+    expect((await request("/rpc/me",memberJar,{json:{}},forged)).status).toBe(401);
+    expect((await rpc("artifacts/getById",memberJar,{artifactId:memberFile.id},memberSpace.id)).status).toBe(401);
+    expect((await rpc("artifacts/create",memberJar,upload(memberBot.id,"After revocation"),memberSpace.id)).status).toBe(401);
+    expect((await rpc("me",await login(memberEmail,true))).status).toBe(401);
+    expect(imports).toHaveLength(2);
+    await value(await rpc("me",jar));
+    expect(directoryChecks).toBeGreaterThan(20);
+    expect(nonIssuerRequests).toBe(0);
+    for (const table of ["tasks","runs","user_model_credentials","routines"]) {
+      expect((await ownerDb.query(`SELECT count(*)::int AS count FROM ${table}`)).rows[0].count,table).toBe(0);
+    }
+    vi.stubEnv("NATIVE_ASSISTANT","false");
+    vi.stubEnv("PERSONAL_ASSISTANT","false");
     await value(await rpc("scratchpad/remove",jar,{itemId:item.id},space.id));
     await value(await rpc("bots/remove",jar,{botId:bot.id},space.id));
     await value(await rpc("spaces/remove",jar,{spaceId:space.id}));
     expect((await request("/api/auth/sign-out",jar,{})).status).toBe(200);
     expect((await rpc("me",jar)).status).toBe(401);
-    console.log("Verified owner-only OIDC, durable workspace/profile/scratchpad CRUD, blocked execution, zero provider requests and zero durable work.");
+    console.log("Verified two-user OIDC/directory admission, real PostgreSQL workspace/profile/thread/file isolation and revocation; mocked file-import boundary; zero provider requests and zero durable work.");
   } finally {
     await handles?.stop(); await ownerDb.end(); vi.unstubAllGlobals(); vi.unstubAllEnvs();
     await rm(dataDir,{recursive:true,force:true});

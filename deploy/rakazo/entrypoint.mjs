@@ -19,6 +19,8 @@ for (const [name, file] of Object.entries(mappings[mode])) {
 // Keep the route/owner policy active. Native chat uses only the restricted adapter.
 if (mode === 'api') {
   process.env.WORKSPACE_ONLY = 'true';
+  if (process.env.MULTI_USER_ASSISTANT !== undefined && !['true', 'false'].includes(process.env.MULTI_USER_ASSISTANT)) throw new Error('MULTI_USER_ASSISTANT must be true or false');
+  process.env.MULTI_USER_ASSISTANT = process.env.MULTI_USER_ASSISTANT === 'true' ? 'true' : 'false';
   process.env.SANDBOX_PROVIDER = 'none';
   process.env.CLOUD_AGENT_PROVIDER = 'none';
   process.env.AUTH_PASSWORD_ENABLED = 'false';

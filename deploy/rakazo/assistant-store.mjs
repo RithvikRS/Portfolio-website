@@ -27,6 +27,7 @@ export class AssistantStore{
   this.now=now;this.db=new DatabaseSync(file);this.db.exec(`PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;
    CREATE TABLE IF NOT EXISTS approval_reviews(user TEXT,space TEXT,thread TEXT,ids TEXT,PRIMARY KEY(user,space,thread));
    CREATE TABLE IF NOT EXISTS cancelled_runs(id TEXT PRIMARY KEY);
+   CREATE TABLE IF NOT EXISTS cancelled_scopes(user TEXT,space TEXT,thread TEXT,id TEXT,PRIMARY KEY(user,space,thread,id));
    CREATE TABLE IF NOT EXISTS items(user TEXT,space TEXT,kind TEXT,id TEXT,title TEXT,body TEXT,version INTEGER,updated INTEGER,PRIMARY KEY(user,space,kind,id));
    CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY,user TEXT,space TEXT,thread TEXT,run TEXT,action TEXT,payload TEXT,digest TEXT,expires INTEGER,state TEXT);
    CREATE TABLE IF NOT EXISTS schedules(id TEXT PRIMARY KEY,user TEXT,space TEXT,thread TEXT,title TEXT,body TEXT,query TEXT,due INTEGER,repeat_ms INTEGER,state TEXT,last_result TEXT);
@@ -83,9 +84,9 @@ export class AssistantStore{
  });}
  finish(id,state){this.db.prepare('UPDATE approvals SET state=? WHERE id=?').run(state,id);}
  reject(s,id){this.db.prepare("UPDATE approvals SET state='rejected' WHERE id=? AND user=? AND space=? AND thread=? AND state='pending'").run(id,s.user,s.space,s.thread);return {rejected:true};}
- cancelled(s){return !!this.db.prepare('SELECT 1 FROM cancelled_runs WHERE id=?').get(s.run);}
+ cancelled(s){scopeOf(s);return !!(this.db.prepare('SELECT 1 FROM cancelled_runs WHERE id=?').get(s.run)||this.db.prepare('SELECT 1 FROM cancelled_scopes WHERE user=? AND space=? AND thread=? AND id=?').get(s.user,s.space,s.thread,s.run));}
  importDocument(s,p){scopeOf(s);if(!/^[a-zA-Z0-9_-]{1,128}$/.test(p.id))throw Error('Invalid upload ID');const old=this.db.prepare('SELECT * FROM items WHERE user=? AND space=? AND kind=\'document\' AND id=?').get(s.user,s.space,p.id);if(old){if(old.title!==p.title||old.body!==p.body)throw Error('Uploaded content differs');return {id:p.id,imported:true};}const result=this.put(s,'document',{title:p.title,body:p.body});this.db.prepare('UPDATE items SET id=? WHERE user=? AND space=? AND kind=\'document\' AND id=?').run(p.id,s.user,s.space,result.id);return {id:p.id,imported:true};}
- cancelRun(s){this.db.prepare('INSERT OR IGNORE INTO cancelled_runs VALUES(?)').run(s.run);this.db.prepare("UPDATE approvals SET state='cancelled' WHERE user=? AND space=? AND thread=? AND run=? AND state='pending'").run(s.user,s.space,s.thread,s.run);}
+ cancelRun(s){this.db.prepare('INSERT OR IGNORE INTO cancelled_scopes VALUES(?,?,?,?)').run(s.user,s.space,s.thread,s.run);this.db.prepare("UPDATE approvals SET state='cancelled' WHERE user=? AND space=? AND thread=? AND run=? AND state='pending'").run(s.user,s.space,s.thread,s.run);}
  schedules(s){return this.db.prepare('SELECT id,title,body,query,due,repeat_ms,state,last_result FROM schedules WHERE user=? AND space=? ORDER BY due LIMIT 20').all(s.user,s.space);}
  schedule(s,p){
   if(this.db.prepare("SELECT count(*) n FROM schedules WHERE user=? AND space=? AND state NOT IN ('deleted','done')").get(s.user,s.space).n>=10)throw Error('Ten active schedules maximum');

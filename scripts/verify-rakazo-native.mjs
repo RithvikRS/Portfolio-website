@@ -20,8 +20,8 @@ try{
  await send('TOOL_REHEARSAL: calculate 17 plus 25 with the isolated computer.');await page.getByText('The isolated calculation returned 42.',{exact:true}).last().waitFor({timeout:20000});await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden',timeout:15000});
  await send('STOP_REHEARSAL: wait while I test Stop.');const stop=page.getByRole('button',{name:'Stop',exact:true});await stop.waitFor();await page.waitForTimeout(1000);await stop.click();await stop.waitFor({state:'hidden',timeout:15000});
  await page.waitForTimeout(32000);assert.equal(await stop.count(),0);await page.reload();await page.getByText('STOP_REHEARSAL: wait while I test Stop.',{exact:true}).last().waitFor();
- await page.getByText('Model: fixture-primary · model-a',{exact:true}).waitFor();
- await page.getByText('Models used: fixture-primary · model-a; fixture-fallback · model-b',{exact:true}).waitFor();
+ await page.getByText('Model: fixture-primary / model-a',{exact:true}).waitFor();
+ await page.getByText('Models used: fixture-primary / model-a; fixture-fallback / model-b',{exact:true}).waitFor();
  const reset=await page.evaluate(async()=>{const botId=location.pathname.split('/').filter(Boolean).at(-1);return (await fetch('/rpc/threads/clear',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({json:{botId}})})).status;});assert.equal(reset,200);await page.reload();await page.locator('textarea').waitFor();
  await send('LONG_REHEARSAL: perform the nine-step isolated task and summarize it.');
  const longStarted=Date.now();await page.getByText('Long task completed after nine tools and ten model calls.',{exact:true}).waitFor({timeout:360000});assert.ok(Date.now()-longStarted>120000);await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});

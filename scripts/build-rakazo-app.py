@@ -20,9 +20,10 @@ PATCH_NAMES = ('workspace-only.patch', 'workspace-ui.patch', 'native-assistant.p
 ARTIFACTS = {
     'api-src': '/app/apps/api/src', 'api-dist': '/app/apps/api/dist',
     'web-src': '/app/apps/web/src', 'web-dist': '/app/apps/web/dist',
+    'auth-src': '/app/packages/auth/src',
     'contracts-src': '/app/packages/contracts/src', 'adapters-src': '/app/packages/adapters/src',
 }
-PATCH_PREFIXES = ('apps/api/src/', 'apps/web/src/', 'packages/contracts/src/', 'packages/adapters/src/')
+PATCH_PREFIXES = ('apps/api/src/', 'apps/web/src/', 'packages/contracts/src/', 'packages/adapters/src/', 'packages/auth/src/')
 BUILD_COMMAND = '''
 set -eu
 [ "$GIT_SHA" = "747ece9641dcc60c95467ffae8ab2311fb1f3f81" ]
@@ -33,7 +34,7 @@ git apply --check /tmp/workspace-ui.patch
 git apply /tmp/workspace-ui.patch
 git apply --check /tmp/native-assistant.patch
 git apply /tmp/native-assistant.patch
-NODE_ENV=test pnpm exec vitest run apps/api/src/workspace-only.test.ts apps/api/src/native-assistant.test.ts apps/web/src/pages/WorkspaceOnly.test.tsx --maxWorkers=2
+NODE_ENV=test pnpm exec vitest run apps/web/src/pages/shell/composer.test.tsx packages/adapters/src/executor-user-progress.test.ts packages/db/src/events.test.ts packages/auth/src/oidc.test.ts apps/api/src/workspace-only.test.ts apps/api/src/native-assistant.test.ts apps/web/src/pages/WorkspaceOnly.test.tsx --maxWorkers=2
 pnpm --filter @rakazo/api build
 RAKAZO_ALLOW_DEV_SECRETS=1 pnpm --filter @rakazo/web build
 '''
